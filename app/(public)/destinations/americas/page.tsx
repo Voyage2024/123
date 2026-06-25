@@ -24,6 +24,7 @@ interface Hub {
   id: string;
   name: { EN: string; RU: string };
   subtitle: { EN: string; RU: string };
+  body: { EN: string; RU: string };
   x: number;
   y: number;
 }
@@ -51,16 +52,26 @@ const STAGE_STYLE: React.CSSProperties =
 // Data — координаты выверены по /map-americas.jpg (1928×1452).
 // ─────────────────────────────────────────────────────────────
 const HUBS: Hub[] = [
-  { id: "toronto",   name: { EN: "TORONTO",         RU: "ТОРОНТО" },       subtitle: { EN: "Business & Wealth Hub", RU: "Центр бизнеса и капитала" }, x: 72.0, y: 31.1 },
-  { id: "vancouver", name: { EN: "VANCOUVER",       RU: "ВАНКУВЕР" },      subtitle: { EN: "Pacific Premium Lifestyle", RU: "Премиум-лайфстайл Тихого океана" }, x: 12.5, y: 20.0 },
-  { id: "seattle",   name: { EN: "SEATTLE",         RU: "СИЭТЛ" },         subtitle: { EN: "Tech Elite Community", RU: "Элитное техно-комьюнити" }, x: 11.9, y: 26.3 },
-  { id: "portland",  name: { EN: "PORTLAND",        RU: "ПОРТЛЕНД" },      subtitle: { EN: "Exclusive Retreats", RU: "Эксклюзивные ретриты" }, x: 10.9, y: 33.8 },
-  { id: "philadelphia", name: { EN: "PHILADELPHIA", RU: "ФИЛАДЕЛЬФИЯ" },   subtitle: { EN: "Heritage & Prestige", RU: "Наследие и престиж" }, x: 77.3, y: 41.5 },
-  { id: "washington", name: { EN: "WASHINGTON D.C.", RU: "ВАШИНГТОН" },    subtitle: { EN: "Capital Connections", RU: "Связи в столице" }, x: 75.8, y: 44.5 },
-  { id: "losangeles", name: { EN: "LOS ANGELES",    RU: "ЛОС-АНДЖЕЛЕС" },  subtitle: { EN: "Hollywood Image Parties", RU: "Голливудские имидж-вечеринки" }, x: 15.5, y: 54.8 },
-  { id: "greaterla",  name: { EN: "GREATER LA COAST", RU: "ПОБЕРЕЖЬЕ LA" }, subtitle: { EN: "Pasadena, Santa Barbara, Santa Monica, Glendale, LAX", RU: "Pasadena, Santa Barbara, Santa Monica, Glendale, LAX" }, x: 13.6, y: 51.1 },
-  { id: "sandiego",  name: { EN: "SAN DIEGO",       RU: "САН-ДИЕГО" },     subtitle: { EN: "Luxury Yacht Charters", RU: "Чартеры люкс-яхт" }, x: 17.6, y: 57.7 },
-  { id: "sanfrancisco", name: { EN: "SAN FRANCISCO", RU: "САН-ФРАНЦИСКО" }, subtitle: { EN: "Silicon Valley Networking", RU: "Нетворкинг Кремниевой долины" }, x: 11.0, y: 45.1 },
+  { id: "toronto",   name: { EN: "TORONTO",         RU: "ТОРОНТО" },       subtitle: { EN: "Business & Wealth Hub", RU: "Центр бизнеса и капитала" }, x: 72.0, y: 31.1,
+    body: { EN: "Canada's engine of business and wealth. Powerful rooms, serious connections, and a polished cosmopolitan elite.", RU: "Двигатель бизнеса и капитала Канады. Влиятельные кабинеты, серьёзные связи и отполированная космополитичная элита." } },
+  { id: "vancouver", name: { EN: "VANCOUVER",       RU: "ВАНКУВЕР" },      subtitle: { EN: "Pacific Premium Lifestyle", RU: "Премиум-лайфстайл Тихого океана" }, x: 12.5, y: 20.0,
+    body: { EN: "Pacific premium living. Ocean, mountains, and an effortlessly affluent lifestyle on Canada's west coast.", RU: "Премиум-жизнь у Тихого океана. Океан, горы и непринуждённо состоятельный лайфстайл на западном побережье Канады." } },
+  { id: "seattle",   name: { EN: "SEATTLE",         RU: "СИЭТЛ" },         subtitle: { EN: "Tech Elite Community", RU: "Элитное техно-комьюнити" }, x: 11.9, y: 26.3,
+    body: { EN: "A tech elite community. Quiet money, sharp minds, and access to the next big thing before anyone else.", RU: "Элитное техно-комьюнити. Тихие деньги, острые умы и доступ к следующему прорыву раньше всех." } },
+  { id: "portland",  name: { EN: "PORTLAND",        RU: "ПОРТЛЕНД" },      subtitle: { EN: "Exclusive Retreats", RU: "Эксклюзивные ретриты" }, x: 10.9, y: 33.8,
+    body: { EN: "Exclusive retreats among forests and coast. Understated and deliberately off-grid for those who value calm.", RU: "Эксклюзивные ретриты среди лесов и побережья. Сдержанные и намеренно вне сети — для тех, кто ценит спокойствие." } },
+  { id: "philadelphia", name: { EN: "PHILADELPHIA", RU: "ФИЛАДЕЛЬФИЯ" },   subtitle: { EN: "Heritage & Prestige", RU: "Наследие и престиж" }, x: 77.3, y: 41.5,
+    body: { EN: "Heritage and prestige. Old institutions, deep roots, and East Coast refinement just a step from New York.", RU: "Наследие и престиж. Старые институции, глубокие корни и утончённость Восточного побережья в шаге от Нью-Йорка." } },
+  { id: "washington", name: { EN: "WASHINGTON D.C.", RU: "ВАШИНГТОН" },    subtitle: { EN: "Capital Connections", RU: "Связи в столице" }, x: 75.8, y: 44.5,
+    body: { EN: "The corridors of power. Capital connections and introductions that shape decisions at the highest level.", RU: "Коридоры власти. Связи в столице и знакомства, которые влияют на решения на самом высоком уровне." } },
+  { id: "losangeles", name: { EN: "LOS ANGELES",    RU: "ЛОС-АНДЖЕЛЕС" },  subtitle: { EN: "Hollywood Image Parties", RU: "Голливудские имидж-вечеринки" }, x: 15.5, y: 54.8,
+    body: { EN: "Hollywood image parties and golden-hour glamour. Where status is currency and the right room changes everything.", RU: "Голливудские имидж-вечеринки и гламур золотого часа. Здесь статус — это валюта, а нужная комната меняет всё." } },
+  { id: "greaterla",  name: { EN: "GREATER LA COAST", RU: "ПОБЕРЕЖЬЕ LA" }, subtitle: { EN: "Pasadena, Santa Barbara, Santa Monica, Glendale, LAX", RU: "Pasadena, Santa Barbara, Santa Monica, Glendale, LAX" }, x: 13.6, y: 51.1,
+    body: { EN: "The wider LA coast — from Pasadena to Santa Barbara. Estates, beaches, and curated access across the whole basin.", RU: "Большое побережье LA — от Пасадены до Санта-Барбары. Поместья, пляжи и продуманный доступ по всему региону." } },
+  { id: "sandiego",  name: { EN: "SAN DIEGO",       RU: "САН-ДИЕГО" },     subtitle: { EN: "Luxury Yacht Charters", RU: "Чартеры люкс-яхт" }, x: 17.6, y: 57.7,
+    body: { EN: "Sun, marinas, and luxury yacht charters. Laid-back coastal living with a VIP polish all year round.", RU: "Солнце, марины и чартеры люкс-яхт. Расслабленная жизнь у побережья с VIP-лоском круглый год." } },
+  { id: "sanfrancisco", name: { EN: "SAN FRANCISCO", RU: "САН-ФРАНЦИСКО" }, subtitle: { EN: "Silicon Valley Networking", RU: "Нетворкинг Кремниевой долины" }, x: 11.0, y: 45.1,
+    body: { EN: "Silicon Valley networking at its core. Founders, capital, and the connections that fund the future.", RU: "Сердце нетворкинга Кремниевой долины. Основатели, капитал и связи, которые финансируют будущее." } },
 ];
 
 const ARTERIES: string[] = [
@@ -96,32 +107,47 @@ const HIGHLIGHTS: Highlight[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────
-// Components
+// Language Toggle — exactly like homepage
 // ─────────────────────────────────────────────────────────────
 
-function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
+function LanguageToggle({
+  lang,
+  setLang,
+}: {
+  lang: Lang;
+  setLang: (l: Lang) => void;
+}) {
   return (
-    <div className="relative flex items-center bg-zinc-900/80 border border-zinc-800 rounded-full p-1 w-fit">
-      <motion.div
-        layout
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="absolute top-1 bottom-1 rounded-full bg-zinc-800"
-        style={{ width: "calc(50% - 4px)", left: lang === "EN" ? "4px" : "calc(50%)" }}
+    <div className="relative bg-zinc-900/50 backdrop-blur-md border border-white/5 rounded-full p-1 flex items-center">
+      <div
+        className="absolute top-1 left-1 w-8 h-6 rounded-full bg-amber-200/20 transition-all duration-300"
+        style={{
+          transform: lang === "EN" ? "translateX(0px)" : "translateX(32px)",
+        }}
       />
-      {(["EN", "RU"] as Lang[]).map((l) => (
-        <button
-          key={l}
-          onClick={() => setLang(l)}
-          className={`relative z-10 px-5 py-1.5 text-xs font-medium tracking-widest transition-colors duration-200 ${
-            lang === l ? "text-amber-200" : "text-zinc-500 hover:text-zinc-300"
-          }`}
-        >
-          {l}
-        </button>
-      ))}
+      <button
+        onClick={() => setLang("EN")}
+        className={`relative z-10 text-[10px] tracking-widest font-medium w-8 h-6 flex items-center justify-center cursor-pointer transition-colors duration-300 ${
+          lang === "EN" ? "text-amber-200" : "text-zinc-500 hover:text-zinc-300"
+        }`}
+      >
+        EN
+      </button>
+      <button
+        onClick={() => setLang("RU")}
+        className={`relative z-10 text-[10px] tracking-widest font-medium w-8 h-6 flex items-center justify-center cursor-pointer transition-colors duration-300 ${
+          lang === "RU" ? "text-amber-200" : "text-zinc-500 hover:text-zinc-300"
+        }`}
+      >
+        RU
+      </button>
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+// Components
+// ─────────────────────────────────────────────────────────────
 
 function RadarNode({ active }: { active: boolean }) {
   return (
@@ -186,10 +212,6 @@ export default function AmericasPage() {
       mapLabel: { EN: "Regional Overview", RU: "Обзор региона" },
       highlightsTitle: { EN: "Membership Privileges", RU: "Привилегии членства" },
       drawerEyebrow: { EN: "Location Dossier", RU: "Досье локации" },
-      drawerBody: {
-        EN: "The pulse of global business and entertainment. Miami penthouses, elite lounges in New York and Los Angeles. Maximum scale and exclusive access.",
-        RU: "Пульс мирового бизнеса и развлечений. Пентхаусы Майами, элитные ложи в Нью-Йорке и Лос-Анджелесе. Максимальный масштаб и эксклюзивный доступ.",
-      },
       drawerCta: { EN: "Resident Access", RU: "Вход для резидентов" },
     }),
     []
@@ -383,7 +405,7 @@ export default function AmericasPage() {
               <h2 className="mt-10 font-serif text-5xl font-light leading-tight text-zinc-100">{selected.name[lang]}</h2>
               <p className="mt-3 text-[11px] uppercase tracking-[0.25em] text-amber-200/70">{selected.subtitle[lang]}</p>
               <div className="my-8 h-px w-16 bg-amber-200/30" />
-              <p className="text-sm font-light leading-relaxed text-zinc-400">{t.drawerBody[lang]}</p>
+              <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.body[lang]}</p>
               <Link href="/login" className="mt-10 inline-flex items-center justify-center rounded-full bg-amber-200 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100">
                 {t.drawerCta[lang]}
               </Link>

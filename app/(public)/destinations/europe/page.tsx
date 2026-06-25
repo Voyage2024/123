@@ -24,6 +24,7 @@ interface Hub {
   id: string;
   name: { EN: string; RU: string };
   subtitle: { EN: string; RU: string };
+  body: { EN: string; RU: string };
   x: number;
   y: number;
 }
@@ -50,33 +51,60 @@ const STAGE_STYLE: React.CSSProperties =
 // Data — координаты выверены по /map-europe.jpg (2232×1208).
 // ─────────────────────────────────────────────────────────────
 const HUBS: Hub[] = [
-  { id: "paris",       name: { EN: "PARIS",          RU: "ПАРИЖ" },          subtitle: { EN: "Haute Couture & Soirées", RU: "Высокая мода и приёмы" }, x: 20.5, y: 44.5 },
-  { id: "nice",        name: { EN: "NICE",           RU: "НИЦЦА" },          subtitle: { EN: "Riviera Privée", RU: "Приватная Ривьера" }, x: 27.3, y: 65.2 },
-  { id: "monaco",      name: { EN: "MONACO",         RU: "МОНАКО" },         subtitle: { EN: "The Billionaire's Principality", RU: "Княжество миллиардеров" }, x: 28.2, y: 64.6 },
-  { id: "uk",          name: { EN: "UNITED KINGDOM", RU: "ВЕЛИКОБРИТАНИЯ" }, subtitle: { EN: "Members-Only London", RU: "Лондон только для своих" }, x: 15.5, y: 33.4 },
-  { id: "germany",     name: { EN: "GERMANY",        RU: "ГЕРМАНИЯ" },       subtitle: { EN: "Berlin After-Dark", RU: "Берлин после полуночи" }, x: 36.3, y: 29.5 },
-  { id: "italy",       name: { EN: "ITALY",          RU: "ИТАЛИЯ" },         subtitle: { EN: "La Dolce Vita", RU: "Сладкая жизнь" }, x: 36.2, y: 72.9 },
-  { id: "spain",       name: { EN: "SPAIN",          RU: "ИСПАНИЯ" },        subtitle: { EN: "Sun-Drenched Soirées", RU: "Солнечные приёмы" }, x: 9.6, y: 77.6 },
-  { id: "switzerland", name: { EN: "SWITZERLAND",    RU: "ШВЕЙЦАРИЯ" },      subtitle: { EN: "Discreet Wealth", RU: "Тихое богатство" }, x: 29.6, y: 50.4 },
-  { id: "greece",      name: { EN: "GREECE",         RU: "ГРЕЦИЯ" },         subtitle: { EN: "Aegean Escapes", RU: "Эгейские уединения" }, x: 50.0, y: 86.5 },
-  { id: "netherlands", name: { EN: "NETHERLANDS",    RU: "НИДЕРЛАНДЫ" },     subtitle: { EN: "Canal-Side Elite", RU: "Элита у каналов" }, x: 23.2, y: 30.3 },
-  { id: "belgium",     name: { EN: "BELGIUM",        RU: "БЕЛЬГИЯ" },        subtitle: { EN: "Quiet Luxury", RU: "Тихая роскошь" }, x: 22.6, y: 36.3 },
-  { id: "luxembourg",  name: { EN: "LUXEMBOURG",     RU: "ЛЮКСЕМБУРГ" },     subtitle: { EN: "The Private Vault", RU: "Закрытый сейф" }, x: 25.6, y: 41.4 },
-  { id: "denmark",     name: { EN: "DENMARK",        RU: "ДАНИЯ" },          subtitle: { EN: "Nordic Refinement", RU: "Северная утончённость" }, x: 34.9, y: 14.5 },
-  { id: "norway",      name: { EN: "NORWAY",         RU: "НОРВЕГИЯ" },       subtitle: { EN: "Fjord Seclusion", RU: "Уединение фьордов" }, x: 25.2, y: 2.6 },
-  { id: "sweden",      name: { EN: "SWEDEN",         RU: "ШВЕЦИЯ" },         subtitle: { EN: "Scandinavian Cool", RU: "Скандинавский шик" }, x: 37.5, y: 8.5 },
-  { id: "czech",       name: { EN: "CZECH REPUBLIC", RU: "ЧЕХИЯ" },          subtitle: { EN: "Bohemian Grandeur", RU: "Богемское величие" }, x: 38.6, y: 39.7 },
-  { id: "albania",     name: { EN: "ALBANIA",        RU: "АЛБАНИЯ" },        subtitle: { EN: "The Rising Riviera", RU: "Восходящая Ривьера" }, x: 47.2, y: 74.1 },
-  { id: "bosnia",      name: { EN: "BOSNIA",         RU: "БОСНИЯ" },         subtitle: { EN: "The Hidden Gem", RU: "Скрытая жемчужина" }, x: 45.2, y: 64.1 },
-  { id: "serbia",      name: { EN: "SERBIA",         RU: "СЕРБИЯ" },         subtitle: { EN: "Belgrade Nightlife", RU: "Ночная жизнь Белграда" }, x: 49.0, y: 62.5 },
-  { id: "montenegro",  name: { EN: "MONTENEGRO",     RU: "ЧЕРНОГОРИЯ" },     subtitle: { EN: "The Adriatic Secret", RU: "Адриатический секрет" }, x: 46.5, y: 69.7 },
-  { id: "georgia",     name: { EN: "GEORGIA",        RU: "ГРУЗИЯ" },         subtitle: { EN: "Caucasus Frontier", RU: "Кавказский рубеж" }, x: 87.8, y: 66.2 },
-  { id: "armenia",     name: { EN: "ARMENIA",        RU: "АРМЕНИЯ" },        subtitle: { EN: "Ancient Highlands", RU: "Древнее нагорье" }, x: 86.7, y: 72.5 },
-  { id: "cyprus-gr",   name: { EN: "CYPRUS (GREEK)", RU: "КИПР (ГРЕЧ.)" },   subtitle: { EN: "Mediterranean Haven", RU: "Средиземноморская гавань" }, x: 68.5, y: 96.0 },
-  { id: "cyprus-tr",   name: { EN: "CYPRUS (TURKISH)", RU: "КИПР (ТУР.)" },  subtitle: { EN: "Untouched Shores", RU: "Нетронутые берега" }, x: 67.5, y: 94.3 },
-  { id: "latvia",      name: { EN: "LATVIA",         RU: "ЛАТВИЯ" },         subtitle: { EN: "Baltic Elegance", RU: "Балтийская элегантность" }, x: 52.6, y: 9.8 },
-  { id: "lithuania",   name: { EN: "LITHUANIA",      RU: "ЛИТВА" },          subtitle: { EN: "The Amber Coast", RU: "Янтарный берег" }, x: 54.5, y: 19.9 },
-  { id: "estonia",     name: { EN: "ESTONIA",        RU: "ЭСТОНИЯ" },        subtitle: { EN: "Digital Aristocracy", RU: "Цифровая аристократия" }, x: 53.1, y: 3.1 },
+  { id: "paris",       name: { EN: "PARIS",          RU: "ПАРИЖ" },          subtitle: { EN: "Haute Couture & Soirées", RU: "Высокая мода и приёмы" }, x: 20.5, y: 44.5,
+    body: { EN: "The capital of taste. Couture houses, private soirées, and the art of being seen at the right table. The benchmark for European elegance.", RU: "Столица вкуса. Дома высокой моды, приватные приёмы и искусство быть замеченным за нужным столом. Эталон европейской элегантности." } },
+  { id: "nice",        name: { EN: "NICE",           RU: "НИЦЦА" },          subtitle: { EN: "Riviera Privée", RU: "Приватная Ривьера" }, x: 27.3, y: 65.2,
+    body: { EN: "The Riviera at its most private. Sun, sea, and long afternoons that drift into golden evenings on the Côte d'Azur.", RU: "Ривьера в её самой закрытой форме. Солнце, море и долгие дни, перетекающие в золотые вечера на Лазурном берегу." } },
+  { id: "monaco",      name: { EN: "MONACO",         RU: "МОНАКО" },         subtitle: { EN: "The Billionaire's Principality", RU: "Княжество миллиардеров" }, x: 28.2, y: 64.6,
+    body: { EN: "A principality built for billionaires. Superyachts, casinos, and a skyline of quiet power. Old-world glamour at its peak.", RU: "Княжество, созданное для миллиардеров. Суперяхты, казино и силуэт тихой власти. Гламур старого света на пике." } },
+  { id: "uk",          name: { EN: "UNITED KINGDOM", RU: "ВЕЛИКОБРИТАНИЯ" }, subtitle: { EN: "Members-Only London", RU: "Лондон только для своих" }, x: 15.5, y: 33.4,
+    body: { EN: "London behind closed doors. Members-only clubs, old money, and introductions that open every room in the city.", RU: "Лондон за закрытыми дверями. Клубы для своих, старые деньги и знакомства, открывающие любые двери города." } },
+  { id: "germany",     name: { EN: "GERMANY",        RU: "ГЕРМАНИЯ" },       subtitle: { EN: "Berlin After-Dark", RU: "Берлин после полуночи" }, x: 36.3, y: 29.5,
+    body: { EN: "Berlin after dark. Underground glamour, fearless nights, and a scene that never asks for names. Freedom with an edge.", RU: "Берлин после полуночи. Подпольный гламур, бесстрашные ночи и сцена, которая не спрашивает имён. Свобода на грани." } },
+  { id: "italy",       name: { EN: "ITALY",          RU: "ИТАЛИЯ" },         subtitle: { EN: "La Dolce Vita", RU: "Сладкая жизнь" }, x: 36.2, y: 72.9,
+    body: { EN: "La dolce vita, perfected. Lake villas, fashion houses, and pleasure as a way of life — from Milan to the Amalfi coast.", RU: "Сладкая жизнь в совершенстве. Виллы у озёр, дома моды и удовольствие как образ жизни — от Милана до побережья Амальфи." } },
+  { id: "spain",       name: { EN: "SPAIN",          RU: "ИСПАНИЯ" },        subtitle: { EN: "Sun-Drenched Soirées", RU: "Солнечные приёмы" }, x: 9.6, y: 77.6,
+    body: { EN: "Sun-drenched and unhurried. Marbella terraces, island parties, and warm Mediterranean nights that never end too soon.", RU: "Залитая солнцем и неспешная. Террасы Марбельи, островные вечеринки и тёплые средиземноморские ночи, которые не заканчиваются слишком рано." } },
+  { id: "switzerland", name: { EN: "SWITZERLAND",    RU: "ШВЕЙЦАРИЯ" },      subtitle: { EN: "Discreet Wealth", RU: "Тихое богатство" }, x: 29.6, y: 50.4,
+    body: { EN: "Where wealth stays silent. Alpine privacy, private banking, and absolute discretion. Status without a single word.", RU: "Где богатство молчит. Альпийская приватность, частный банкинг и абсолютная конфиденциальность. Статус без единого слова." } },
+  { id: "greece",      name: { EN: "GREECE",         RU: "ГРЕЦИЯ" },         subtitle: { EN: "Aegean Escapes", RU: "Эгейские уединения" }, x: 50.0, y: 86.5,
+    body: { EN: "Aegean blue and white. Island-hopping by yacht, hidden coves, and escapes far from prying eyes.", RU: "Сине-белая Эгеида. Острова на яхте, скрытые бухты и уединения вдали от посторонних глаз." } },
+  { id: "netherlands", name: { EN: "NETHERLANDS",    RU: "НИДЕРЛАНДЫ" },     subtitle: { EN: "Canal-Side Elite", RU: "Элита у каналов" }, x: 23.2, y: 30.3,
+    body: { EN: "Canal-side refinement. A discreet elite that prizes culture, comfort, and quiet status over noise.", RU: "Изысканность у каналов. Тихая элита, ценящая культуру, комфорт и негромкий статус выше шума." } },
+  { id: "belgium",     name: { EN: "BELGIUM",        RU: "БЕЛЬГИЯ" },        subtitle: { EN: "Quiet Luxury", RU: "Тихая роскошь" }, x: 22.6, y: 36.3,
+    body: { EN: "The art of quiet luxury. Understated, cultured, and effortlessly refined — for those who never need to prove it.", RU: "Искусство тихой роскоши. Сдержанная, культурная и непринуждённо утончённая — для тех, кому не нужно ничего доказывать." } },
+  { id: "luxembourg",  name: { EN: "LUXEMBOURG",     RU: "ЛЮКСЕМБУРГ" },     subtitle: { EN: "The Private Vault", RU: "Закрытый сейф" }, x: 25.6, y: 41.4,
+    body: { EN: "A private vault of a country. Small, secure, and built for those who value confidentiality above all.", RU: "Страна-сейф. Маленькая, надёжная и созданная для тех, кто ценит конфиденциальность превыше всего." } },
+  { id: "denmark",     name: { EN: "DENMARK",        RU: "ДАНИЯ" },          subtitle: { EN: "Nordic Refinement", RU: "Северная утончённость" }, x: 34.9, y: 14.5,
+    body: { EN: "Nordic refinement and clean design. Calm, curated, and quietly exclusive. Copenhagen sophistication.", RU: "Скандинавская утончённость и чистый дизайн. Спокойствие, вкус и тихая эксклюзивность. Утончённость Копенгагена." } },
+  { id: "norway",      name: { EN: "NORWAY",         RU: "НОРВЕГИЯ" },       subtitle: { EN: "Fjord Seclusion", RU: "Уединение фьордов" }, x: 25.2, y: 2.6,
+    body: { EN: "Seclusion among the fjords. Dramatic nature and total privacy at the very edge of the map.", RU: "Уединение среди фьордов. Драматичная природа и полная приватность на самом краю карты." } },
+  { id: "sweden",      name: { EN: "SWEDEN",         RU: "ШВЕЦИЯ" },         subtitle: { EN: "Scandinavian Cool", RU: "Скандинавский шик" }, x: 37.5, y: 8.5,
+    body: { EN: "Effortless Scandinavian cool. Sleek, modern, and discreetly affluent. Stockholm style done right.", RU: "Непринуждённый скандинавский шик. Лаконичный, современный и негромко состоятельный. Стокгольмский стиль как надо." } },
+  { id: "czech",       name: { EN: "CZECH REPUBLIC", RU: "ЧЕХИЯ" },          subtitle: { EN: "Bohemian Grandeur", RU: "Богемское величие" }, x: 38.6, y: 39.7,
+    body: { EN: "Bohemian grandeur. Baroque palaces, hidden bars, and Prague nights with a real sense of theatre.", RU: "Богемское величие. Барочные дворцы, скрытые бары и пражские ночи с настоящим театральным размахом." } },
+  { id: "albania",     name: { EN: "ALBANIA",        RU: "АЛБАНИЯ" },        subtitle: { EN: "The Rising Riviera", RU: "Восходящая Ривьера" }, x: 47.2, y: 74.1,
+    body: { EN: "The Riviera on the rise. Unspoiled coast, fresh energy, and early access before the crowd arrives.", RU: "Восходящая Ривьера. Нетронутый берег, свежая энергия и доступ раньше, чем приходит толпа." } },
+  { id: "bosnia",      name: { EN: "BOSNIA",         RU: "БОСНИЯ" },         subtitle: { EN: "The Hidden Gem", RU: "Скрытая жемчужина" }, x: 45.2, y: 64.1,
+    body: { EN: "A hidden gem off the radar. Raw beauty, deep history, and privacy for the truly in-the-know.", RU: "Скрытая жемчужина вне радаров. Дикая красота, глубокая история и приватность для по-настоящему посвящённых." } },
+  { id: "serbia",      name: { EN: "SERBIA",         RU: "СЕРБИЯ" },         subtitle: { EN: "Belgrade Nightlife", RU: "Ночная жизнь Белграда" }, x: 49.0, y: 62.5,
+    body: { EN: "Belgrade never sleeps. River clubs, late nights, and a nightlife with no last call. Raw, electric energy.", RU: "Белград, который не спит. Клубы на реке, поздние ночи и ночная жизнь без последнего звонка. Дикая, электрическая энергия." } },
+  { id: "montenegro",  name: { EN: "MONTENEGRO",     RU: "ЧЕРНОГОРИЯ" },     subtitle: { EN: "The Adriatic Secret", RU: "Адриатический секрет" }, x: 46.5, y: 69.7,
+    body: { EN: "The Adriatic's best-kept secret. Marina life, mountain views, and quiet superyacht glamour around Porto Montenegro.", RU: "Главный секрет Адриатики. Жизнь у марины, виды на горы и тихий гламур суперяхт вокруг Порто-Монтенегро." } },
+  { id: "georgia",     name: { EN: "GEORGIA",        RU: "ГРУЗИЯ" },         subtitle: { EN: "Caucasus Frontier", RU: "Кавказский рубеж" }, x: 87.8, y: 66.2,
+    body: { EN: "A frontier of the Caucasus. Bold flavours, warm hospitality, and untamed luxury between mountains and sea.", RU: "Рубеж Кавказа. Смелые вкусы, тёплое гостеприимство и неприручённая роскошь между горами и морем." } },
+  { id: "armenia",     name: { EN: "ARMENIA",        RU: "АРМЕНИЯ" },        subtitle: { EN: "Ancient Highlands", RU: "Древнее нагорье" }, x: 86.7, y: 72.5,
+    body: { EN: "Ancient highlands and deep heritage. Soulful, storied, and quietly captivating for those who look beyond the obvious.", RU: "Древнее нагорье и глубокое наследие. Душевная, легендарная и негромко притягательная для тех, кто смотрит дальше очевидного." } },
+  { id: "cyprus-gr",   name: { EN: "CYPRUS (GREEK)", RU: "КИПР (ГРЕЧ.)" },   subtitle: { EN: "Mediterranean Haven", RU: "Средиземноморская гавань" }, x: 68.5, y: 96.0,
+    body: { EN: "A Mediterranean haven. Sun, sea, and a relaxed harbour for the well-connected. Easy luxury year-round.", RU: "Средиземноморская гавань. Солнце, море и спокойная пристань для своих. Лёгкая роскошь круглый год." } },
+  { id: "cyprus-tr",   name: { EN: "CYPRUS (TURKISH)", RU: "КИПР (ТУР.)" },  subtitle: { EN: "Untouched Shores", RU: "Нетронутые берега" }, x: 67.5, y: 94.3,
+    body: { EN: "Untouched shores and easy privacy. A quiet coast away from the crowds — discreet and unhurried.", RU: "Нетронутые берега и лёгкая приватность. Тихое побережье вдали от толпы — деликатно и неспешно." } },
+  { id: "latvia",      name: { EN: "LATVIA",         RU: "ЛАТВИЯ" },         subtitle: { EN: "Baltic Elegance", RU: "Балтийская элегантность" }, x: 52.6, y: 9.8,
+    body: { EN: "Baltic elegance with an Art Nouveau soul. Refined, walkable, and discreetly chic. Riga at its best.", RU: "Балтийская элегантность с душой модерна. Утончённая, уютная и негромко шикарная. Рига во всей красе." } },
+  { id: "lithuania",   name: { EN: "LITHUANIA",      RU: "ЛИТВА" },          subtitle: { EN: "The Amber Coast", RU: "Янтарный берег" }, x: 54.5, y: 19.9,
+    body: { EN: "The amber coast. Old-town charm, pine forests, and a calm, cultured pace away from the noise.", RU: "Янтарный берег. Очарование старого города, сосновые леса и спокойный, культурный ритм вдали от шума." } },
+  { id: "estonia",     name: { EN: "ESTONIA",        RU: "ЭСТОНИЯ" },        subtitle: { EN: "Digital Aristocracy", RU: "Цифровая аристократия" }, x: 53.1, y: 3.1,
+    body: { EN: "A digital aristocracy. Medieval beauty meets a sleek, frictionless modern life. Tallinn, quietly ahead.", RU: "Цифровая аристократия. Средневековая красота встречает гладкую, безбарьерную современность. Таллин, негромко впереди." } },
 ];
 
 const ARTERIES: string[] = [
@@ -202,10 +230,6 @@ export default function EuropePage() {
       mapLabel: { EN: "Regional Overview", RU: "Обзор региона" },
       highlightsTitle: { EN: "Membership Privileges", RU: "Привилегии членства" },
       drawerEyebrow: { EN: "Location Dossier", RU: "Досье локации" },
-      drawerBody: {
-        EN: "Classic elegance and aristocratic chic. From private villas on the French Riviera to members-only clubs in London. Perfect for a flawless image.",
-        RU: "Классическая элегантность и аристократичный шик. От закрытых вилл на Лазурном берегу до приватных клубов Лондона. Идеально для безупречного имиджа.",
-      },
       drawerCta: { EN: "Resident Access", RU: "Вход для резидентов" },
     }),
     []
@@ -429,7 +453,7 @@ export default function EuropePage() {
               <h2 className="mt-10 font-serif text-5xl font-light leading-tight text-zinc-100">{selected.name[lang]}</h2>
               <p className="mt-3 text-[11px] uppercase tracking-[0.25em] text-amber-200/70">{selected.subtitle[lang]}</p>
               <div className="my-8 h-px w-16 bg-amber-200/30" />
-              <p className="text-sm font-light leading-relaxed text-zinc-400">{t.drawerBody[lang]}</p>
+              <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.body[lang]}</p>
               <Link href="/login" className="mt-10 inline-flex items-center justify-center rounded-full bg-amber-200 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100">
                 {t.drawerCta[lang]}
               </Link>

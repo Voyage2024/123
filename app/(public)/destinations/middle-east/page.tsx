@@ -24,8 +24,12 @@ interface Hub {
   id: string;
   name: { EN: string; RU: string };
   subtitle: { EN: string; RU: string };
-  x: number; // % from left
-  y: number; // % from top
+  description: { EN: string; RU: string }; // Новое поле
+  rates: { split: string; shot: string; incall: string; outcall: string }; // Новое поле
+  accommodation: { EN: string; RU: string }; // Новое поле
+  services: { EN: string; RU: string }; // Новое поле
+  x: number;
+  y: number;
 }
 
 interface Highlight {
@@ -53,18 +57,247 @@ const STAGE_STYLE: React.CSSProperties =
 // Data
 // ─────────────────────────────────────────────────────────────
 const HUBS: Hub[] = [
-  { id: "dubai",    name: { EN: "DUBAI",    RU: "ДУБАЙ" },    subtitle: { EN: "Premium Outcall", RU: "Премиум выезды" }, x: 77, y: 56 },
-  { id: "qatar",    name: { EN: "QATAR",    RU: "КАТАР" },    subtitle: { EN: "High-End Hub", RU: "Элитный хаб" }, x: 66.2, y: 54.8 },
-  { id: "saudi",    name: { EN: "SAUDI ARABIA", RU: "САУДОВСКАЯ АРАВИЯ" }, subtitle: { EN: "Exclusive Access", RU: "Эксклюзивный доступ" }, x: 52, y: 56 },
-  { id: "bahrain",  name: { EN: "BAHRAIN",  RU: "БАХРЕЙН" },  subtitle: { EN: "Private Events", RU: "Приватные ивенты" }, x: 64.8, y: 52.5 },
-  { id: "oman",     name: { EN: "OMAN",     RU: "ОМАН" },     subtitle: { EN: "VIP Tours", RU: "VIP-туры" }, x: 82.2, y: 60.1 },
-  { id: "lebanon",  name: { EN: "LEBANON",  RU: "ЛИВАН" },    subtitle: { EN: "Party Hub", RU: "Клубная столица" }, x: 29, y: 31 },
-  { id: "jordan",   name: { EN: "JORDAN",   RU: "ИОРДАНИЯ" }, subtitle: { EN: "Closed Residencies", RU: "Закрытые резиденции" }, x: 33, y: 38 },
-  { id: "israel",   name: { EN: "ISRAEL",   RU: "ИЗРАИЛЬ" },  subtitle: { EN: "Elite Community", RU: "Элитное комьюнити" }, x: 28, y: 35 },
-  { id: "egypt",    name: { EN: "EGYPT",    RU: "ЕГИПЕТ" },   subtitle: { EN: "Private Escapes", RU: "Приватный отдых" }, x: 20, y: 40 },
-  { id: "turkey",   name: { EN: "TURKEY",   RU: "ТУРЦИЯ" },   subtitle: { EN: "Eurasian Hub", RU: "Евразийский хаб" }, x: 32, y: 15 },
+  {
+  id: "dubai",
+  name: { EN: "DUBAI", RU: "ДУБАЙ" },
+  subtitle: { EN: "Premium Outcall", RU: "Премиум выезды" },
+  description: {
+    EN: "The Gulf's crown jewel. Sky-high penthouses, private yacht decks, and the heart of the region's nightlife. Premium outcall with flawless discretion.",
+    RU: "Жемчужина Залива. Пентхаусы под небом, приватные яхты и сердце ночной жизни региона. Премиум-выезды с безупречной конфиденциальностью."
+  },
+  rates: {
+    split: "Earnings depend on demand/client", // Гибкая система, как ты просил
+    shot: "1-2 hours: $250",
+    incall: "4-5 hours: $400+",
+    outcall: "Bonuses, tips & extras are 100% yours"
+  },
+  accommodation: {
+    EN: "Comfortable apartment ($1000/mo all-inclusive). Includes: groceries, home-cooked meals, internet, TV, maid service.",
+    RU: "Уютная квартира (1000$ в месяц, всё включено). Включено: продукты, домашняя еда, интернет, ТВ, услуги горничной."
+  },
+  services: {
+    EN: "Security & 24/7 support. Airport pick-up, medical assistance, vetted clients only. No public profiles.",
+    RU: "Безопасность и поддержка 24/7. Встреча в аэропорту, медпомощь, только проверенные клиенты. Никаких публичных профилей."
+  },
+  x: 77, y: 56
+},
+  {
+  id: "qatar",
+  name: { EN: "QATAR", RU: "КАТАР" },
+  subtitle: { EN: "High-End Hub", RU: "Элитный хаб" },
+  description: {
+    EN: "Quiet, ultra-wealthy, and exceptionally discreet. A high-end hub for those who value privacy above everything.",
+    RU: "Тихий, сверхбогатый и предельно закрытый. Элитный хаб для тех, кто ценит приватность превыше всего."
+  },
+  rates: {
+    split: "60/40",
+    shot: "30m: $165 - $220",
+    incall: "1h: $275 - $410",
+    outcall: "Tips & gifts are 100% yours"
+  },
+  accommodation: {
+    EN: "Tourist luxury hotels ($130-200/day). One person per room. Hotels are changed every 3-4 days for safety.",
+    RU: "Туристические люкс-отели (130-200$ в сутки). Проживание по одному в номере. Смена отеля каждые 3-4 дня."
+  },
+  services: {
+    EN: "Online-only work, vetted clients, 24/7 dispatcher support. Services: MBR, anal (extra fee).",
+    RU: "Работа онлайн, проверенные клиенты, поддержка диспетчеров 24/7. Сервис: МБР, анал (доп. оплата)."
+  },
+  x: 66.2, y: 54.8
+},
+ {
+  id: "saudi",
+  name: { EN: "SAUDI ARABIA", RU: "САУДОВСКАЯ АРАВИЯ" },
+  subtitle: { EN: "Exclusive Access", RU: "Эксклюзивный доступ" },
+  description: {
+    EN: "A market opening to the select few. Exclusive access, private gatherings, and connections at the very top. Discretion is non-negotiable.",
+    RU: "Рынок, открывающийся лишь для избранных. Эксклюзивный доступ, закрытые встречи и связи на самом верху. Конфиденциальность — обязательна."
+  },
+  rates: {
+    split: "50/50",
+    shot: "$215 - $270",
+    incall: "$400 - $560",
+    outcall: "$560 - $670 + Taxi"
+  },
+  accommodation: {
+    EN: "50/50 cost split, private elite apartments (personal selection).",
+    RU: "Разделение расходов 50/50, приватные апартаменты в элитных районах (личный выбор)."
+  },
+  services: {
+    EN: "Full security protocols, mbr, kissing, shower, massage, oral.",
+    RU: "Полная безопасность и приватность. Сервис: mbr, поцелуи, душ, массаж, оральный."
+  },
+  x: 52, y: 56
+},
+{
+  id: "bahrain",
+  name: { EN: "BAHRAIN", RU: "БАХРЕЙН" },
+  subtitle: { EN: "Private Events", RU: "Приватные ивенты" },
+  description: {
+    EN: "Island of discreet pleasure. Private events, intimate circles, and a relaxed pace away from the spotlight.",
+    RU: "Остров негромких удовольствий. Приватные ивенты, закрытые круги и спокойный ритм вдали от софитов."
+  },
+  rates: {
+    split: "60/40",
+    shot: "30m: $105 - $210",
+    incall: "1h: $210 - $340",
+    outcall: "Night: $1,050 - $1,580"
+  },
+  accommodation: {
+    EN: "Luxury apartments (~$925/mo or $40-53/day). Private accommodation, solo living.",
+    RU: "Люксовые апартаменты (~925$ в месяц или 40-53$ в сутки). Проживание по одному в номере."
+  },
+  services: {
+    EN: "Remote work, vetted clients, 24/7 support. Extras: Anal ($132), Golden Shower ($80).",
+    RU: "Работа онлайн, проверенные клиенты, поддержка 24/7. Допы: Анал (132$), Золотой дождь (80$)."
+  },
+  x: 64.8, y: 52.5
+},
+ {
+  id: "oman",
+  name: { EN: "OMAN", RU: "ОМАН" },
+  subtitle: { EN: "VIP Tours", RU: "VIP-туры" },
+  description: {
+    EN: "Untouched coastlines and curated VIP tours. Serene, understated luxury for those who prefer beauty without the crowd.",
+    RU: "Нетронутые берега и продуманные VIP-туры. Спокойная, сдержанная роскошь для тех, кто ценит красоту без толпы."
+  },
+  rates: {
+    split: "60/40",
+    shot: "30m: $150 - $200",
+    incall: "1h: $250 - $400",
+    outcall: "Tips & gifts are 100% yours"
+  },
+  accommodation: {
+    EN: "Luxury tourist hotels or private villas. Accommodation cost split 50/50.",
+    RU: "Люксовые туристические отели или приватные виллы. Разделение расходов 50/50."
+  },
+  services: {
+    EN: "Security & 24/7 support. Online-only work, vetted clients, full privacy protocols.",
+    RU: "Безопасность и поддержка 24/7. Работа онлайн, только проверенные клиенты, полная приватность."
+  },
+  x: 82.2, y: 60.1
+},
+ {
+  id: "lebanon",
+  name: { EN: "LEBANON", RU: "ЛИВАН" },
+  subtitle: { EN: "Party Hub", RU: "Клубная столица" },
+  description: {
+    EN: "The Mediterranean's nightlife capital. Rooftop parties, sea views, and a restless social scene that runs till dawn.",
+    RU: "Ночная столица Средиземноморья. Вечеринки на крышах, вид на море и неугомонная светская жизнь до рассвета."
+  },
+  rates: {
+    split: "50/50",
+    shot: "30m: $100",
+    incall: "1h: $200 / 2h: $300",
+    outcall: "Rare (vetted regulars only, 5* hotels)"
+  },
+  accommodation: {
+    EN: "Stay in hotels (~$90/day). Client entry via passport check. Video confirmation of hotel room may be required by clients.",
+    RU: "Проживание в отеле (~90$/сутки). Вход клиентов по паспортам. Клиенты могут запрашивать видео подтверждение номера."
+  },
+  services: {
+    EN: "High trust environment. 70% Christian / 30% Muslim clientele.",
+    RU: "Высокое доверие. Клиентура: 70% христиане, 30% мусульмане."
+  },
+  x: 29, y: 31
+},
+  {
+  id: "jordan",
+  name: { EN: "JORDAN", RU: "ИОРДАНИЯ" },
+  subtitle: { EN: "Closed Residencies", RU: "Закрытые резиденции" },
+  description: {
+    EN: "Ancient backdrops and modern privacy. Closed residencies for guests who prefer to stay unseen. Calm, secure, and exclusive.",
+    RU: "Древние декорации и современная приватность. Закрытые резиденции для тех, кто предпочитает оставаться незамеченным. Спокойно, надёжно, эксклюзивно."
+  },
+  rates: {
+    split: "50/50",
+    shot: "30m: $100 - $150",
+    incall: "1h: $200 / 2h: $350",
+    outcall: "Optional (at discretion)"
+  },
+  accommodation: {
+    EN: "5* Hotels ($100-$120/day). Flight & taxi costs split 50/50. Visa on arrival ($65).",
+    RU: "Отели 5* (100-120$/сутки). Расходы на перелет и такси 50/50. Виза по прилету (65$)."
+  },
+  services: {
+    EN: "Work hours: 12:00 PM – 12:00 AM. 2-week trip minimum. In-hotel work preferred.",
+    RU: "Рабочий график: 12:00 – 00:00. Минимальный тур 2 недели. Предпочтительна работа в отеле."
+  },
+  x: 33, y: 38
+},
+  {
+  id: "israel",
+  name: { EN: "ISRAEL", RU: "ИЗРАИЛЬ" },
+  subtitle: { EN: "Elite Community", RU: "Элитное комьюнити" },
+  description: {
+    EN: "A tight elite community where status and ambition meet. Fast networks, sharper connections, and a buzzing scene by the sea.",
+    RU: "Сплочённое элитное комьюнити, где встречаются статус и амбиции. Быстрые связи, ещё быстрее знакомства и живая сцена у моря."
+  },
+  rates: {
+    split: "50/50",
+    shot: "30m: ~$160",
+    incall: "1h: ~$270",
+    outcall: "Incall only"
+  },
+  accommodation: {
+    EN: "Comfortable private apartments (~$108/day). Solo accommodation.",
+    RU: "Комфортабельные личные апартаменты (~108$ в сутки). Проживание по одному."
+  },
+  services: {
+    EN: "100% border control support documents provided. 90% regular clients. Strictly incall.",
+    RU: "Полная поддержка документами для прохождения границы. 90% постоянных клиентов. Только инколл."
+  },
+  x: 28, y: 35
+},
+  {
+  id: "egypt",
+  name: { EN: "EGYPT", RU: "ЕГИПЕТ" },
+  subtitle: { EN: "Private Escapes", RU: "Приватный отдых" },
+  description: {
+    EN: "Red Sea hideaways and desert retreats. Private escapes for those who disappear in style — sun, silence, and total seclusion.",
+    RU: "Укрытия на Красном море и уединение в пустыне. Приватный отдых для тех, кто исчезает со вкусом: солнце, тишина и полное уединение."
+  },
+  rates: {
+    split: "50/50",
+    shot: "30m: $100 - $200",
+    incall: "1h: $200 - $400",
+    outcall: "Available (driver provided)"
+  },
+  accommodation: {
+    EN: "Private luxury accommodation. High standards of safety and comfort.",
+    RU: "Приватное жилье высокого класса. Высокие стандарты безопасности и комфорта."
+  },
+  services: {
+    EN: "Work hours: 15:00 – 03:00. Vetted client base (7 years experience). Photo privacy options available.",
+    RU: "Рабочий график: 15:00 – 03:00. Проверенная база клиентов (7 лет опыта). Возможность работы без публичных фото."
+  },
+  x: 20, y: 40
+},
+ {
+  id: "turkey",
+  name: { EN: "TURKEY", RU: "ТУРЦИЯ" },
+  subtitle: { EN: "Eurasian Hub", RU: "Евразийский хаб" },
+  description: {
+    EN: "Where Europe meets Asia. A vibrant hub bridging worlds, capital, and the right people.",
+    RU: "Где Европа встречается с Азией. Яркий хаб, объединяющий миры, капитал и нужных людей."
+  },
+  rates: {
+    split: "50/50",
+    shot: "1h: $200",
+    incall: "2h: $350 / 3h: $500",
+    outcall: "Night (6-7h): $900 - $1000"
+  },
+  accommodation: {
+    EN: "5* Hotels (~$25/day). Cost split 50/50.",
+    RU: "Отели 5* (~25$/сутки). Разделение расходов 50/50."
+  },
+  services: {
+    EN: "Incall + Outcall available. Flexible schedule (approx. 12:00 - 03:00).",
+    RU: "Доступны Incall и Outcall. Гибкий график (примерно с 12:00 до 03:00)."
+  },
+  x: 75.5, y: 72.8
+},
 ];
-
 const HIGHLIGHTS: Highlight[] = [
   {
     icon: <ShieldCheck className="w-7 h-7" />,
@@ -190,10 +423,6 @@ export default function MiddleEastPage() {
       mapLabel: { EN: "Regional Overview", RU: "Обзор региона" },
       highlightsTitle: { EN: "Regional Highlights", RU: "Особенности региона" },
       drawerEyebrow: { EN: "Location Dossier", RU: "Досье локации" },
-      drawerBody: {
-        EN: "The epicenter of luxury. Private yacht parties, VIP lounges, and a flawless network among the world's elite. Absolute confidentiality and the highest level of checks.",
-        RU: "Эпицентр роскоши. Закрытые яхт-вечеринки, VIP-ложи и безупречный нетворк среди мировой элиты. Абсолютная конфиденциальность и высочайший уровень чеков.",
-      },
       drawerCta: { EN: "Resident Access", RU: "Вход для резидентов" },
     }),
     []
@@ -461,47 +690,69 @@ export default function MiddleEastPage() {
               className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
             />
             {/* Panel */}
-            <motion.aside
-              key="drawer-panel"
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", stiffness: 320, damping: 34 }}
-              className="fixed right-0 top-0 bottom-0 z-[70] w-full max-w-md overflow-y-auto border-l border-zinc-800/80 bg-zinc-950 p-8 sm:p-10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-            >
-              <div className="flex items-start justify-between">
-                <span className="text-[11px] uppercase tracking-[0.3em] text-amber-200/60">
-                  {t.drawerEyebrow[lang]}
-                </span>
-                <button
-                  onClick={() => setSelected(null)}
-                  aria-label="Close"
-                  className="-mr-2 -mt-2 rounded-full p-2 text-zinc-500 transition-colors hover:text-amber-200"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+ <motion.aside
+  key="drawer-panel"
+  initial={{ x: "100%" }}
+  animate={{ x: 0 }}
+  exit={{ x: "100%" }}
+  transition={{ type: "spring", stiffness: 320, damping: 34 }}
+  className="fixed right-0 top-0 bottom-0 z-[70] w-full max-w-md overflow-y-auto border-l border-zinc-800/80 bg-zinc-950 p-8 sm:p-10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+>
+  <div className="flex items-start justify-between">
+    <span className="text-[11px] uppercase tracking-[0.3em] text-amber-200/60">
+      {t.drawerEyebrow[lang]}
+    </span>
+    <button onClick={() => setSelected(null)} className="text-zinc-500 hover:text-amber-200">
+      <X className="h-5 w-5" />
+    </button>
+  </div>
 
-              <h2 className="mt-10 font-serif text-5xl font-light leading-tight text-zinc-100">
-                {selected.name[lang]}
-              </h2>
-              <p className="mt-3 text-[11px] uppercase tracking-[0.25em] text-amber-200/70">
-                {selected.subtitle[lang]}
-              </p>
+  <h2 className="mt-10 font-serif text-5xl font-light leading-tight text-zinc-100">
+    {selected.name[lang]}
+  </h2>
+  <p className="mt-3 text-[11px] uppercase tracking-[0.25em] text-amber-200/70">
+    {selected.subtitle[lang]}
+  </p>
 
-              <div className="my-8 h-px w-16 bg-amber-200/30" />
+  <div className="my-8 h-px w-16 bg-amber-200/30" />
 
-              <p className="text-sm font-light leading-relaxed text-zinc-400">
-                {t.drawerBody[lang]}
-              </p>
+  {/* Контент */}
+  <div className="space-y-8">
+    <div className="text-sm font-light leading-relaxed text-zinc-400">
+      {selected.description[lang]}
+    </div>
 
-              <Link
-                href="/login"
-                className="mt-10 inline-flex items-center justify-center rounded-full bg-amber-200 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100"
-              >
-                {t.drawerCta[lang]}
-              </Link>
-            </motion.aside>
+    {/* Блок Условий (rates) */}
+    <div>
+      <h4 className="text-amber-200 uppercase tracking-widest text-[10px] font-bold mb-3">Earnings & Rates</h4>
+      <div className="grid grid-cols-2 gap-y-2 text-xs text-zinc-400">
+        <span>Split:</span> <span className="text-zinc-100 text-right">{selected.rates.split}</span>
+        <span>Shot:</span> <span className="text-zinc-100 text-right">{selected.rates.shot}</span>
+        <span>Incall:</span> <span className="text-zinc-100 text-right">{selected.rates.incall}</span>
+        <span>Outcall:</span> <span className="text-zinc-100 text-right">{selected.rates.outcall}</span>
+      </div>
+    </div>
+
+    {/* Accommodation */}
+    <div>
+      <h4 className="text-amber-200 uppercase tracking-widest text-[10px] font-bold mb-2">Accommodation</h4>
+      <p className="text-xs text-zinc-400">{selected.accommodation[lang]}</p>
+    </div>
+
+    {/* Services */}
+    <div>
+      <h4 className="text-amber-200 uppercase tracking-widest text-[10px] font-bold mb-2">Included Services</h4>
+      <p className="text-xs text-zinc-400">{selected.services[lang]}</p>
+    </div>
+  </div>
+
+  <Link
+    href="/login"
+    className="mt-10 flex w-full items-center justify-center rounded-full bg-amber-200 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100"
+  >
+    {t.drawerCta[lang]}
+  </Link>
+</motion.aside>
           </>
         )}
       </AnimatePresence>
