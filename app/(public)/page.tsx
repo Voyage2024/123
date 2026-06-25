@@ -50,7 +50,6 @@ export default function HomePage() {
       return;
     }
 
-    // Clear any previous particles at start of new flight
     setTrailParticles([]);
     particleIdRef.current = 0;
 
@@ -65,7 +64,6 @@ export default function HomePage() {
 
           setTrailParticles(prev => {
             const newParticle: TrailParticle = { id, x, y, opacity: 1, scale: 1 };
-            // Keep only last 40 particles for performance
             const updated = [...prev, newParticle];
             if (updated.length > 40) updated.shift();
             return updated;
@@ -116,7 +114,7 @@ export default function HomePage() {
       heroSubtitle:
         "Exclusive community. Premium image events and residencies worldwide.",
       ctaExplore: "Explore Destinations",
-      ctaApply: "Apply for Membership",
+      ctaApply: "Resident Access",
       sectionResidencies: "Residencies",
       sectionDestinations: "Current Destinations",
       macroRegion: "Macro Region",
@@ -144,7 +142,7 @@ export default function HomePage() {
       // Манифест и столпы / Manifesto & Pillars
       missionEyebrow: "Mission & Positioning",
       manifesto:
-        "We do not just organize travel. We curate an ecosystem. Voyage is a private, invitation-only community where global elites, visionaries, and premium aesthetics converge.",
+        "We do not just organize travel. Voyage is a private, invitation-only club. A place where the world's elite, the right connections, and impeccable aesthetics converge.",
       pillar1Title: "The Inner Circle",
       pillar1Desc:
         "Access is everything. Become part of an exclusive network. From closed after-parties in Hollywood to private yacht charters in Monaco, we put you in the right room with the right people.",
@@ -185,7 +183,7 @@ export default function HomePage() {
       heroSubtitle:
         "Эксклюзивное комьюнити. Премиальные имиджевые мероприятия и резиденции по всему миру.",
       ctaExplore: "Смотреть направления",
-      ctaApply: "Подать заявку",
+      ctaApply: "Вход для резидентов",
       sectionResidencies: "Резиденции",
       sectionDestinations: "Актуальные направления",
       macroRegion: "Макрорегион",
@@ -196,13 +194,13 @@ export default function HomePage() {
       exploreRegion: "Исследовать регион",
       sectionWhy: "Почему Voyage",
       sectionTrust: "Основано на доверии",
-      value1Title: "Verified Network",
+      value1Title: "Закрытая сеть",
       value1Desc:
         "Только проверенные VIP-клиенты. Каждый участник проходит строгую верификацию перед вступлением в клуб.",
-      value2Title: "Flawless Security",
+      value2Title: "Безупречная защита",
       value2Desc:
         "24/7 протоколы защиты. Конфиденциальность и безопасность каждого участника — наш главный приоритет.",
-      value3Title: "100% Tips Retention",
+      value3Title: "100% сохранение чаевых",
       value3Desc:
         "Полное сохранение чаевых. Всё, что вы зарабатываете сверх тарифа, остаётся только у вас.",
       footerRights: "Только для членов клуба — Все права защищены",
@@ -213,7 +211,7 @@ export default function HomePage() {
       // Манифест и столпы / Manifesto & Pillars
       missionEyebrow: "Миссия и позиционирование",
       manifesto:
-        "Мы не просто организуем поездки. Мы курируем экосистему. Voyage — это закрытое комьюнити по приглашениям, где пересекаются глобальная элита, визионеры и безупречная эстетика.",
+        "Мы не просто организуем поездки. Voyage — это закрытый клуб по приглашениям. Место, где пересекаются мировая элита, правильные связи и безупречная эстетика.",
       pillar1Title: "Закрытое комьюнити",
       pillar1Desc:
         "Доступ решает всё. Станьте частью эксклюзивного нетворка. От закрытых after-party в Голливуде до чартеров в Монако — мы открываем двери в правильные комнаты к нужным людям.",
@@ -258,7 +256,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased">
-      {/* ─── Public Header (прозрачный, только логотип / язык / Member Login) ─── */}
+      {/* ─── Public Header ─── */}
       <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-5 border-b border-white/5 bg-zinc-950/60 backdrop-blur-md">
         <span
           className="text-amber-200 font-serif tracking-[0.35em] text-xl font-light select-none"
@@ -306,17 +304,14 @@ export default function HomePage() {
 
       {/* ─── Hero Section ─── */}
       <section className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 pt-24 overflow-hidden">
-        {/* Ambient glow */}
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] rounded-full bg-amber-400/5 blur-[120px]" />
         </div>
 
-        {/* Eyebrow */}
         <p className="mb-6 text-xs tracking-[0.5em] uppercase text-amber-200/60 font-medium">
           {t.heroEyebrow}
         </p>
 
-        {/* Main heading */}
         <h1
           className="text-6xl md:text-8xl lg:text-9xl font-light text-zinc-50 leading-none tracking-tight mb-6"
           style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}
@@ -328,15 +323,12 @@ export default function HomePage() {
           {t.heroLine3}
         </h1>
 
-        {/* Divider */}
         <div className="w-16 h-px bg-amber-200/40 mx-auto my-8" />
 
-        {/* Subheading */}
         <p className="max-w-xl text-zinc-400 text-base md:text-lg leading-relaxed mb-12 font-light">
           {t.heroSubtitle}
         </p>
 
-        {/* CTAs */}
         <div className="flex flex-col sm:flex-row gap-4 items-center">
           <button
             onClick={scrollToDestinations}
@@ -352,7 +344,6 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* Scroll indicator */}
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-40">
           <div className="w-px h-10 bg-gradient-to-b from-transparent to-amber-200/60 animate-pulse" />
         </div>
@@ -360,13 +351,11 @@ export default function HomePage() {
 
       {/* ─── Mission & Positioning (Манифест и Три столпа) ─── */}
       <section className="relative px-6 py-28 overflow-hidden">
-        {/* Ambient glow */}
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[640px] h-[420px] rounded-full bg-amber-400/[0.04] blur-[130px]" />
         </div>
 
         <div className="relative max-w-5xl mx-auto">
-          {/* Eyebrow */}
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -377,7 +366,6 @@ export default function HomePage() {
             {t.missionEyebrow}
           </motion.p>
 
-          {/* Манифест */}
           <motion.blockquote
             initial={{ opacity: 0, y: 26 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -389,7 +377,6 @@ export default function HomePage() {
             {t.manifesto}
           </motion.blockquote>
 
-          {/* Divider */}
           <motion.div
             initial={{ opacity: 0, scaleX: 0 }}
             whileInView={{ opacity: 1, scaleX: 1 }}
@@ -398,7 +385,6 @@ export default function HomePage() {
             className="w-16 h-px bg-amber-200/40 mx-auto my-16 origin-center"
           />
 
-          {/* Три столпа */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {pillars.map((p, i) => (
               <motion.div
@@ -422,7 +408,6 @@ export default function HomePage() {
                   {p.desc}
                 </p>
 
-                {/* Corner accent glow */}
                 <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-400/5 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               </motion.div>
             ))}
@@ -432,7 +417,6 @@ export default function HomePage() {
 
       {/* ─── Destinations ─── */}
       <section id="destinations" className="px-6 py-28 max-w-6xl mx-auto">
-        {/* Section header */}
         <div className="mb-14 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
             <p className="text-xs tracking-[0.5em] uppercase text-amber-200/60 font-medium mb-3">
@@ -448,7 +432,6 @@ export default function HomePage() {
           <div className="w-24 h-px bg-zinc-800 self-center hidden md:block" />
         </div>
 
-        {/* Macro-region cards grid — 2×2 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* ── Middle East ── */}
           <Link
@@ -478,11 +461,7 @@ export default function HomePage() {
               </div>
               <div className="flex items-center gap-2 text-amber-200/60 text-sm tracking-widest uppercase font-medium group-hover:text-amber-200 transition-colors duration-300">
                 {t.exploreRegion}
-                <ArrowRight
-                  size={14}
-                  strokeWidth={2}
-                  className="group-hover:translate-x-1 transition-transform duration-300"
-                />
+                <ArrowRight size={14} strokeWidth={2} className="group-hover:translate-x-1 transition-transform duration-300" />
               </div>
             </div>
             <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-amber-400/5 to-transparent rounded-2xl" />
@@ -516,11 +495,7 @@ export default function HomePage() {
               </div>
               <div className="flex items-center gap-2 text-amber-200/60 text-sm tracking-widest uppercase font-medium group-hover:text-amber-200 transition-colors duration-300">
                 {t.exploreRegion}
-                <ArrowRight
-                  size={14}
-                  strokeWidth={2}
-                  className="group-hover:translate-x-1 transition-transform duration-300"
-                />
+                <ArrowRight size={14} strokeWidth={2} className="group-hover:translate-x-1 transition-transform duration-300" />
               </div>
             </div>
             <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-amber-400/5 to-transparent rounded-2xl" />
@@ -554,11 +529,7 @@ export default function HomePage() {
               </div>
               <div className="flex items-center gap-2 text-amber-200/60 text-sm tracking-widest uppercase font-medium group-hover:text-amber-200 transition-colors duration-300">
                 {t.exploreRegion}
-                <ArrowRight
-                  size={14}
-                  strokeWidth={2}
-                  className="group-hover:translate-x-1 transition-transform duration-300"
-                />
+                <ArrowRight size={14} strokeWidth={2} className="group-hover:translate-x-1 transition-transform duration-300" />
               </div>
             </div>
             <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-amber-400/5 to-transparent rounded-2xl" />
@@ -592,11 +563,7 @@ export default function HomePage() {
               </div>
               <div className="flex items-center gap-2 text-amber-200/60 text-sm tracking-widest uppercase font-medium group-hover:text-amber-200 transition-colors duration-300">
                 {t.exploreRegion}
-                <ArrowRight
-                  size={14}
-                  strokeWidth={2}
-                  className="group-hover:translate-x-1 transition-transform duration-300"
-                />
+                <ArrowRight size={14} strokeWidth={2} className="group-hover:translate-x-1 transition-transform duration-300" />
               </div>
             </div>
             <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-amber-400/5 to-transparent rounded-2xl" />
@@ -607,7 +574,6 @@ export default function HomePage() {
       {/* ─── Why Voyage / Values ─── */}
       <section className="px-6 py-24 border-t border-white/5">
         <div className="max-w-6xl mx-auto">
-          {/* Section header */}
           <div className="text-center mb-16">
             <p className="text-xs tracking-[0.5em] uppercase text-amber-200/60 font-medium mb-3">
               {t.sectionWhy}
@@ -620,16 +586,11 @@ export default function HomePage() {
             </h2>
           </div>
 
-          {/* Value cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Verified Network */}
+            {/* Verified Network / Закрытая сеть */}
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 backdrop-blur-sm p-8 group hover:border-zinc-700 transition-all duration-300">
               <div className="w-10 h-10 rounded-full border border-amber-200/20 flex items-center justify-center mb-6 group-hover:border-amber-200/40 transition-colors duration-300">
-                <Shield
-                  size={16}
-                  strokeWidth={1.5}
-                  className="text-amber-200/70"
-                />
+                <Shield size={16} strokeWidth={1.5} className="text-amber-200/70" />
               </div>
               <h3
                 className="text-xl font-light text-zinc-100 mb-3"
@@ -642,14 +603,10 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* Flawless Security */}
+            {/* Flawless Security / Безупречная защита */}
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 backdrop-blur-sm p-8 group hover:border-zinc-700 transition-all duration-300">
               <div className="w-10 h-10 rounded-full border border-amber-200/20 flex items-center justify-center mb-6 group-hover:border-amber-200/40 transition-colors duration-300">
-                <Lock
-                  size={16}
-                  strokeWidth={1.5}
-                  className="text-amber-200/70"
-                />
+                <Lock size={16} strokeWidth={1.5} className="text-amber-200/70" />
               </div>
               <h3
                 className="text-xl font-light text-zinc-100 mb-3"
@@ -662,14 +619,10 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* 100% Tips Retention */}
+            {/* 100% Tips Retention / 100% сохранение чаевых */}
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 backdrop-blur-sm p-8 group hover:border-zinc-700 transition-all duration-300">
               <div className="w-10 h-10 rounded-full border border-amber-200/20 flex items-center justify-center mb-6 group-hover:border-amber-200/40 transition-colors duration-300">
-                <BadgeDollarSign
-                  size={16}
-                  strokeWidth={1.5}
-                  className="text-amber-200/70"
-                />
+                <BadgeDollarSign size={16} strokeWidth={1.5} className="text-amber-200/70" />
               </div>
               <h3
                 className="text-xl font-light text-zinc-100 mb-3"
@@ -687,11 +640,9 @@ export default function HomePage() {
 
       {/* ─── Membership Application Form ─── */}
       <section className="px-6 py-24 border-t border-white/5 bg-zinc-950 relative overflow-hidden">
-        {/* Декоративное свечение сверху */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-px bg-gradient-to-r from-transparent via-amber-200/30 to-transparent" />
 
         <div className="max-w-3xl mx-auto">
-          {/* Заголовки формы */}
           <div className="text-center mb-16">
             <p className="text-xs tracking-[0.5em] uppercase text-amber-200/60 font-medium mb-3">
               {t.formEyebrow}
@@ -707,7 +658,6 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Сама форма */}
           <form className="space-y-10" onSubmit={(e) => e.preventDefault()}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <div className="space-y-3 relative group">
@@ -816,7 +766,6 @@ export default function HomePage() {
                   {t.formSubmit}
                 </button>
 
-                {/* Trail particles layer */}
                 <div className="absolute inset-0 pointer-events-none overflow-visible" style={{ width: '500px', height: '200px', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
                   {trailParticles.map((p) => (
                     <div
@@ -837,7 +786,6 @@ export default function HomePage() {
                   ))}
                 </div>
 
-                {/* Самолетик */}
                 <div
                   ref={planeRef}
                   onClick={handlePlaneClick}

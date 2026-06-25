@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -10,6 +10,7 @@ import {
   Crown,
   MapPin,
   ChevronRight,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -32,6 +33,21 @@ interface Highlight {
   title: { EN: string; RU: string };
   body: { EN: string; RU: string };
 }
+
+// ─────────────────────────────────────────────────────────────
+// Map — единый стандарт пропорций для всех регионов (4:3).
+// Карта кладётся во внутренний слой-«сцену», отмасштабированный
+// под cover, поэтому коробка одинаковая на всех страницах, а точки
+// остаются приклеены к самой карте (не сползают).
+// ─────────────────────────────────────────────────────────────
+const MAP_W = 2134;
+const MAP_H = 1563;
+const TARGET_RATIO = 4 / 3;
+const IMG_RATIO = MAP_W / MAP_H;
+const STAGE_STYLE: React.CSSProperties =
+  IMG_RATIO >= TARGET_RATIO
+    ? { height: "100%", width: `${(IMG_RATIO / TARGET_RATIO) * 100}%` }
+    : { width: "100%", height: `${(TARGET_RATIO / IMG_RATIO) * 100}%` };
 
 // ─────────────────────────────────────────────────────────────
 // Data
@@ -146,6 +162,21 @@ function RadarNode({ active }: { active: boolean }) {
 export default function MiddleEastPage() {
   const [lang, setLang] = useState<Lang>("EN");
   const [activeHub, setActiveHub] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Hub | null>(null);
+
+  // Открыть Drawer по клику на локацию (из списка или с карты)
+  const openHub = (hub: Hub) => {
+    setActiveHub(hub.id);
+    setSelected(hub);
+  };
+
+  // Блокируем скролл фона, пока открыт Drawer
+  useEffect(() => {
+    document.body.style.overflow = selected ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selected]);
 
   const t = useMemo(
     () => ({
@@ -158,6 +189,12 @@ export default function MiddleEastPage() {
       hubsLabel: { EN: "Strategic Locations", RU: "Стратегические локации" },
       mapLabel: { EN: "Regional Overview", RU: "Обзор региона" },
       highlightsTitle: { EN: "Regional Highlights", RU: "Особенности региона" },
+      drawerEyebrow: { EN: "Location Dossier", RU: "Досье локации" },
+      drawerBody: {
+        EN: "The epicenter of luxury. Private yacht parties, VIP lounges, and a flawless network among the world's elite. Absolute confidentiality and the highest level of checks.",
+        RU: "Эпицентр роскоши. Закрытые яхт-вечеринки, VIP-ложи и безупречный нетворк среди мировой элиты. Абсолютная конфиденциальность и высочайший уровень чеков.",
+      },
+      drawerCta: { EN: "Resident Access", RU: "Вход для резидентов" },
     }),
     []
   );
@@ -213,8 +250,7 @@ export default function MiddleEastPage() {
                 {t.hubsLabel[lang]}
               </div>
 
-              {/* Скроллбар скрыт во всех движках: WebKit/Blink, Firefox, старый Edge.
-                  Скролл колесом/тачем сохранён. */}
+              {/* Скроллбар скрыт во всех движках: WebKit/Blink, Firefox, старый Edge. */}
               <div className="space-y-1 pr-2 max-h-[600px] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 {HUBS.map((hub, idx) => {
                   const isActive = activeHub === hub.id;
@@ -224,7 +260,8 @@ export default function MiddleEastPage() {
                     <motion.div
                       key={hub.id}
                       onMouseEnter={() => setActiveHub(hub.id)}
-                      onMouseLeave={() => setActiveHub(null)}
+                      onMouseLeave={() => setActiveHub((cur) => (selected ? cur : null))}
+                      onClick={() => openHub(hub)}
                       className={`group flex cursor-pointer items-center justify-between rounded-xl px-5 py-4 transition-all duration-300 ${
                         isActive ? "bg-zinc-900/60 border border-zinc-800/80" : "border border-transparent hover:bg-zinc-900/30"
                       }`}
@@ -273,93 +310,93 @@ export default function MiddleEastPage() {
                 {t.mapLabel[lang]}
               </div>
 
-              {/* Контейнер карты: relative + overflow-hidden обязательны для <Image fill /> */}
+              {/* Единый контейнер 4:3 для всех регионов. */}
               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-950 shadow-2xl">
+                {/* «Сцена» под cover — карта + артерии + точки (точки приклеены к карте) */}
+                <div
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+                  style={STAGE_STYLE}
+                >
+                  <Image
+                    src="/map-mena.jpg"
+                    alt="MENA Map"
+                    fill
+                    priority
+                    className="object-cover opacity-80"
+                  />
 
-                {/* Фоновая картинка карты через next/image (fill) */}
-                <Image
-                  src="/map-mena.jpg"
-                  alt="MENA Map"
-                  fill
-                  priority
-                  className="object-cover opacity-80"
-                />
+                  {/* Виньетка */}
+                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-zinc-950/40 to-zinc-950 pointer-events-none" />
 
-                {/* Растворение краев (виньетка) */}
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-zinc-950/40 to-zinc-950 pointer-events-none" />
+                  {/* Линии связи */}
+                  <svg className="absolute inset-0 h-full w-full pointer-events-none opacity-20" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#fbbf24" stopOpacity="0" />
+                        <stop offset="50%" stopColor="#fbbf24" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="#fbbf24" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <polyline
+                      points="77,56 66.2,54.8 52,56 64.8,52.5 77,56"
+                      fill="none"
+                      stroke="url(#lineGrad)"
+                      strokeWidth="0.5"
+                    />
+                    <line x1="66.2" y1="54.8" x2="29" y2="31" stroke="url(#lineGrad)" strokeWidth="0.3" />
+                    <line x1="52" y1="56" x2="20" y2="40" stroke="url(#lineGrad)" strokeWidth="0.3" />
+                    <line x1="82.2" y1="60.1" x2="52" y2="56" stroke="url(#lineGrad)" strokeWidth="0.3" />
+                  </svg>
 
-                {/* Region label */}
-                <div className="absolute top-6 left-6 z-10">
+                  {/* Nodes (Точки городов) — клик открывает Drawer */}
+                  {HUBS.map((hub) => {
+                    const labelAbove = hub.y > 82;
+                    return (
+                      <div
+                        key={hub.id}
+                        className="absolute -translate-x-1/2 -translate-y-1/2 z-10"
+                        style={{ left: `${hub.x}%`, top: `${hub.y}%` }}
+                      >
+                        <button
+                          type="button"
+                          onMouseEnter={() => setActiveHub(hub.id)}
+                          onMouseLeave={() => setActiveHub((cur) => (selected ? cur : null))}
+                          onClick={() => openHub(hub)}
+                          aria-label={hub.name[lang]}
+                          className="flex h-7 w-7 cursor-pointer items-center justify-center"
+                        >
+                          <RadarNode active={activeHub === hub.id} />
+                        </button>
+
+                        <AnimatePresence>
+                          {activeHub === hub.id && (
+                            <motion.div
+                              key={`tooltip-${hub.id}`}
+                              initial={{ opacity: 0, y: labelAbove ? -10 : 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: labelAbove ? -10 : 10 }}
+                              transition={{ duration: 0.2 }}
+                              className={`pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap z-20 ${
+                                labelAbove ? "bottom-full mb-3" : "top-full mt-3"
+                              }`}
+                            >
+                              <div className="rounded-lg bg-zinc-950/90 px-4 py-2 text-[10px] tracking-widest uppercase font-medium text-amber-200 shadow-xl border border-amber-200/20 backdrop-blur-md">
+                                {hub.name[lang]}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Region label (на контейнере — всегда видна) */}
+                <div className="absolute top-6 left-6 z-10 pointer-events-none">
                   <span className="font-serif text-5xl font-light text-zinc-100/10 select-none tracking-widest">
                     MENA
                   </span>
                 </div>
-
-                {/* Линии связи с добавленным viewBox для корректного отображения */}
-                <svg className="absolute inset-0 h-full w-full pointer-events-none opacity-20" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#fbbf24" stopOpacity="0" />
-                      <stop offset="50%" stopColor="#fbbf24" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#fbbf24" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  <polyline
-                    points="77,56 66.2,54.8 52,56 64.8,52.5 77,56"
-                    fill="none"
-                    stroke="url(#lineGrad)"
-                    strokeWidth="0.5"
-                  />
-                  <line x1="66.2" y1="54.8" x2="29" y2="31" stroke="url(#lineGrad)" strokeWidth="0.3" />
-                  <line x1="52" y1="56" x2="20" y2="40" stroke="url(#lineGrad)" strokeWidth="0.3" />
-                  <line x1="82.2" y1="60.1" x2="52" y2="56" stroke="url(#lineGrad)" strokeWidth="0.3" />
-                </svg>
-
-                {/* Nodes (Точки городов) — теперь кликабельные/наводимые прямо на карте */}
-                {HUBS.map((hub) => {
-                  const labelAbove = hub.y > 82; // у нижней кромки подпись сверху
-                  return (
-                    <div
-                      key={hub.id}
-                      className="absolute -translate-x-1/2 -translate-y-1/2 z-10"
-                      style={{ left: `${hub.x}%`, top: `${hub.y}%` }}
-                    >
-                      {/* Кликабельная/наводимая зона вокруг точки (удобно тыкать) */}
-                      <button
-                        type="button"
-                        onMouseEnter={() => setActiveHub(hub.id)}
-                        onMouseLeave={() => setActiveHub(null)}
-                        onClick={() =>
-                          setActiveHub((cur) => (cur === hub.id ? null : hub.id))
-                        }
-                        aria-label={hub.name[lang]}
-                        className="flex h-7 w-7 cursor-pointer items-center justify-center"
-                      >
-                        <RadarNode active={activeHub === hub.id} />
-                      </button>
-
-                      {/* Tooltip label on active */}
-                      <AnimatePresence>
-                        {activeHub === hub.id && (
-                          <motion.div
-                            key={`tooltip-${hub.id}`}
-                            initial={{ opacity: 0, y: labelAbove ? -10 : 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: labelAbove ? -10 : 10 }}
-                            transition={{ duration: 0.2 }}
-                            className={`pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap z-20 ${
-                              labelAbove ? "bottom-full mb-3" : "top-full mt-3"
-                            }`}
-                          >
-                            <div className="rounded-lg bg-zinc-950/90 px-4 py-2 text-[10px] tracking-widest uppercase font-medium text-amber-200 shadow-xl border border-amber-200/20 backdrop-blur-md">
-                              {hub.name[lang]}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
               </div>
             </div>
           </div>
@@ -399,7 +436,6 @@ export default function MiddleEastPage() {
                   {item.body[lang]}
                 </p>
 
-                {/* Corner accent glow */}
                 <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-400/5 blur-2xl transition-opacity duration-500 group-hover:opacity-100 opacity-0 pointer-events-none" />
               </motion.div>
             ))}
@@ -409,6 +445,66 @@ export default function MiddleEastPage() {
 
       {/* ── Footer spacer ── */}
       <div className="h-12" />
+
+      {/* ── Location Drawer ── */}
+      <AnimatePresence>
+        {selected && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="drawer-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              onClick={() => setSelected(null)}
+              className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
+            />
+            {/* Panel */}
+            <motion.aside
+              key="drawer-panel"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 34 }}
+              className="fixed right-0 top-0 bottom-0 z-[70] w-full max-w-md overflow-y-auto border-l border-zinc-800/80 bg-zinc-950 p-8 sm:p-10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+            >
+              <div className="flex items-start justify-between">
+                <span className="text-[11px] uppercase tracking-[0.3em] text-amber-200/60">
+                  {t.drawerEyebrow[lang]}
+                </span>
+                <button
+                  onClick={() => setSelected(null)}
+                  aria-label="Close"
+                  className="-mr-2 -mt-2 rounded-full p-2 text-zinc-500 transition-colors hover:text-amber-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <h2 className="mt-10 font-serif text-5xl font-light leading-tight text-zinc-100">
+                {selected.name[lang]}
+              </h2>
+              <p className="mt-3 text-[11px] uppercase tracking-[0.25em] text-amber-200/70">
+                {selected.subtitle[lang]}
+              </p>
+
+              <div className="my-8 h-px w-16 bg-amber-200/30" />
+
+              <p className="text-sm font-light leading-relaxed text-zinc-400">
+                {t.drawerBody[lang]}
+              </p>
+
+              <Link
+                href="/login"
+                className="mt-10 inline-flex items-center justify-center rounded-full bg-amber-200 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100"
+              >
+                {t.drawerCta[lang]}
+              </Link>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

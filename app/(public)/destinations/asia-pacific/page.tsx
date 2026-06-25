@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -10,6 +10,7 @@ import {
   Briefcase,
   MapPin,
   ChevronRight,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -23,8 +24,8 @@ interface Hub {
   id: string;
   name: { EN: string; RU: string };
   subtitle: { EN: string; RU: string };
-  x: number; // % from left
-  y: number; // % from top
+  x: number;
+  y: number;
 }
 
 interface Highlight {
@@ -34,8 +35,23 @@ interface Highlight {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Data
-// Координаты x/y выверены по карте /map-apac.jpg (1152×1652, портрет).
+// Map — единый стандарт пропорций (4:3) + cover-«сцена».
+// ВНИМАНИЕ: эта карта портретная (1152×1652). В едином 4:3 верх
+// (Korea/China) и низ (Australia) уходят за кадр. Точки остаются
+// привязаны к карте и доступны в списке/Drawer. Чтобы показать
+// карту целиком — поставь TARGET_RATIO = IMG_RATIO.
+// ─────────────────────────────────────────────────────────────
+const MAP_W = 1152;
+const MAP_H = 1652;
+const TARGET_RATIO = 4 / 3;
+const IMG_RATIO = MAP_W / MAP_H;
+const STAGE_STYLE: React.CSSProperties =
+  IMG_RATIO >= TARGET_RATIO
+    ? { height: "100%", width: `${(IMG_RATIO / TARGET_RATIO) * 100}%` }
+    : { width: "100%", height: `${(TARGET_RATIO / IMG_RATIO) * 100}%` };
+
+// ─────────────────────────────────────────────────────────────
+// Data — координаты выверены по /map-apac.jpg (1152×1652).
 // ─────────────────────────────────────────────────────────────
 const HUBS: Hub[] = [
   { id: "korea",     name: { EN: "SOUTH KOREA", RU: "ЮЖНАЯ КОРЕЯ" }, subtitle: { EN: "Seoul Nightlife Elite", RU: "Элита ночного Сеула" }, x: 53.0, y: 13.7 },
@@ -50,10 +66,9 @@ const HUBS: Hub[] = [
   { id: "australia", name: { EN: "AUSTRALIA", RU: "АВСТРАЛИЯ" }, subtitle: { EN: "Harbour Yacht Society", RU: "Яхт-клуб у гавани" }, x: 85.7, y: 89.0 },
 ];
 
-// Главные артерии (декоративные SVG-линии) по координатам хабов.
 const ARTERIES: string[] = [
-  "53,13.7 43.1,20.7 11.8,40.4 13.4,51.8 34.2,63.7 85.7,89",   // Korea → China → Bangkok → Malaysia → Bali → Australia
-  "10.5,48 11.8,40.4 18.2,43.1 21.1,43.7",                     // Phuket → Bangkok → Cambodia → Vietnam
+  "53,13.7 43.1,20.7 11.8,40.4 13.4,51.8 34.2,63.7 85.7,89",
+  "10.5,48 11.8,40.4 18.2,43.1 21.1,43.7",
 ];
 
 const HIGHLIGHTS: Highlight[] = [
@@ -94,10 +109,7 @@ function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => v
         layout
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="absolute top-1 bottom-1 rounded-full bg-zinc-800"
-        style={{
-          width: "calc(50% - 4px)",
-          left: lang === "EN" ? "4px" : "calc(50%)",
-        }}
+        style={{ width: "calc(50% - 4px)", left: lang === "EN" ? "4px" : "calc(50%)" }}
       />
       {(["EN", "RU"] as Lang[]).map((l) => (
         <button
@@ -117,7 +129,6 @@ function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => v
 function RadarNode({ active }: { active: boolean }) {
   return (
     <div className="relative flex items-center justify-center">
-      {/* Ping rings */}
       <AnimatePresence>
         {active && (
           <motion.div key="waves" className="absolute inset-0 flex items-center justify-center">
@@ -138,7 +149,6 @@ function RadarNode({ active }: { active: boolean }) {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Core dot */}
       <span
         className={`relative inline-flex rounded-full transition-all duration-500 z-10 ${
           active
@@ -153,6 +163,19 @@ function RadarNode({ active }: { active: boolean }) {
 export default function AsiaPacificPage() {
   const [lang, setLang] = useState<Lang>("EN");
   const [activeHub, setActiveHub] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Hub | null>(null);
+
+  const openHub = (hub: Hub) => {
+    setActiveHub(hub.id);
+    setSelected(hub);
+  };
+
+  useEffect(() => {
+    document.body.style.overflow = selected ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selected]);
 
   const t = useMemo(
     () => ({
@@ -165,6 +188,12 @@ export default function AsiaPacificPage() {
       hubsLabel: { EN: "Member Destinations", RU: "Направления клуба" },
       mapLabel: { EN: "Regional Overview", RU: "Обзор региона" },
       highlightsTitle: { EN: "Membership Privileges", RU: "Привилегии членства" },
+      drawerEyebrow: { EN: "Location Dossier", RU: "Досье локации" },
+      drawerBody: {
+        EN: "Futuristic luxury and private islands. Hidden resorts in Bali, elite hubs in Singapore and Hong Kong. Refined aesthetics and new networking horizons.",
+        RU: "Футуристичный люкс и приватные острова. Скрытые резорты Бали, элитные хабы Сингапура и Гонконга. Утонченная эстетика и новые горизонты нетворка.",
+      },
+      drawerCta: { EN: "Resident Access", RU: "Вход для резидентов" },
     }),
     []
   );
@@ -174,14 +203,10 @@ export default function AsiaPacificPage() {
       {/* ── Navigation ── */}
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <Link
-            href="/"
-            className="group flex items-center gap-2 text-xs uppercase tracking-widest font-medium text-zinc-400 transition-colors hover:text-amber-200"
-          >
+          <Link href="/" className="group flex items-center gap-2 text-xs uppercase tracking-widest font-medium text-zinc-400 transition-colors hover:text-amber-200">
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
             {t.back[lang]}
           </Link>
-
           <div className="flex items-center gap-4">
             <LanguageToggle lang={lang} setLang={setLang} />
           </div>
@@ -191,21 +216,11 @@ export default function AsiaPacificPage() {
       {/* ── Hero ── */}
       <section className="relative overflow-hidden pt-36 pb-16 px-6">
         <div className="mx-auto max-w-7xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-          >
-            <h1 className="font-serif text-6xl font-light tracking-tight text-zinc-100 sm:text-7xl lg:text-8xl">
-              {t.heroTitle[lang]}
-            </h1>
-            <p className="mt-4 max-w-2xl text-lg font-light leading-relaxed text-zinc-400">
-              {t.heroSubtitle[lang]}
-            </p>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: "easeOut" }}>
+            <h1 className="font-serif text-6xl font-light tracking-tight text-zinc-100 sm:text-7xl lg:text-8xl">{t.heroTitle[lang]}</h1>
+            <p className="mt-4 max-w-2xl text-lg font-light leading-relaxed text-zinc-400">{t.heroSubtitle[lang]}</p>
           </motion.div>
         </div>
-
-        {/* Decorative gradient */}
         <div className="pointer-events-none absolute top-0 right-0 h-[500px] w-[500px] rounded-full bg-amber-400/5 blur-[120px]" />
       </section>
 
@@ -219,94 +234,45 @@ export default function AsiaPacificPage() {
                 <MapPin className="h-3.5 w-3.5" />
                 {t.hubsLabel[lang]}
               </div>
-
-              {/* Скроллбар скрыт во всех движках: WebKit/Blink, Firefox, старый Edge.
-                  Скролл колесом/тачем сохранён. */}
               <div className="space-y-1 pr-2 max-h-[680px] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 {HUBS.map((hub, idx) => {
                   const isActive = activeHub === hub.id;
                   const num = String(idx + 1).padStart(2, "0");
-
                   return (
                     <motion.div
                       key={hub.id}
                       onMouseEnter={() => setActiveHub(hub.id)}
-                      onMouseLeave={() => setActiveHub(null)}
-                      className={`group flex cursor-pointer items-center justify-between rounded-xl px-5 py-4 transition-all duration-300 ${
-                        isActive ? "bg-zinc-900/60 border border-zinc-800/80" : "border border-transparent hover:bg-zinc-900/30"
-                      }`}
+                      onMouseLeave={() => setActiveHub((cur) => (selected ? cur : null))}
+                      onClick={() => openHub(hub)}
+                      className={`group flex cursor-pointer items-center justify-between rounded-xl px-5 py-4 transition-all duration-300 ${isActive ? "bg-zinc-900/60 border border-zinc-800/80" : "border border-transparent hover:bg-zinc-900/30"}`}
                     >
                       <div className="flex items-center gap-5">
-                        <span
-                          className={`font-mono text-sm transition-colors duration-300 ${
-                            isActive ? "text-amber-200" : "text-zinc-700"
-                          }`}
-                        >
-                          {num}
-                        </span>
+                        <span className={`font-mono text-sm transition-colors duration-300 ${isActive ? "text-amber-200" : "text-zinc-700"}`}>{num}</span>
                         <div>
-                          <h3
-                            className={`font-serif text-2xl font-light tracking-wide transition-colors duration-300 ${
-                              isActive ? "text-amber-200" : "text-zinc-300 group-hover:text-zinc-100"
-                            }`}
-                          >
-                            {hub.name[lang]}
-                          </h3>
-                          <p className={`mt-1 text-[11px] uppercase tracking-widest transition-colors duration-300 ${
-                            isActive ? "text-amber-200/70" : "text-zinc-600"
-                          }`}>
-                            {hub.subtitle[lang]}
-                          </p>
+                          <h3 className={`font-serif text-2xl font-light tracking-wide transition-colors duration-300 ${isActive ? "text-amber-200" : "text-zinc-300 group-hover:text-zinc-100"}`}>{hub.name[lang]}</h3>
+                          <p className={`mt-1 text-[11px] uppercase tracking-widest transition-colors duration-300 ${isActive ? "text-amber-200/70" : "text-zinc-600"}`}>{hub.subtitle[lang]}</p>
                         </div>
                       </div>
-
-                      <ChevronRight
-                        className={`h-5 w-5 transition-all duration-300 ${
-                          isActive
-                            ? "translate-x-0 text-amber-200 opacity-100"
-                            : "-translate-x-2 text-zinc-700 opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
-                        }`}
-                      />
+                      <ChevronRight className={`h-5 w-5 transition-all duration-300 ${isActive ? "translate-x-0 text-amber-200 opacity-100" : "-translate-x-2 text-zinc-700 opacity-0 group-hover:translate-x-0 group-hover:opacity-100"}`} />
                     </motion.div>
                   );
                 })}
               </div>
             </div>
 
-            {/* Right: Actual Image Map */}
+            {/* Right: Map */}
             <div className="lg:col-span-7">
               <div className="mb-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-amber-200/60">
                 <Globe className="h-3.5 w-3.5" />
                 {t.mapLabel[lang]}
               </div>
 
-              {/* Карта вертикальная → центрируем и держим её ИСТИННЫЕ пропорции
-                  (1152×1652), чтобы красиво легла в рамку и точки совпали по %. */}
-              <div className="flex justify-center">
-                <div
-                  className="relative w-full max-w-[500px] overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-950 shadow-2xl"
-                  style={{ aspectRatio: "1152 / 1652" }}
-                >
-                  {/* Фоновая картинка карты через next/image (fill) */}
-                  <Image
-                    src="/map-apac.jpg"
-                    alt="Asia & Pacific Map"
-                    fill
-                    priority
-                    className="object-cover opacity-80"
-                  />
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-950 shadow-2xl">
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={STAGE_STYLE}>
+                  <Image src="/map-apac.jpg" alt="Asia & Pacific Map" fill priority className="object-cover opacity-80" />
 
-                  {/* Растворение краев (виньетка) */}
                   <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-zinc-950/40 to-zinc-950 pointer-events-none" />
 
-                  {/* Region label */}
-                  <div className="absolute top-6 left-6 z-10">
-                    <span className="font-serif text-5xl font-light text-zinc-100/10 select-none tracking-widest">
-                      APAC
-                    </span>
-                  </div>
-
-                  {/* Линии связи (артерии) */}
                   <svg className="absolute inset-0 h-full w-full pointer-events-none opacity-20" viewBox="0 0 100 100" preserveAspectRatio="none">
                     <defs>
                       <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -316,41 +282,24 @@ export default function AsiaPacificPage() {
                       </linearGradient>
                     </defs>
                     {ARTERIES.map((points, i) => (
-                      <polyline
-                        key={i}
-                        points={points}
-                        fill="none"
-                        stroke="url(#lineGrad)"
-                        strokeWidth="0.4"
-                        vectorEffect="non-scaling-stroke"
-                      />
+                      <polyline key={i} points={points} fill="none" stroke="url(#lineGrad)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
                     ))}
                   </svg>
 
-                  {/* Nodes (Точки городов) — кликабельные/наводимые прямо на карте */}
                   {HUBS.map((hub) => {
-                    const labelAbove = hub.y > 82; // у нижней кромки подпись сверху
+                    const labelAbove = hub.y > 82;
                     return (
-                      <div
-                        key={hub.id}
-                        className="absolute -translate-x-1/2 -translate-y-1/2 z-10"
-                        style={{ left: `${hub.x}%`, top: `${hub.y}%` }}
-                      >
-                        {/* Кликабельная/наводимая зона вокруг точки (удобно тыкать) */}
+                      <div key={hub.id} className="absolute -translate-x-1/2 -translate-y-1/2 z-10" style={{ left: `${hub.x}%`, top: `${hub.y}%` }}>
                         <button
                           type="button"
                           onMouseEnter={() => setActiveHub(hub.id)}
-                          onMouseLeave={() => setActiveHub(null)}
-                          onClick={() =>
-                            setActiveHub((cur) => (cur === hub.id ? null : hub.id))
-                          }
+                          onMouseLeave={() => setActiveHub((cur) => (selected ? cur : null))}
+                          onClick={() => openHub(hub)}
                           aria-label={hub.name[lang]}
                           className="flex h-7 w-7 cursor-pointer items-center justify-center"
                         >
                           <RadarNode active={activeHub === hub.id} />
                         </button>
-
-                        {/* Tooltip label on active */}
                         <AnimatePresence>
                           {activeHub === hub.id && (
                             <motion.div
@@ -359,19 +308,19 @@ export default function AsiaPacificPage() {
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, y: labelAbove ? -10 : 10 }}
                               transition={{ duration: 0.2 }}
-                              className={`pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap z-20 ${
-                                labelAbove ? "bottom-full mb-3" : "top-full mt-3"
-                              }`}
+                              className={`pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap z-20 ${labelAbove ? "bottom-full mb-3" : "top-full mt-3"}`}
                             >
-                              <div className="rounded-lg bg-zinc-950/90 px-4 py-2 text-[10px] tracking-widest uppercase font-medium text-amber-200 shadow-xl border border-amber-200/20 backdrop-blur-md">
-                                {hub.name[lang]}
-                              </div>
+                              <div className="rounded-lg bg-zinc-950/90 px-4 py-2 text-[10px] tracking-widest uppercase font-medium text-amber-200 shadow-xl border border-amber-200/20 backdrop-blur-md">{hub.name[lang]}</div>
                             </motion.div>
                           )}
                         </AnimatePresence>
                       </div>
                     );
                   })}
+                </div>
+
+                <div className="absolute top-6 left-6 z-10 pointer-events-none">
+                  <span className="font-serif text-5xl font-light text-zinc-100/10 select-none tracking-widest">APAC</span>
                 </div>
               </div>
             </div>
@@ -382,16 +331,9 @@ export default function AsiaPacificPage() {
       {/* ── Highlights ── */}
       <section className="border-t border-zinc-900 bg-zinc-950/50 px-6 py-24 relative z-10">
         <div className="mx-auto max-w-7xl">
-          <motion.h2
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="mb-14 font-serif text-4xl font-light text-zinc-100"
-          >
+          <motion.h2 initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="mb-14 font-serif text-4xl font-light text-zinc-100">
             {t.highlightsTitle[lang]}
           </motion.h2>
-
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {HIGHLIGHTS.map((item, i) => (
               <motion.div
@@ -402,17 +344,9 @@ export default function AsiaPacificPage() {
                 transition={{ duration: 0.5, delay: i * 0.1 }}
                 className="group relative overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-900/30 p-8 transition-all duration-500 hover:border-amber-200/30 hover:bg-zinc-900/50"
               >
-                <div className="mb-6 w-12 h-12 rounded-full border border-amber-200/20 flex items-center justify-center text-amber-200/70 transition-colors duration-500 group-hover:border-amber-200/40 group-hover:text-amber-200">
-                  {item.icon}
-                </div>
-                <h3 className="mb-3 font-serif text-2xl font-light text-zinc-100">
-                  {item.title[lang]}
-                </h3>
-                <p className="text-sm font-light leading-relaxed text-zinc-500">
-                  {item.body[lang]}
-                </p>
-
-                {/* Corner accent glow */}
+                <div className="mb-6 w-12 h-12 rounded-full border border-amber-200/20 flex items-center justify-center text-amber-200/70 transition-colors duration-500 group-hover:border-amber-200/40 group-hover:text-amber-200">{item.icon}</div>
+                <h3 className="mb-3 font-serif text-2xl font-light text-zinc-100">{item.title[lang]}</h3>
+                <p className="text-sm font-light leading-relaxed text-zinc-500">{item.body[lang]}</p>
                 <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-400/5 blur-2xl transition-opacity duration-500 group-hover:opacity-100 opacity-0 pointer-events-none" />
               </motion.div>
             ))}
@@ -420,8 +354,46 @@ export default function AsiaPacificPage() {
         </div>
       </section>
 
-      {/* ── Footer spacer ── */}
       <div className="h-12" />
+
+      {/* ── Location Drawer ── */}
+      <AnimatePresence>
+        {selected && (
+          <>
+            <motion.div
+              key="drawer-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              onClick={() => setSelected(null)}
+              className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
+            />
+            <motion.aside
+              key="drawer-panel"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 34 }}
+              className="fixed right-0 top-0 bottom-0 z-[70] w-full max-w-md overflow-y-auto border-l border-zinc-800/80 bg-zinc-950 p-8 sm:p-10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+            >
+              <div className="flex items-start justify-between">
+                <span className="text-[11px] uppercase tracking-[0.3em] text-amber-200/60">{t.drawerEyebrow[lang]}</span>
+                <button onClick={() => setSelected(null)} aria-label="Close" className="-mr-2 -mt-2 rounded-full p-2 text-zinc-500 transition-colors hover:text-amber-200">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <h2 className="mt-10 font-serif text-5xl font-light leading-tight text-zinc-100">{selected.name[lang]}</h2>
+              <p className="mt-3 text-[11px] uppercase tracking-[0.25em] text-amber-200/70">{selected.subtitle[lang]}</p>
+              <div className="my-8 h-px w-16 bg-amber-200/30" />
+              <p className="text-sm font-light leading-relaxed text-zinc-400">{t.drawerBody[lang]}</p>
+              <Link href="/login" className="mt-10 inline-flex items-center justify-center rounded-full bg-amber-200 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100">
+                {t.drawerCta[lang]}
+              </Link>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
