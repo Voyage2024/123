@@ -18,8 +18,45 @@ import {
   Star,
   MapPin,
   Calendar,
-  ChevronRight,
 } from "lucide-react";
+
+type Lang = "EN" | "RU";
+
+// ─── Language Toggle (как на главной странице) ────────────────────────
+function LanguageToggle({
+  lang,
+  setLang,
+}: {
+  lang: Lang;
+  setLang: (l: Lang) => void;
+}) {
+  return (
+    <div className="relative bg-zinc-900/50 backdrop-blur-md border border-white/5 rounded-full p-1 flex items-center">
+      <div
+        className="absolute top-1 left-1 w-8 h-6 rounded-full bg-amber-200/20 transition-all duration-300"
+        style={{
+          transform: lang === "EN" ? "translateX(0px)" : "translateX(32px)",
+        }}
+      />
+      <button
+        onClick={() => setLang("EN")}
+        className={`relative z-10 text-[10px] tracking-widest font-medium w-8 h-6 flex items-center justify-center cursor-pointer transition-colors duration-300 ${
+          lang === "EN" ? "text-amber-200" : "text-zinc-500 hover:text-zinc-300"
+        }`}
+      >
+        EN
+      </button>
+      <button
+        onClick={() => setLang("RU")}
+        className={`relative z-10 text-[10px] tracking-widest font-medium w-8 h-6 flex items-center justify-center cursor-pointer transition-colors duration-300 ${
+          lang === "RU" ? "text-amber-200" : "text-zinc-500 hover:text-zinc-300"
+        }`}
+      >
+        RU
+      </button>
+    </div>
+  );
+}
 
 // ─── Components ───────────────────────────────────────────────────────
 
@@ -63,11 +100,13 @@ function RateCard({
   amount,
   note,
   popular = false,
+  popularLabel = "Popular",
 }: {
   label: string;
   amount: string;
   note?: string;
   popular?: boolean;
+  popularLabel?: string;
 }) {
   return (
     <div
@@ -90,7 +129,7 @@ function RateCard({
         </span>
         {popular && (
           <span className="text-[9px] tracking-[0.15em] uppercase text-amber-400/70 font-semibold bg-amber-950/30 px-2 py-0.5 rounded-full border border-amber-800/20">
-            Popular
+            {popularLabel}
           </span>
         )}
       </div>
@@ -180,10 +219,190 @@ function InfoRow({
 
 // ─── Main Page ──────────────────────────────────────────────────────
 export default function SydneyResidencyPage() {
+  const [lang, setLang] = useState<Lang>("RU");
   const [applied, setApplied] = useState(false);
+
+  // ─── Словарь переводов (EN / RU) ───────────────────────────────────
+  const t = {
+    EN: {
+      heroBadge: "Voyage Private Club",
+      heroTitle1: "Exclusive Residency:",
+      heroTitle2: "Sydney, Australia",
+      heroSubtitle:
+        "Voyage Private Club residency and elite outcall. A flawless reputation and an established VIP client base.",
+      metaLocation: "Sydney, Australia",
+      metaContract: "Long-term Contract",
+      metaTier: "VIP Tier",
+      aboutTitle: "The Location",
+      aboutNote: "— Sydney, Australia",
+      aboutText:
+        "Sydney is the crown of the South Pacific — a harbour city of superyachts, cliffside penthouses and an effortlessly affluent, discreet elite. Long days on the water flow into glittering nights, with an established, refined clientele used to the very best. A rare high-trust market with serious earning potential and a relaxed, sun-soaked lifestyle.",
+
+      finTitle: "Financial Architecture",
+      finNote: "— Rates & Income",
+      rateLabel: "Base Rate",
+      rateAmount: "$500 – $700 USD / hour",
+      rateNote: "50/50 Split. Stable traffic of 15 to 25 sessions per week.",
+      popular: "Popular",
+      optionsTitle: "Premium Options",
+      opt1Title: "Companion Upgrades",
+      opt1Amount: "+$100 USD",
+      opt2Title: "Premium Specialization",
+      opt2Amount: "+$200 – $300 USD",
+      optNote: "100% retained by the resident",
+      avgTitle: "Target Income",
+      avgAmount: "$6,000 – $9,000 USD",
+      avgPer: "net average weekly",
+      avgNote: "+ up to $2,000 from premium options and upgrades.",
+
+      visaTitle: "Visa & Legal Support",
+      visaNote: "— Legal Stay",
+      visaRowTitle: "Visa Processing",
+      visaRowDesc:
+        "Long-term student visa processing managed entirely by the club to ensure a legal, secure, and seamless stay.",
+
+      accTitle: "Accommodation & Workspace",
+      accNote: "— Premium Living",
+      housingEyebrow: "Housing",
+      housingTitle: "Private House",
+      housingDesc:
+        "Each resident lives in their own separate house — a comfortable, fully equipped home with everything needed for living and work, in a premium location.",
+      badge1: "Premium neighbourhood",
+      badge2: "Private Pool",
+      badge3: "Sauna",
+      badge4: "Fitness Center",
+      outcallEyebrow: "Outcall Logistics",
+      outcallDesc:
+        "Outcalls are strictly limited to max 20% (5-star hotels and private villas only).",
+      aptVideoLabel: "House Walkthrough",
+
+      secTitle: "Security Protocol",
+      secNote: "— Resident Protection",
+      secCardTitle: "100% Confidentiality & Protection",
+      secCardDesc:
+        "Multi-layered security system featuring a 24/7 Rapid Response Protocol. Our in-house security team is stationed city-wide, guaranteeing a maximum 20-minute arrival time to any location.",
+      secPill: "24/7 Rapid Response — 20 min max arrival",
+
+      flightTitle: "Flight Logistics",
+      flightNote: "— Transfer",
+      flightCardTitle: "Complimentary flights for extended contracts",
+      flightCardDesc:
+        "Complimentary flights provided for contracts exceeding 1 month. Ticket Crediting option available for shorter tours.",
+
+      reqTitle: "Application Requirements",
+      reqNote: "— Mandatory",
+      docEyebrow: "Documentation",
+      docVal: "Valid International Passport",
+      visaStatusEyebrow: "Visa Status",
+      visaStatusVal: "Valid Visa (Ready for immediate departure)",
+      portfolioEyebrow: "Portfolio",
+      portfolioVal: "4–5 fresh digital snaps",
+      portfolioSub: "Strictly no filters or makeup",
+      disclaimer:
+        "All applications are subject to verification and approval by the residency committee. Submission does not guarantee acceptance.",
+
+      ctaSecure: "Secure Application",
+      ctaSecureSub: "Encrypted & Confidential",
+      ctaIdle: "Submit Application",
+      ctaSent: "Application Sent",
+    },
+    RU: {
+      heroBadge: "Voyage Private Club",
+      heroTitle1: "Эксклюзивная Резиденция:",
+      heroTitle2: "Сидней, Австралия",
+      heroSubtitle:
+        "Резиденция Voyage Private Club и элитный outcall. Безупречная репутация и устоявшаяся база VIP-клиентов.",
+      metaLocation: "Сидней, Австралия",
+      metaContract: "Долгосрочный контракт",
+      metaTier: "VIP-уровень",
+      aboutTitle: "О локации",
+      aboutNote: "— Сидней, Австралия",
+      aboutText:
+        "Сидней — корона южной части Тихого океана: город суперяхт, пентхаусов на скалах и непринуждённо состоятельной, закрытой элиты. Долгие дни у воды перетекают в искрящиеся ночи, а клиентура — устоявшаяся, утончённая и привыкшая к лучшему. Редкий рынок высокого доверия с серьёзным потенциалом дохода и спокойным, солнечным образом жизни.",
+
+      finTitle: "Финансовая архитектура",
+      finNote: "— Ставки и доход",
+      rateLabel: "Базовая ставка",
+      rateAmount: "500 – 700 USD / час",
+      rateNote: "Расчет 50/50. Стабильный трафик от 15 до 25 сессий в неделю.",
+      popular: "Популярно",
+      optionsTitle: "Дополнительные опции",
+      opt1Title: "Companion Upgrades",
+      opt1Amount: "+100 USD",
+      opt2Title: "Premium Specialization",
+      opt2Amount: "+200 – 300 USD",
+      optNote: "100% дохода с апгрейдов идет резиденту",
+      avgTitle: "Средний доход",
+      avgAmount: "6,000 – 9,000 USD",
+      avgPer: "в неделю чистыми",
+      avgNote: "+ до 2,000 USD с дополнительных опций и апгрейдов.",
+
+      visaTitle: "Виза и образование",
+      visaNote: "— Легальное пребывание",
+      visaRowTitle: "Визовая поддержка",
+      visaRowDesc:
+        "Оформление долгосрочных студенческих виз силами клуба для легального и комфортного пребывания.",
+
+      accTitle: "Проживание и рабочее пространство",
+      accNote: "— Премиум-жильё",
+      housingEyebrow: "Жильё",
+      housingTitle: "Отдельный дом",
+      housingDesc:
+        "Каждый сотрудник живёт в отдельном собственном доме — комфортное, полностью укомплектованное жильё со всем необходимым для жизни и работы в премиальной локации.",
+      badge1: "Дорогой район",
+      badge2: "Собственный бассейн",
+      badge3: "Сауна",
+      badge4: "Фитнес-центр",
+      outcallEyebrow: "Логистика выездов",
+      outcallDesc:
+        "Выезды (5-звездочные отели и частные резиденции) составляют не более 20% от общего объема.",
+      aptVideoLabel: "Видеообзор дома",
+
+      secTitle: "Протокол безопасности",
+      secNote: "— Защита резидента",
+      secCardTitle: "100% Конфиденциальность и Защита",
+      secCardDesc:
+        "Многоуровневая система безопасности. Внутренняя служба безопасности клуба: круглосуточный протокол быстрого реагирования.",
+      secPill: "24/7 Rapid Response — прибытие в течение 20 минут",
+
+      flightTitle: "Логистика перелета",
+      flightNote: "— Трансфер",
+      flightCardTitle: "Перелет оплачивается клубом",
+      flightCardDesc:
+        "При контракте от 1 месяца перелет полностью оплачивается клубом. При более коротких турах доступна опция Кредитования билета.",
+
+      reqTitle: "Требования к заявке",
+      reqNote: "— Обязательные условия",
+      docEyebrow: "Документы",
+      docVal: "Действующий загранпаспорт",
+      visaStatusEyebrow: "Виза",
+      visaStatusVal: "Действующая виза Австралии",
+      portfolioEyebrow: "Портфолио",
+      portfolioVal: "4 – 5 свежих снепов",
+      portfolioSub: "Без фильтров",
+      disclaimer:
+        "Все заявки проходят верификацию и рассмотрение резидентским комитетом. Отправка заявки не гарантирует одобрение.",
+
+      ctaSecure: "Защищённая заявка",
+      ctaSecureSub: "Шифрование и конфиденциальность",
+      ctaIdle: "Подать заявку на контракт",
+      ctaSent: "Заявка отправлена",
+    },
+  }[lang];
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      {/* ── Top bar with language toggle (как на главной) ── */}
+      <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 py-4 bg-zinc-950/70 backdrop-blur-md border-b border-white/5">
+        <span
+          className="text-amber-200/90 font-light tracking-[0.35em] text-lg select-none"
+          style={{ fontFamily: "'Cormorant Garamond', serif" }}
+        >
+          VOYAGE
+        </span>
+        <LanguageToggle lang={lang} setLang={setLang} />
+      </header>
+
       {/* Ambient glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div
@@ -234,7 +453,7 @@ export default function SydneyResidencyPage() {
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-950/20 border border-amber-500/15 mb-6">
                 <Crown className="w-3 h-3 text-amber-400/60" />
                 <span className="text-[10px] tracking-[0.2em] uppercase text-amber-300/70 font-semibold">
-                  Private Contract
+                  {t.heroBadge}
                 </span>
               </div>
 
@@ -243,15 +462,14 @@ export default function SydneyResidencyPage() {
                 className="text-4xl md:text-6xl text-zinc-100 mb-4 leading-[1.1]"
                 style={{ fontFamily: "'Cormorant Garamond', serif" }}
               >
-                Exclusive Residency:
+                {t.heroTitle1}
                 <br />
-                <span className="text-amber-200/80">Sydney, Australia</span>
+                <span className="text-amber-200/80">{t.heroTitle2}</span>
               </h1>
 
               {/* Subtitle */}
               <p className="text-sm md:text-base text-zinc-400 tracking-wide max-w-xl leading-relaxed">
-                Premium contract featuring comprehensive visa support and
-                consistent high-end traffic (15–25 sessions per week).
+                {t.heroSubtitle}
               </p>
 
               {/* Meta */}
@@ -260,21 +478,21 @@ export default function SydneyResidencyPage() {
                   <div className="w-7 h-7 rounded-lg bg-zinc-800/50 border border-zinc-700/30 flex items-center justify-center">
                     <MapPin className="w-3.5 h-3.5 text-amber-400/60" />
                   </div>
-                  <span className="text-sm text-zinc-400 tracking-wide">Sydney, Australia</span>
+                  <span className="text-sm text-zinc-400 tracking-wide">{t.metaLocation}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-zinc-800/50 border border-zinc-700/30 flex items-center justify-center">
                     <Calendar className="w-3.5 h-3.5 text-amber-400/60" />
                   </div>
                   <span className="text-sm text-zinc-400 tracking-wide font-mono">
-                    Long-term Contract
+                    {t.metaContract}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-zinc-800/50 border border-zinc-700/30 flex items-center justify-center">
                     <Star className="w-3.5 h-3.5 text-amber-400/60" />
                   </div>
-                  <span className="text-sm text-zinc-400 tracking-wide">VIP Tier</span>
+                  <span className="text-sm text-zinc-400 tracking-wide">{t.metaTier}</span>
                 </div>
               </div>
             </div>
@@ -283,23 +501,46 @@ export default function SydneyResidencyPage() {
 
         {/* ── Main Content ───────────────────────────────────────── */}
         <div className="max-w-3xl mx-auto px-6 -mt-4 relative z-10 pb-32">
+          {/* ── About the Location ───────────────────────────────── */}
+          <section className="mb-10">
+            <div className="flex items-center gap-2 mb-5">
+              <MapPin className="w-4 h-4 text-zinc-500" />
+              <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
+                {t.aboutTitle}
+              </h2>
+              <span className="text-[10px] text-zinc-600 ml-1">{t.aboutNote}</span>
+            </div>
+
+            <GlassCard>
+              <div className="p-5 md:p-6">
+                <p
+                  className="text-base md:text-lg text-zinc-300 leading-relaxed font-light"
+                  style={{ fontFamily: "'Cormorant Garamond', serif" }}
+                >
+                  {t.aboutText}
+                </p>
+              </div>
+            </GlassCard>
+          </section>
+
           {/* ── Financial Architecture ───────────────────────────── */}
           <section className="mb-10">
             <div className="flex items-center gap-2 mb-5">
               <DollarSign className="w-4 h-4 text-zinc-500" />
               <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
-                Financial Architecture
+                {t.finTitle}
               </h2>
-              <span className="text-[10px] text-zinc-600 ml-1">— Rates & Income</span>
+              <span className="text-[10px] text-zinc-600 ml-1">{t.finNote}</span>
             </div>
 
             {/* Base Rate */}
             <div className="mb-3">
               <RateCard
-                label="Base Rate"
-                amount="$500 – $700 USD / hour"
-                note="50/50 Split. Stable traffic of 15 to 25 sessions per week."
+                label={t.rateLabel}
+                amount={t.rateAmount}
+                note={t.rateNote}
                 popular
+                popularLabel={t.popular}
               />
             </div>
 
@@ -309,30 +550,30 @@ export default function SydneyResidencyPage() {
                 <div className="flex items-center gap-2 mb-3">
                   <Sparkles className="w-3.5 h-3.5 text-amber-500/50" />
                   <span className="text-[10px] tracking-[0.2em] uppercase text-amber-500/70 font-semibold">
-                    Premium Options
+                    {t.optionsTitle}
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="rounded-lg bg-zinc-950/30 border border-zinc-800/40 p-4">
                     <p className="text-sm text-zinc-200 font-medium tracking-wide">
-                      Companion Upgrades
+                      {t.opt1Title}
                     </p>
                     <p className="text-xs text-amber-200/70 font-mono mt-1">
-                      +$100 USD
+                      {t.opt1Amount}
                     </p>
                     <p className="text-[10px] text-zinc-600 mt-1.5 leading-relaxed">
-                      100% retained by the resident
+                      {t.optNote}
                     </p>
                   </div>
                   <div className="rounded-lg bg-zinc-950/30 border border-zinc-800/40 p-4">
                     <p className="text-sm text-zinc-200 font-medium tracking-wide">
-                      Premium Specialization
+                      {t.opt2Title}
                     </p>
                     <p className="text-xs text-amber-200/70 font-mono mt-1">
-                      +$200 – $300 USD
+                      {t.opt2Amount}
                     </p>
                     <p className="text-[10px] text-zinc-600 mt-1.5 leading-relaxed">
-                      100% retained by the resident
+                      {t.optNote}
                     </p>
                   </div>
                 </div>
@@ -345,7 +586,7 @@ export default function SydneyResidencyPage() {
                 <div className="flex items-center gap-2 mb-3">
                   <DollarSign className="w-3.5 h-3.5 text-zinc-600" />
                   <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-600 font-semibold">
-                    Target Income
+                    {t.avgTitle}
                   </span>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-4">
@@ -353,31 +594,31 @@ export default function SydneyResidencyPage() {
                     className="text-3xl text-amber-200/90 font-light tracking-tight"
                     style={{ fontFamily: "'Cormorant Garamond', serif" }}
                   >
-                    $6,000 – $9,000 USD
+                    {t.avgAmount}
                   </p>
-                  <p className="text-sm text-zinc-400 pb-1">net average weekly</p>
+                  <p className="text-sm text-zinc-400 pb-1">{t.avgPer}</p>
                 </div>
                 <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
-                  + up to $2,000 from premium options and upgrades.
+                  {t.avgNote}
                 </p>
               </div>
             </GlassCard>
           </section>
 
-          {/* ── Visa & Legal Support ─────────────────────────────── */}
+          {/* ── Visa & Education ─────────────────────────────────── */}
           <section className="mb-10">
             <div className="flex items-center gap-2 mb-5">
               <GraduationCap className="w-4 h-4 text-zinc-500" />
               <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
-                Visa & Legal Support
+                {t.visaTitle}
               </h2>
-              <span className="text-[10px] text-zinc-600 ml-1">— Legal Stay</span>
+              <span className="text-[10px] text-zinc-600 ml-1">{t.visaNote}</span>
             </div>
 
             <InfoRow
               icon={<GraduationCap className="w-4 h-4" />}
-              title="Visa Processing"
-              description="Long-term student visa processing managed entirely by the club to ensure a legal, secure, and seamless stay."
+              title={t.visaRowTitle}
+              description={t.visaRowDesc}
               accent
             />
           </section>
@@ -387,50 +628,69 @@ export default function SydneyResidencyPage() {
             <div className="flex items-center gap-2 mb-5">
               <Home className="w-4 h-4 text-zinc-500" />
               <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
-                Accommodation & Workspace
+                {t.accTitle}
               </h2>
-              <span className="text-[10px] text-zinc-600 ml-1">— Premium Living</span>
+              <span className="text-[10px] text-zinc-600 ml-1">{t.accNote}</span>
             </div>
 
             <GlassCard glow>
-              <div className="p-5 md:p-6">
-                <div className="mb-4">
-                  <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 font-semibold mb-2">
-                    Housing
-                  </p>
-                  <h3
-                    className="text-xl text-zinc-100 mb-2"
-                    style={{ fontFamily: "'Cormorant Garamond', serif" }}
-                  >
-                    Private Luxury Studio
-                  </h3>
-                  <p className="text-sm text-zinc-400 leading-relaxed">
-                    Living and working seamlessly combined in one premium location.
-                  </p>
-                </div>
+              <div className="p-5 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left: info */}
+                <div className="flex flex-col justify-center">
+                  <div className="mb-4">
+                    <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 font-semibold mb-2">
+                      {t.housingEyebrow}
+                    </p>
+                    <h3
+                      className="text-xl text-zinc-100 mb-2"
+                      style={{ fontFamily: "'Cormorant Garamond', serif" }}
+                    >
+                      {t.housingTitle}
+                    </h3>
+                    <p className="text-sm text-zinc-400 leading-relaxed">
+                      {t.housingDesc}
+                    </p>
+                  </div>
 
-                <div className="flex flex-wrap gap-2 mb-5">
-                  <Badge icon={<Star className="w-3 h-3" />} text="High-end complexes" />
-                  <Badge icon={<Sparkles className="w-3 h-3" />} text="Private Pool" />
-                  <Badge icon={<Sparkles className="w-3 h-3" />} text="Sauna" />
-                  <Badge icon={<Sparkles className="w-3 h-3" />} text="Fitness Center" />
-                </div>
+                  <div className="flex flex-wrap gap-2 mb-5">
+                    <Badge icon={<Star className="w-3 h-3" />} text={t.badge1} />
+                    <Badge icon={<Sparkles className="w-3 h-3" />} text={t.badge2} />
+                    <Badge icon={<Sparkles className="w-3 h-3" />} text={t.badge3} />
+                    <Badge icon={<Sparkles className="w-3 h-3" />} text={t.badge4} />
+                  </div>
 
-                <div className="rounded-lg bg-zinc-950/30 border border-zinc-800/40 p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-800/40 border border-zinc-700/30 flex items-center justify-center text-zinc-500 flex-shrink-0 mt-0.5">
-                      <MapPin className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-1">
-                        Outcall Logistics
-                      </p>
-                      <p className="text-xs text-zinc-400 leading-relaxed">
-                        Outcalls are strictly limited to max 20% (5-star hotels and
-                        private villas only).
-                      </p>
+                  <div className="rounded-lg bg-zinc-950/30 border border-zinc-800/40 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-zinc-800/40 border border-zinc-700/30 flex items-center justify-center text-zinc-500 flex-shrink-0 mt-0.5">
+                        <MapPin className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-1">
+                          {t.outcallEyebrow}
+                        </p>
+                        <p className="text-xs text-zinc-400 leading-relaxed">
+                          {t.outcallDesc}
+                        </p>
+                      </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Right: apartment video (как на странице Дубай) */}
+                <div className="flex flex-col gap-2 self-center">
+                  <div className="aspect-video rounded-xl overflow-hidden border border-zinc-700/50 shadow-[0_0_20px_rgba(0,0,0,0.5)] bg-zinc-950">
+                    {/* TODO: заменить на /sydney-house.mp4, когда будет своё видео дома.
+                        Пока временно используется публичный файл из Дубая. */}
+                    <video
+                      src="/dubai-apt.mp4"
+                      controls
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <p className="text-[10px] tracking-[0.15em] uppercase text-zinc-600 font-medium text-center">
+                    {t.aptVideoLabel}
+                  </p>
                 </div>
               </div>
             </GlassCard>
@@ -441,9 +701,9 @@ export default function SydneyResidencyPage() {
             <div className="flex items-center gap-2 mb-5">
               <Shield className="w-4 h-4 text-zinc-500" />
               <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
-                Security Protocol
+                {t.secTitle}
               </h2>
-              <span className="text-[10px] text-zinc-600 ml-1">— Resident Protection</span>
+              <span className="text-[10px] text-zinc-600 ml-1">{t.secNote}</span>
             </div>
 
             <GlassCard accent>
@@ -457,17 +717,15 @@ export default function SydneyResidencyPage() {
                       className="text-lg text-amber-200/90 mb-2 tracking-wide"
                       style={{ fontFamily: "'Cormorant Garamond', serif" }}
                     >
-                      100% Confidentiality & Protection
+                      {t.secCardTitle}
                     </h3>
                     <p className="text-xs text-zinc-400 leading-relaxed mb-3">
-                      Multi-layered security system featuring a 24/7 Rapid Response
-                      Protocol. Our in-house security team is stationed city-wide,
-                      guaranteeing a maximum 20-minute arrival time to any location.
+                      {t.secCardDesc}
                     </p>
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-950/20 border border-amber-800/20">
                       <Clock className="w-3 h-3 text-amber-400/60" />
                       <span className="text-[10px] tracking-[0.15em] uppercase text-amber-300/70 font-semibold">
-                        24/7 Rapid Response — 20 min max arrival
+                        {t.secPill}
                       </span>
                     </div>
                   </div>
@@ -481,9 +739,9 @@ export default function SydneyResidencyPage() {
             <div className="flex items-center gap-2 mb-5">
               <Plane className="w-4 h-4 text-zinc-500" />
               <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
-                Flight Logistics
+                {t.flightTitle}
               </h2>
-              <span className="text-[10px] text-zinc-600 ml-1">— Transfer</span>
+              <span className="text-[10px] text-zinc-600 ml-1">{t.flightNote}</span>
             </div>
 
             <GlassCard>
@@ -494,11 +752,10 @@ export default function SydneyResidencyPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-zinc-200 font-medium tracking-wide mb-2">
-                      Complimentary flights for extended contracts
+                      {t.flightCardTitle}
                     </p>
                     <p className="text-xs text-zinc-500 leading-relaxed">
-                      Complimentary flights provided for contracts exceeding 1 month.
-                      Ticket Crediting option available for shorter tours.
+                      {t.flightCardDesc}
                     </p>
                   </div>
                 </div>
@@ -511,9 +768,9 @@ export default function SydneyResidencyPage() {
             <div className="flex items-center gap-2 mb-5">
               <FileText className="w-4 h-4 text-zinc-500" />
               <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
-                Application Requirements
+                {t.reqTitle}
               </h2>
-              <span className="text-[10px] text-zinc-600 ml-1">— Mandatory</span>
+              <span className="text-[10px] text-zinc-600 ml-1">{t.reqNote}</span>
             </div>
 
             <div className="relative rounded-xl overflow-hidden">
@@ -529,10 +786,10 @@ export default function SydneyResidencyPage() {
                     </div>
                     <div>
                       <p className="text-[10px] tracking-[0.15em] uppercase text-zinc-500 font-medium">
-                        Documentation
+                        {t.docEyebrow}
                       </p>
                       <p className="text-sm text-zinc-200 mt-0.5">
-                        Valid International Passport
+                        {t.docVal}
                       </p>
                     </div>
                   </div>
@@ -544,10 +801,10 @@ export default function SydneyResidencyPage() {
                     </div>
                     <div>
                       <p className="text-[10px] tracking-[0.15em] uppercase text-zinc-500 font-medium">
-                        Visa Status
+                        {t.visaStatusEyebrow}
                       </p>
                       <p className="text-sm text-zinc-200 mt-0.5">
-                        Valid Visa (Ready for immediate departure)
+                        {t.visaStatusVal}
                       </p>
                     </div>
                   </div>
@@ -559,13 +816,13 @@ export default function SydneyResidencyPage() {
                     </div>
                     <div>
                       <p className="text-[10px] tracking-[0.15em] uppercase text-zinc-500 font-medium">
-                        Portfolio
+                        {t.portfolioEyebrow}
                       </p>
                       <p className="text-sm text-zinc-200 mt-0.5">
-                        4–5 fresh digital snaps
+                        {t.portfolioVal}
                       </p>
                       <p className="text-[10px] text-zinc-600 mt-0.5">
-                        Strictly no filters or makeup
+                        {t.portfolioSub}
                       </p>
                     </div>
                   </div>
@@ -575,8 +832,7 @@ export default function SydneyResidencyPage() {
                 <div className="h-px bg-zinc-800/40 my-4" />
 
                 <p className="text-xs text-zinc-500 leading-relaxed">
-                  All applications are subject to verification and approval by the
-                  residency committee. Submission does not guarantee acceptance.
+                  {t.disclaimer}
                 </p>
               </div>
             </div>
@@ -604,10 +860,10 @@ export default function SydneyResidencyPage() {
                   </div>
                   <div>
                     <p className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 font-semibold">
-                      Secure Application
+                      {t.ctaSecure}
                     </p>
                     <p className="text-xs text-zinc-600 mt-0.5">
-                      Encrypted & Confidential
+                      {t.ctaSecureSub}
                     </p>
                   </div>
                 </div>
@@ -624,12 +880,12 @@ export default function SydneyResidencyPage() {
                   {applied ? (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      Application Sent
+                      {t.ctaSent}
                     </>
                   ) : (
                     <>
                       <Lock className="w-4 h-4" />
-                      Submit Application
+                      {t.ctaIdle}
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
