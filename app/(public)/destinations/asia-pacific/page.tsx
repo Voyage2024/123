@@ -24,7 +24,10 @@ interface Hub {
   id: string;
   name: { EN: string; RU: string };
   subtitle: { EN: string; RU: string };
-  body: { EN: string; RU: string };
+  description: { EN: string; RU: string };
+  rates: { split: string; shot: string; incall: string; outcall: string };
+  accommodation: { EN: string; RU: string };
+  services: { EN: string; RU: string };
   x: number;
   y: number;
 }
@@ -42,39 +45,269 @@ interface Highlight {
 // привязаны к карте и доступны в списке/Drawer. Чтобы показать
 // карту целиком — поставь TARGET_RATIO = IMG_RATIO.
 // ─────────────────────────────────────────────────────────────
-const MAP_W = 1152;
-const MAP_H = 1652;
+const MAP_W = 1280;
+const MAP_H = 960;
 const TARGET_RATIO = 4 / 3;
 const IMG_RATIO = MAP_W / MAP_H;
 const STAGE_STYLE: React.CSSProperties =
   IMG_RATIO >= TARGET_RATIO
-    ? { height: "100%", width: `${(IMG_RATIO / TARGET_RATIO) * 100}%` }
-    : { width: "100%", height: `${(TARGET_RATIO / IMG_RATIO) * 100}%` };
+    ? { width: "100%", height: `${(TARGET_RATIO / IMG_RATIO) * 100}%` }
+    : { height: "100%", width: `${(IMG_RATIO / TARGET_RATIO) * 100}%` };
 
 // ─────────────────────────────────────────────────────────────
 // Data — координаты выверены по /map-apac.jpg (1152×1652).
 // ─────────────────────────────────────────────────────────────
 const HUBS: Hub[] = [
-  { id: "korea",     name: { EN: "SOUTH KOREA", RU: "ЮЖНАЯ КОРЕЯ" }, subtitle: { EN: "Seoul Nightlife Elite", RU: "Элита ночного Сеула" }, x: 53.0, y: 13.7,
-    body: { EN: "Seoul after midnight. Members-only lounges, flawless style, and an elite that moves fast. Where K-culture meets serious money.", RU: "Сеул после полуночи. Лаунжи для своих, безупречный стиль и элита, которая движется быстро. Где K-культура встречает серьёзные деньги." } },
-  { id: "china",     name: { EN: "CHINA",     RU: "КИТАЙ" },     subtitle: { EN: "Shanghai High Society", RU: "Высший свет Шанхая" }, x: 43.1, y: 20.7,
-    body: { EN: "Shanghai's high society. Skyline penthouses, private members' clubs, and capital at a scale few can match.", RU: "Высший свет Шанхая. Пентхаусы над городом, частные клубы и капитал такого масштаба, который мало кому под силу." } },
-  { id: "cambodia",  name: { EN: "CAMBODIA",  RU: "КАМБОДЖА" },  subtitle: { EN: "The Hidden Riviera", RU: "Скрытая ривьера" }, x: 18.2, y: 43.1,
-    body: { EN: "A hidden Riviera in the making. Untouched islands, fresh energy, and privacy well off the beaten path.", RU: "Зарождающаяся скрытая ривьера. Нетронутые острова, свежая энергия и приватность вдали от туристических троп." } },
-  { id: "phuket",    name: { EN: "PHUKET",    RU: "ПХУКЕТ" },    subtitle: { EN: "Private Island Villas", RU: "Виллы на закрытых островах" }, x: 10.5, y: 48.0,
-    body: { EN: "Private island villas and turquoise water. Barefoot luxury with a closed-door feel — the Andaman at its finest.", RU: "Виллы на закрытых островах и бирюзовая вода. Босоногая роскошь за закрытыми дверями — Андаманское море во всей красе." } },
-  { id: "pattaya",   name: { EN: "PATTAYA",   RU: "ПАТТАЙЯ" },   subtitle: { EN: "Beachfront Afterparties", RU: "Афтерпати на побережье" }, x: 12.9, y: 42.2,
-    body: { EN: "Beachfront afterparties that run till sunrise. High energy, low inhibition, and a scene that never stops.", RU: "Афтерпати на побережье до рассвета. Много энергии, минимум ограничений и сцена, которая не останавливается." } },
-  { id: "bangkok",   name: { EN: "BANGKOK",   RU: "БАНГКОК" },   subtitle: { EN: "The Sleepless Capital", RU: "Город, который не спит" }, x: 11.8, y: 40.4,
-    body: { EN: "The capital that never sleeps. Rooftop bars, hidden clubs, and endless nights. The pulse of Southeast Asia.", RU: "Столица, которая не спит. Бары на крышах, скрытые клубы и бесконечные ночи. Пульс Юго-Восточной Азии." } },
-  { id: "vietnam",   name: { EN: "VIETNAM",   RU: "ВЬЕТНАМ" },   subtitle: { EN: "Emerging Yacht Scene", RU: "Новая яхтенная сцена" }, x: 21.1, y: 43.7,
-    body: { EN: "An emerging yacht scene. Dramatic bays, new money, and fresh horizons along a fast-rising coast.", RU: "Новая яхтенная сцена. Эффектные бухты, новые деньги и свежие горизонты вдоль стремительно растущего побережья." } },
-  { id: "bali",      name: { EN: "BALI",      RU: "БАЛИ" },      subtitle: { EN: "Cliffside Villa Estates", RU: "Виллы на скалах" }, x: 34.2, y: 63.7,
-    body: { EN: "Cliffside estates above the surf. Spiritual calm meets curated, private luxury. The island of choice for the in-crowd.", RU: "Имения на скалах над прибоем. Духовное спокойствие и продуманная приватная роскошь. Остров для своих." } },
-  { id: "malaysia",  name: { EN: "MALAYSIA",  RU: "МАЛАЙЗИЯ" },  subtitle: { EN: "Skyline Penthouses", RU: "Пентхаусы над городом" }, x: 13.4, y: 51.8,
-    body: { EN: "Skyline penthouses and twin-tower views. A polished, cosmopolitan hub for discreet networking.", RU: "Пентхаусы над городом и виды на башни-близнецы. Отполированный космополитичный хаб для деликатного нетворкинга." } },
-  { id: "australia", name: { EN: "AUSTRALIA", RU: "АВСТРАЛИЯ" }, subtitle: { EN: "Harbour Yacht Society", RU: "Яхт-клуб у гавани" }, x: 85.7, y: 89.0,
-    body: { EN: "Harbour yacht society. Sun, sea, and an easy-going elite at the edge of the Pacific. Sydney glamour, unhurried.", RU: "Яхт-клуб у гавани. Солнце, море и непринуждённая элита на краю Тихого океана. Гламур Сиднея, без суеты." } },
+  {
+    id: "south_korea",
+    name: { EN: "SOUTH KOREA", RU: "ЮЖНАЯ КОРЕЯ" },
+    subtitle: { EN: "High-Volume Premium", RU: "Премиальный поток" },
+    description: {
+      EN: "Intensive and highly profitable market with a generous clientele. Perfect for energetic girls ready for a consistent daily flow of high-paying guests.",
+      RU: "Интенсивный и высокодоходный рынок со щедрой клиентурой. Идеально для активных девушек, готовых к стабильному потоку платежеспособных гостей."
+    },
+    rates: {
+      split: "50/50",
+      shot: "30m: $200 / 1h: $300-$350",
+      incall: "2h: $600-$650",
+      outcall: "Night (7h): $1500-$2000",
+    },
+    accommodation: {
+      EN: "Hotels (~$40/day). Cost split 50/50. Free return ticket provided after 1 month of work.",
+      RU: "Отели (~$40/сутки). Оплата 50/50. При отработке полного месяца — обратный билет в подарок."
+    },
+    services: {
+      EN: "3-4 guests daily. Classic service included, all extra services and tips are chosen and kept by the model.",
+      RU: "3-4 гостя в день. Включена классика, дополнительные услуги на усмотрение девушки (доходы не делятся)."
+    },
+    x: 61.1,
+    y: 11.5,
+  },
+  {
+    id: "china",
+    name: { EN: "CHINA", RU: "КИТАЙ" },
+    subtitle: { EN: "Massive Clean Income", RU: "Колоссальный чистый доход" },
+    description: {
+      EN: "Exclusive access to wealthy Chinese clients across major cities (Guangzhou, Shanghai, Beijing). Incredible daily volume and VIP conditions with no hidden fees.",
+      RU: "Эксклюзивный доступ к состоятельным китайским клиентам в мегаполисах (Гуанчжоу, Шанхай, Пекин). Невероятный поток и VIP-условия без скрытых комиссий."
+    },
+    rates: {
+      split: "100% clean income to girl",
+      shot: "1 shot (5-30m): 800 - 1100¥ (Clean)",
+      incall: "2 shots: 1000 - 1300¥ (Clean)",
+      outcall: "Night/Escort: Negotiable",
+    },
+    accommodation: {
+      EN: "Free hotel and meals. Tickets fully credited and paid by agency for tours over 1 month.",
+      RU: "Бесплатное проживание в отеле и питание. Кредитация билетов (при туре от месяца оплачиваются агентством)."
+    },
+    services: {
+      EN: "Hours: 13:00 - 02:00. 5-6+ guests/day. Full visa support. Consumables provided for free.",
+      RU: "График: 13:00 - 02:00. 5-6+ гостей в день. Виза под ключ. Все расходники за счет агентства."
+    },
+    x: 55.9,
+    y: 18.2,
+  },
+  {
+    id: "cambodia",
+    name: { EN: "CAMBODIA", RU: "КАМБОДЖА" },
+    subtitle: { EN: "Private Casino Hub", RU: "Закрытый казино-хаб" },
+    description: {
+      EN: "A discreet and rapidly growing market focused on VIP casino players, private investors, and exclusive private parties.",
+      RU: "Приватный и быстрорастущий рынок, ориентированный на VIP-игроков казино, частных инвесторов и закрытые вечеринки."
+    },
+    rates: {
+      split: "Premium Individual Rates",
+      shot: "On demand",
+      incall: "Custom bookings",
+      outcall: "Escort & Casino accompaniment",
+    },
+    accommodation: {
+      EN: "Luxury casino resort hotels and private villas.",
+      RU: "Люксовые отели при казино и приватные виллы."
+    },
+    services: {
+      EN: "Strictly vetted wealthy guests. Extreme discretion and high-end service required.",
+      RU: "Строго проверенные состоятельные гости. Требуется максимальная конфиденциальность и высокий уровень сервиса."
+    },
+    x: 36.5,
+    y: 42.3,
+  },
+  {
+    id: "phuket",
+    name: { EN: "PHUKET", RU: "ПХУКЕТ" },
+    subtitle: { EN: "Island Luxury", RU: "Островной люкс" },
+    description: {
+      EN: "Tropical paradise with premium services for wealthy Asian tourists and expats. Relaxed resort atmosphere combined with serious earnings.",
+      RU: "Тропический рай с премиальным сервисом для богатых азиатских туристов и экспатов. Расслабленная курортная атмосфера и серьезные доходы."
+    },
+    rates: {
+      split: "50/50 (Tips 100% yours)",
+      shot: "1h: $240+",
+      incall: "2h: $350+",
+      outcall: "Night: $800+",
+    },
+    accommodation: {
+      EN: "4* Hotels. Island premium locations. Flight crediting available.",
+      RU: "Отели 4*. Премиальные локации. Предоставляется кредитация билетов."
+    },
+    services: {
+      EN: "Hours: 19:00 - 03:00. Target audience: Wealthy Chinese guests. Closed database, no internet ads.",
+      RU: "График: 19:00 - 03:00. Аудитория: богатые китайские гости. Закрытая база, без рекламы в интернете."
+    },
+    x: 28.7,
+    y: 46.2,
+  },
+  {
+    id: "pattaya",
+    name: { EN: "PATTAYA", RU: "ПАТТАЙЯ" },
+    subtitle: { EN: "Resort Elite", RU: "Курортная элита" },
+    description: {
+      EN: "A mix of beach resort vibes and high-earning closed meetings. Focused heavily on high-paying Chinese clientele in a secure environment.",
+      RU: "Микс курортного вайба и высокодоходных закрытых встреч. Плотная работа с платежеспособной китайской клиентурой в безопасной среде."
+    },
+    rates: {
+      split: "Clean income per shot",
+      shot: "1 shot: 800¥ (Clean to girl)",
+      incall: "High frequency bookings",
+      outcall: "Upon request",
+    },
+    accommodation: {
+      EN: "Free hotel accommodation provided.",
+      RU: "Бесплатное проживание в комфортном отеле."
+    },
+    services: {
+      EN: "Min tour: 14 days. Incall focus with thoroughly verified guests.",
+      RU: "Мин. тур: 14 дней. Фокус на работу в отеле с тщательно проверенными гостями."
+    },
+    x: 31.5,
+    y: 41.0,
+  },
+  {
+    id: "bangkok",
+    name: { EN: "BANGKOK", RU: "БАНГКОК" },
+    subtitle: { EN: "Asian Hub", RU: "Азиатский хаб" },
+    description: {
+      EN: "The vibrant capital of Thailand working directly with top-tier Asian expats. High dynamics, luxury conditions, and great tips.",
+      RU: "Яркая столица Таиланда с прямым доступом к топовым азиатским экспатам. Высокая динамика, люксовые условия и отличные чаевые."
+    },
+    rates: {
+      split: "50/50",
+      shot: "1h: $240+",
+      incall: "2h: $350+",
+      outcall: "Night: $800+",
+    },
+    accommodation: {
+      EN: "4* Hotels. Safe, comfortable, and discreet.",
+      RU: "Отели 4*. Безопасно, комфортно и конфиденциально."
+    },
+    services: {
+      EN: "Hours: 19:00 - 03:00. Airport pickup provided. Zero public advertising to ensure probability of leaks is minimal.",
+      RU: "График: 19:00 - 03:00. Встреча в аэропорту. Отправка фото только по базе, вероятность сливов минимальная."
+    },
+    x: 31.0,
+    y: 40.0,
+  },
+  {
+    id: "vietnam",
+    name: { EN: "VIETNAM", RU: "ВЬЕТНАМ" },
+    subtitle: { EN: "VIP Outcall", RU: "VIP-выезды" },
+    description: {
+      EN: "Exclusive outcall service for high-ranking clients and VIPs. Complete peace of mind, excellent conditions, and 100% rate retention for models.",
+      RU: "Эксклюзивный выездной сервис для высокопоставленных лиц и VIP-гостей. Полное спокойствие, отличные условия и 100% ставки на руки."
+    },
+    rates: {
+      split: "100% to model (Hourly rate)",
+      shot: "Clean income: $20k - $25k / month",
+      incall: "Focus on Outcall",
+      outcall: "1h: $140 - $170",
+    },
+    accommodation: {
+      EN: "Free comfortable hotel provided. Ticket crediting is available.",
+      RU: "Бесплатное проживание в комфортабельном отеле. Возможна кредитация билетов."
+    },
+    services: {
+      EN: "Hours: 18:00 - 06:00. 6 days off/month. White/European look required. Kissing and joint shower mandatory.",
+      RU: "График: 18:00 - 06:00. 6 выходных в месяц. Белая/европейская внешность. Обязательны поцелуи и совместный душ."
+    },
+    x: 40.5,
+    y: 40.0,
+  },
+  {
+    id: "bali",
+    name: { EN: "BALI", RU: "БАЛИ" },
+    subtitle: { EN: "Tropical Elite", RU: "Тропическая элита" },
+    description: {
+      EN: "Luxury villa parties, yacht trips, and wealthy crypto-investors. A perfect mix of high-end resort living and top-tier earnings.",
+      RU: "Закрытые вечеринки на виллах, яхты и состоятельные крипто-инвесторы. Идеальный микс шикарного курортного отдыха и топовых доходов."
+    },
+    rates: {
+      split: "50/50 (Tips & extras 100% yours)",
+      shot: "1h: $250 - $300",
+      incall: "2h: $400 - $500",
+      outcall: "Night/Yacht: $1000 - $1500+",
+    },
+    accommodation: {
+      EN: "Premium villas or 5* hotels. Costs split 50/50.",
+      RU: "Премиальные виллы или отели 5*. Расходы делятся 50/50."
+    },
+    services: {
+      EN: "High demand for atmospheric and relaxed vibe. Focus on rich expats and tourists.",
+      RU: "Высокий спрос на атмосферность и расслабленный вайб. Фокус на богатых экспатах и туристах."
+    },
+    x: 46.5,
+    y: 65.8,
+  },
+  {
+    id: "malaysia",
+    name: { EN: "MALAYSIA", RU: "МАЛАЙЗИЯ" },
+    subtitle: { EN: "Asian Business Hub", RU: "Азиатский бизнес-хаб" },
+    description: {
+      EN: "The business heart of Southeast Asia. Skyscrapers, luxury condos, and wealthy Asian businessmen who value discretion and premium service.",
+      RU: "Деловое сердце Юго-Восточной Азии. Небоскребы, люксовые кондоминиумы и богатые азиатские бизнесмены, ценящие приватность и премиум-сервис."
+    },
+    rates: {
+      split: "50/50 (Tips & gifts 100% yours)",
+      shot: "1h: $200 - $250",
+      incall: "2h: $350 - $400",
+      outcall: "Night: $800 - $1000",
+    },
+    accommodation: {
+      EN: "Luxury high-rise apartments with infinity pools (50/50 split).",
+      RU: "Люксовые апартаменты в небоскребах с инфинити-бассейнами (оплата 50/50)."
+    },
+    services: {
+      EN: "Strict confidentiality. Vetted clientele only. Professional and polished look required.",
+      RU: "Строгая конфиденциальность. Только проверенная клиентура. Требуется ухоженный и профессиональный вид."
+    },
+    x: 32.1,
+    y: 52.5,
+  },
+  {
+    id: "australia",
+    name: { EN: "AUSTRALIA", RU: "АВСТРАЛИЯ" },
+    subtitle: { EN: "Ultimate Premium", RU: "Абсолютный премиум" },
+    description: {
+      EN: "Incredibly high rates, 100% safety, and official student visas. Stunning luxury apartments and a highly professional security protocol.",
+      RU: "Невероятно высокие ставки, 100% безопасность и официальные студенческие визы. Шикарные апартаменты и максимально профессиональный подход."
+    },
+    rates: {
+      split: "50/50 (Base rate)",
+      shot: "1h: $500 - $700",
+      incall: "Clean income: $6k-$9k / week",
+      outcall: "Extras (MBR +$100, Anal +$200-300) 100% yours",
+    },
+    accommodation: {
+      EN: "Luxury private apartments with pools and gyms provided. Flights paid for 1+ month tours.",
+      RU: "Предоставляются личные шикарные апартаменты с бассейнами и залом. Билеты оплачиваются при туре от 1 месяца."
+    },
+    services: {
+      EN: "15-25 meetings/week. 80% incall. Backup security team of 30+ ready 24/7. Total safety.",
+      RU: "15-25 встреч в неделю. 80% инколл. Группа быстрого реагирования 24/7, абсолютная безопасность."
+    },
+    x: 85.2,
+    y: 93.1,
+  }
 ];
 
 const ARTERIES: string[] = [
@@ -201,6 +434,13 @@ export default function AsiaPacificPage() {
       highlightsTitle: { EN: "Membership Privileges", RU: "Привилегии членства" },
       drawerEyebrow: { EN: "Location Dossier", RU: "Досье локации" },
       drawerCta: { EN: "Resident Access", RU: "Вход для резидентов" },
+      ratesLabel: { EN: "Rates", RU: "Тарифы" },
+      accommodationLabel: { EN: "Accommodation", RU: "Проживание" },
+      servicesLabel: { EN: "Services", RU: "Условия" },
+      splitLabel: { EN: "Split", RU: "Дележ" },
+      shotLabel: { EN: "Shot", RU: "Shot" },
+      incallLabel: { EN: "Incall", RU: "Incall" },
+      outcallLabel: { EN: "Outcall", RU: "Outcall" },
     }),
     []
   );
@@ -393,7 +633,43 @@ export default function AsiaPacificPage() {
               <h2 className="mt-10 font-serif text-5xl font-light leading-tight text-zinc-100">{selected.name[lang]}</h2>
               <p className="mt-3 text-[11px] uppercase tracking-[0.25em] text-amber-200/70">{selected.subtitle[lang]}</p>
               <div className="my-8 h-px w-16 bg-amber-200/30" />
-              <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.body[lang]}</p>
+              <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.description[lang]}</p>
+
+              {/* Rates */}
+              <div className="mt-8">
+                <h4 className="text-[11px] uppercase tracking-[0.2em] text-amber-200/60 mb-3">{t.ratesLabel[lang]}</h4>
+                <div className="space-y-2 text-sm text-zinc-400">
+                  <div className="flex justify-between border-b border-zinc-800/60 pb-2">
+                    <span className="text-zinc-500">{t.splitLabel[lang]}</span>
+                    <span className="text-zinc-300">{selected.rates.split}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-zinc-800/60 pb-2">
+                    <span className="text-zinc-500">{t.shotLabel[lang]}</span>
+                    <span className="text-zinc-300">{selected.rates.shot}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-zinc-800/60 pb-2">
+                    <span className="text-zinc-500">{t.incallLabel[lang]}</span>
+                    <span className="text-zinc-300">{selected.rates.incall}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">{t.outcallLabel[lang]}</span>
+                    <span className="text-zinc-300">{selected.rates.outcall}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Accommodation */}
+              <div className="mt-8">
+                <h4 className="text-[11px] uppercase tracking-[0.2em] text-amber-200/60 mb-3">{t.accommodationLabel[lang]}</h4>
+                <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.accommodation[lang]}</p>
+              </div>
+
+              {/* Services */}
+              <div className="mt-8">
+                <h4 className="text-[11px] uppercase tracking-[0.2em] text-amber-200/60 mb-3">{t.servicesLabel[lang]}</h4>
+                <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.services[lang]}</p>
+              </div>
+
               <Link href="/login" className="mt-10 inline-flex items-center justify-center rounded-full bg-amber-200 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100">
                 {t.drawerCta[lang]}
               </Link>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Lock, ArrowRight, Shield, BadgeDollarSign, Plane, Key, Sparkles, ShieldCheck } from "lucide-react";
+import { useAuth } from "@/app/context/AuthContext"; // <-- ДОБАВИЛИ ИМПОРТ
 
 type Lang = "EN" | "RU";
 
@@ -16,6 +17,12 @@ interface TrailParticle {
 }
 
 export default function HomePage() {
+  // 1. Достаем user и функцию logout
+  const { user, logout } = useAuth(); 
+  
+  // 2. Создаем переключатель для выпадающего меню
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   // --- Состояния для пасхалки ---
   const [planeClicks, setPlaneClicks] = useState(0);
   const [isFlying, setIsFlying] = useState(false);
@@ -120,7 +127,7 @@ export default function HomePage() {
       macroRegion: "Macro Region",
       regionMiddleEast: "Middle East",
       regionEuropeUK: "Europe & UK",
-      regionAsiaPacific: "Asia — Pacific",
+      regionAsiaPacific: "APAC & Australia",
       regionAmericas: "The Americas",
       exploreRegion: "Explore Region",
       sectionWhy: "Why Voyage",
@@ -189,7 +196,7 @@ export default function HomePage() {
       macroRegion: "Макрорегион",
       regionMiddleEast: "Middle East",
       regionEuropeUK: "Europe & UK",
-      regionAsiaPacific: "Asia — Pacific",
+      regionAsiaPacific: "APAC и Австралия",
       regionAmericas: "The Americas",
       exploreRegion: "Исследовать регион",
       sectionWhy: "Почему Voyage",
@@ -291,14 +298,49 @@ export default function HomePage() {
               {t.langRU}
             </button>
           </div>
+{/* ─── ОБНОВЛЕННАЯ КНОПКА С МЕНЮ ─── */}
+          {user ? (
+            <div className="relative">
+              {/* Кнопка с именем (без uppercase) */}
+              <button
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="flex items-center gap-2 px-5 py-2 rounded-full border border-amber-200/30 text-amber-200 text-sm font-medium hover:bg-amber-200/10 hover:border-amber-200/60 transition-all duration-300"
+              >
+                <span>{user.name}</span>
+              </button>
 
-          <Link
-            href="/login"
-            className="flex items-center gap-2 px-5 py-2 rounded-full border border-amber-200/30 text-amber-200 text-sm tracking-widest uppercase font-medium hover:bg-amber-200/10 hover:border-amber-200/60 transition-all duration-300"
-          >
-            <Lock size={13} strokeWidth={2} />
-            {t.navLogin}
-          </Link>
+              {/* Выпадающее окно */}
+              {isMenuOpen && (
+                <div className="absolute right-0 mt-3 w-48 rounded-2xl border border-zinc-800/80 bg-zinc-900/95 backdrop-blur-xl p-2 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="block w-full text-left px-4 py-2.5 text-xs text-zinc-300 hover:text-amber-200 hover:bg-white/5 rounded-xl transition-colors"
+                  >
+                    {lang === "EN" ? "Dashboard" : "Личный кабинет"}
+                  </Link>
+                  <button
+                    onClick={() => {
+                      logout();
+                      setIsMenuOpen(false);
+                    }}
+                    className="block w-full text-left px-4 py-2.5 text-xs text-red-400 hover:text-red-300 hover:bg-white/5 rounded-xl transition-colors mt-1"
+                  >
+                    {lang === "EN" ? "Logout" : "Выйти"}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center gap-2 px-5 py-2 rounded-full border border-amber-200/30 text-amber-200 text-sm tracking-widest uppercase font-medium hover:bg-amber-200/10 hover:border-amber-200/60 transition-all duration-300"
+            >
+              <Lock size={13} strokeWidth={2} />
+              {t.navLogin}
+            </Link>
+          )}
+          {/* ─── КОНЕЦ ИЗМЕНЕНИЙ ─── */}
         </div>
       </nav>
 
@@ -484,7 +526,7 @@ export default function HomePage() {
               </h3>
               <div className="flex flex-wrap gap-2 mb-8">
                 <span className="px-3 py-1 text-[11px] tracking-wider uppercase rounded-full border border-amber-200/30 text-amber-200/80">
-                  27 Destinations
+                  20 Destinations
                 </span>
                 <span className="px-3 py-1 text-[11px] tracking-wider uppercase rounded-full border border-zinc-700 text-zinc-500">
                   Euro Tours
