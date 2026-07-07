@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/client";
 
 type Field = "full_name" | "location" | "citizenship";
 
@@ -20,7 +20,7 @@ const FIELDS: { key: Field; label: string; placeholder: string }[] = [
 
 export function ProfileForm({ userId, initialData }: ProfileFormProps) {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = createClient()!;
 
   const [values, setValues] = useState<Record<Field, string>>({
     full_name: initialData.full_name ?? "",
