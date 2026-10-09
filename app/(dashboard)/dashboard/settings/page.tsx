@@ -1,15 +1,18 @@
 "use client";
 
-import { Settings } from "lucide-react";
-import ResidentPlaceholder from "@/app/components/ResidentPlaceholder";
+import RoleGuard from "@/app/components/RoleGuard";
+import AccountSettings, { AccountSettingsHeader } from "@/app/components/AccountSettings";
 
-export default function SettingsPage() {
+export default function ResidentSettingsPage() {
   return (
-    <ResidentPlaceholder
-      icon={Settings}
-      title="Настройки"
-      subtitle="Управление профилем, приватностью и уведомлениями. Персональные настройки аккаунта появятся здесь в ближайшем обновлении."
-      buttonText="Открыть настройки"
-    />
+    <RoleGuard allowedRoles={["resident"]}>
+      <main className="min-h-screen bg-zinc-950 px-4 py-10 sm:py-16">
+        <div className="mx-auto max-w-2xl">
+          {/* У резидентов не передаем слово "Admin", заголовок будет обычным */}
+          <AccountSettingsHeader />
+          <AccountSettings />
+        </div>
+      </main>
+    </RoleGuard>
   );
 }

@@ -1,20 +1,12 @@
 "use client";
-
-import {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-} from "react";
+import MyApplications from "@/app/components/MyApplications";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   CheckCircle2,
-  Clock,
-  Lock,
   Shield,
   Eye,
   EyeOff,
-  CreditCard,
+  Wallet,
   User,
   MapPin,
   Flag,
@@ -25,25 +17,31 @@ import {
   Cigarette,
   Wine,
   AlignLeft,
-  ChevronRight,
-  UserCheck,
-  Video,
-  Phone,
   Crown,
-  Sparkles,
-  Gem,
-  PartyPopper,
   Camera,
   Image as ImageIcon,
   Plus,
   Loader2,
-  Check,
   X,
 } from "lucide-react";
 
 import { useAuth } from "@/app/context/AuthContext";
+import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
-import { VoyageIdCard } from "@/app/components/VoyageIdCard";
+import { fmtPoints, type CircleConfig, type CircleKey } from "@/lib/gamification";
+
+import { cormorant } from "@/app/components/profile/fonts";
+import { useClubStanding } from "@/app/components/profile/useClubStanding";
+import {
+  CIRCLE_ORDER,
+  ClubCardholder,
+  formatMemberNo,
+  sinceRoman,
+  skinFor,
+  toRoman,
+} from "@/app/components/profile/ClubCardholder";
+import { AchievementShelf, type AchievementKey } from "@/app/components/profile/AchievementShelf";
+import { KycSection } from "@/app/components/profile/KycSection";
 
 /* ──────────────────────────────────────────────────────────────────────
  * ПРИМЕЧАНИЯ ПО АРХИТЕКТУРЕ
@@ -53,25 +51,297 @@ import { VoyageIdCard } from "@/app/components/VoyageIdCard";
  *    генерируем временные signed URL через createSignedUrls(). Если в
  *    массиве уже лежат полные http-ссылки — они используются как есть.
  *
- * 2. `height` / `weight` сохраняются как «сырые» значения из инпута.
- *    Если в БД это int — вводите только числа (PostgREST сам приведёт "172"
- *    к числу). Единицы (cm / kg) показываются отдельно и НЕ пишутся в БД.
+ * 2. Имя и аватар берутся ТОЛЬКО из AuthContext (user.fullName / user.avatarUrl)
+ *    и редактируются на странице настроек. Здесь они read-only.
+ *    `photo_urls` — отдельный массив портфолио, к аватару отношения не имеет.
  *
- * 3. Страница загружает профиль текущего пользователя (id = user.id).
- *    Админ редактирует Status / Achievements / KYC на профиле, который
- *    открыт. Чтобы дать админу проверять чужие анкеты — передавайте
- *    profileId через props/searchParams и замените user.id ниже.
+ * 3. `height` / `weight` сохраняются как «сырые» значения из инпута.
+ *    Единицы (cm / kg) показываются отдельно и НЕ пишутся в БД.
  *
  * 4. Для записи нужны корректные RLS-политики на таблице `profiles`
- *    и на бакете `user-uploads` (insert/update/select для владельца,
- *    update status/kyc_level/achievements — для админа).
+ *    и на бакете `user-uploads`.
+ *
+ * 5. Кардхолдер красится по Circle из v_global_leaderboard (useClubStanding,
+ *    realtime) — тот же расчёт, что в «Паспорте» и лидерборде.
+ *
+ * 6. kyc_level, achievements, status, usdt_wallet и role меняет только
+ *    персонал клуба — это гарантирует триггер в БД
+ *    (миграция 20261009_profile_kyc_vault.sql), а не только интерфейс.
+ *    Документы KYC — в приватном бакете `kyc-vault` (см. KycSection).
  * ──────────────────────────────────────────────────────────────────── */
 
-const ADMIN_EMAIL = "fridelltubaugh129@gmail.com";
+/** Временный запасной доступ — пока у этого аккаунта нет роли owner/admin в profiles */
+const LEGACY_ADMIN_EMAIL = "fridelltubaugh129@gmail.com";
+
+// ─── i18n ────────────────────────────────────────────────────────────
+// Lang ("EN" | "RU" | "ES" | "PT") импортируется из LanguageContext.
+// Тексты ачивок и KYC живут в своих компонентах.
+
+const en = {
+  club: "Voyage Private Club",
+  admin: "Admin",
+  pageTitle: "Resident Profile",
+  completion: "Profile Completion",
+
+  circleNow: "Current circle",
+  next: "Next",
+  topCircle: "The club's highest circle",
+  influence: "Influence Index",
+  kycShort: "KYC verification",
+  cardAutoNote: "Your card changes colour on its own — with every new circle.",
+  cardTapHint: "Touch the card — light will run across it",
+
+  portfolio: "Personal Portfolio",
+  verifiedData: "— Verified Data",
+  identity: "Identity",
+  fullName: "Full Name",
+  nameNotSet: "Set your name in settings",
+  avatarHint: "Avatar can be changed in settings",
+  currentLocation: "Current Location",
+  locationPlaceholder: "City",
+  citizenship: "Citizenship",
+  nationality: "Nationality",
+  nationalityPlaceholder: "Citizenship",
+  dob: "Date of Birth",
+  dobPlaceholder: "dd.mm.yyyy",
+  physical: "Physical Parameters",
+  height: "Height",
+  weight: "Weight",
+  measurements: "Measurements",
+  cm: "cm",
+  kg: "kg",
+  lifestyle: "Lifestyle Habits",
+  smoking: "Smoking Status",
+  alcohol: "Alcohol Consumption",
+  about: "About & Preferences",
+  aboutPlaceholder: "Tell us about yourself and your travel preferences…",
+  clickToEdit: "Click to edit",
+
+  visualPortfolio: "Visual Portfolio",
+  polaroids: "— Polaroids & Digitals",
+  photo: "Photo",
+  addPhoto: "Add Photo",
+  uploadingShort: "Uploading…",
+  deletePhoto: "Delete photo",
+  uploadError: "Photo upload failed. Check the console (F12).",
+
+  vault: "Personal Vault",
+  encrypted: "— Encrypted",
+  vaultPitch:
+    "We can open a protected wallet for you and arrange secure withdrawals anywhere on our planet",
+  vaultMars: "(or even on Mars)",
+  usdtWallet: "USDT Wallet",
+  walletNotOpened: "Not opened yet",
+  showAddress: "Show address",
+  hideAddress: "Hide address",
+
+  footerTitle: "Voyage Private Club — Confidential",
+  footerNote: "All data is encrypted and stored under strict NDA",
+  loginRequired: "Please sign in to open your dashboard.",
+  saving: "Saving",
+  uploading: "Uploading",
+};
+
+type TKey = keyof typeof en;
+type Dict = Record<TKey, string>;
+
+const translations: Record<Lang, Dict> = {
+  EN: en,
+  RU: {
+    club: "Voyage Private Club",
+    admin: "Админ",
+    pageTitle: "Профиль резидента",
+    completion: "Заполненность профиля",
+
+    circleNow: "Текущий круг",
+    next: "Следующий",
+    topCircle: "Высший круг клуба",
+    influence: "Индекс влияния",
+    kycShort: "KYC-верификация",
+    cardAutoNote: "Цвет карты меняется сам — с каждым новым кругом.",
+    cardTapHint: "Коснитесь карты — блик пройдёт по ней",
+
+    portfolio: "Личное портфолио",
+    verifiedData: "— Проверенные данные",
+    identity: "Личность",
+    fullName: "Полное имя",
+    nameNotSet: "Укажите имя в настройках",
+    avatarHint: "Аватар меняется в настройках",
+    currentLocation: "Текущее местоположение",
+    locationPlaceholder: "Город",
+    citizenship: "Гражданство",
+    nationality: "Гражданство",
+    nationalityPlaceholder: "Гражданство",
+    dob: "Дата рождения",
+    dobPlaceholder: "дд.мм.гггг",
+    physical: "Параметры",
+    height: "Рост",
+    weight: "Вес",
+    measurements: "Объёмы",
+    cm: "см",
+    kg: "кг",
+    lifestyle: "Образ жизни",
+    smoking: "Курение",
+    alcohol: "Алкоголь",
+    about: "О себе и предпочтения",
+    aboutPlaceholder: "Расскажите о себе, своих предпочтениях в путешествиях…",
+    clickToEdit: "Нажмите, чтобы изменить",
+
+    visualPortfolio: "Фотопортфолио",
+    polaroids: "— Полароиды и снепы",
+    photo: "Фото",
+    addPhoto: "Добавить фото",
+    uploadingShort: "Загрузка…",
+    deletePhoto: "Удалить фото",
+    uploadError: "Ошибка при загрузке фото. Проверь консоль (F12).",
+
+    vault: "Личный сейф",
+    encrypted: "— Зашифровано",
+    vaultPitch:
+      "Мы можем завести для вас защищённый кошелёк и организовать безопасный вывод средств в любой точке нашей планеты",
+    vaultMars: "(или даже на Марсе)",
+    usdtWallet: "USDT-кошелёк",
+    walletNotOpened: "Ещё не открыт",
+    showAddress: "Показать адрес",
+    hideAddress: "Скрыть адрес",
+
+    footerTitle: "Voyage Private Club — Конфиденциально",
+    footerNote: "Все данные зашифрованы и хранятся под строгим NDA",
+    loginRequired: "Пожалуйста, войдите, чтобы открыть личный кабинет.",
+    saving: "Сохранение",
+    uploading: "Загрузка",
+  },
+  ES: {
+    club: "Voyage Private Club",
+    admin: "Admin",
+    pageTitle: "Perfil de residente",
+    completion: "Perfil completado",
+
+    circleNow: "Círculo actual",
+    next: "Siguiente",
+    topCircle: "El círculo más alto del club",
+    influence: "Índice de influencia",
+    kycShort: "Verificación KYC",
+    cardAutoNote: "El color de la tarjeta cambia solo, con cada nuevo círculo.",
+    cardTapHint: "Toque la tarjeta: un destello la recorrerá",
+
+    portfolio: "Portafolio personal",
+    verifiedData: "— Datos verificados",
+    identity: "Identidad",
+    fullName: "Nombre completo",
+    nameNotSet: "Indica tu nombre en ajustes",
+    avatarHint: "El avatar se cambia en ajustes",
+    currentLocation: "Ubicación actual",
+    locationPlaceholder: "Ciudad",
+    citizenship: "Ciudadanía",
+    nationality: "Nacionalidad",
+    nationalityPlaceholder: "Ciudadanía",
+    dob: "Fecha de nacimiento",
+    dobPlaceholder: "dd.mm.aaaa",
+    physical: "Medidas físicas",
+    height: "Altura",
+    weight: "Peso",
+    measurements: "Medidas",
+    cm: "cm",
+    kg: "kg",
+    lifestyle: "Estilo de vida",
+    smoking: "Fumadora",
+    alcohol: "Consumo de alcohol",
+    about: "Sobre mí y preferencias",
+    aboutPlaceholder: "Cuéntanos sobre ti y tus preferencias de viaje…",
+    clickToEdit: "Haz clic para editar",
+
+    visualPortfolio: "Portafolio visual",
+    polaroids: "— Polaroids y digitales",
+    photo: "Foto",
+    addPhoto: "Añadir foto",
+    uploadingShort: "Subiendo…",
+    deletePhoto: "Eliminar foto",
+    uploadError: "Error al subir la foto. Revisa la consola (F12).",
+
+    vault: "Bóveda personal",
+    encrypted: "— Cifrado",
+    vaultPitch:
+      "Podemos abrirle una billetera protegida y organizar retiros seguros en cualquier lugar de nuestro planeta",
+    vaultMars: "(o incluso en Marte)",
+    usdtWallet: "Billetera USDT",
+    walletNotOpened: "Aún no abierta",
+    showAddress: "Mostrar dirección",
+    hideAddress: "Ocultar dirección",
+
+    footerTitle: "Voyage Private Club — Confidencial",
+    footerNote: "Todos los datos están cifrados y protegidos por un estricto NDA",
+    loginRequired: "Inicia sesión para abrir tu panel.",
+    saving: "Guardando",
+    uploading: "Subiendo",
+  },
+  PT: {
+    club: "Voyage Private Club",
+    admin: "Admin",
+    pageTitle: "Perfil de residente",
+    completion: "Perfil preenchido",
+
+    circleNow: "Círculo atual",
+    next: "Próximo",
+    topCircle: "O círculo mais alto do clube",
+    influence: "Índice de influência",
+    kycShort: "Verificação KYC",
+    cardAutoNote: "A cor do cartão muda sozinha a cada novo círculo.",
+    cardTapHint: "Toque no cartão — um brilho vai percorrê-lo",
+
+    portfolio: "Portfólio pessoal",
+    verifiedData: "— Dados verificados",
+    identity: "Identidade",
+    fullName: "Nome completo",
+    nameNotSet: "Defina seu nome nas configurações",
+    avatarHint: "O avatar é alterado nas configurações",
+    currentLocation: "Localização atual",
+    locationPlaceholder: "Cidade",
+    citizenship: "Cidadania",
+    nationality: "Nacionalidade",
+    nationalityPlaceholder: "Cidadania",
+    dob: "Data de nascimento",
+    dobPlaceholder: "dd.mm.aaaa",
+    physical: "Medidas físicas",
+    height: "Altura",
+    weight: "Peso",
+    measurements: "Medidas",
+    cm: "cm",
+    kg: "kg",
+    lifestyle: "Estilo de vida",
+    smoking: "Fumante",
+    alcohol: "Consumo de álcool",
+    about: "Sobre mim e preferências",
+    aboutPlaceholder: "Conte sobre você e suas preferências de viagem…",
+    clickToEdit: "Clique para editar",
+
+    visualPortfolio: "Portfólio visual",
+    polaroids: "— Polaroids e digitais",
+    photo: "Foto",
+    addPhoto: "Adicionar foto",
+    uploadingShort: "Enviando…",
+    deletePhoto: "Excluir foto",
+    uploadError: "Falha ao enviar a foto. Verifique o console (F12).",
+
+    vault: "Cofre pessoal",
+    encrypted: "— Criptografado",
+    vaultPitch:
+      "Podemos abrir uma carteira protegida para você e organizar saques seguros em qualquer lugar do nosso planeta",
+    vaultMars: "(ou até em Marte)",
+    usdtWallet: "Carteira USDT",
+    walletNotOpened: "Ainda não aberta",
+    showAddress: "Mostrar endereço",
+    hideAddress: "Ocultar endereço",
+
+    footerTitle: "Voyage Private Club — Confidencial",
+    footerNote: "Todos os dados são criptografados e protegidos por NDA rigoroso",
+    loginRequired: "Faça login para abrir seu painel.",
+    saving: "Salvando",
+    uploading: "Enviando",
+  },
+};
 
 // ─── Types ──────────────────────────────────────────────────────────
-type KycStatus = "completed" | "pending" | "locked";
-
 interface Profile {
   id: string;
   full_name: string | null;
@@ -88,6 +358,10 @@ interface Profile {
   kyc_level: number;
   achievements: string[] | null;
   photo_urls: string[] | null;
+  /** адрес кошелька — заводит персонал клуба */
+  usdt_wallet?: string | null;
+  member_no?: string | number | null;
+  created_at?: string | null;
 }
 
 function emptyProfile(id: string): Profile {
@@ -104,51 +378,13 @@ function emptyProfile(id: string): Profile {
     alcohol: false,
     about: null,
     status: null,
-    kyc_level: 1,
+    // паспорт ещё не загружен — уровень 1 не пройден
+    kyc_level: 0,
     achievements: [],
     photo_urls: [],
+    usdt_wallet: null,
   };
 }
-
-// ─── Static meta ─────────────────────────────────────────────────────
-const KYC_META: {
-  id: number;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-}[] = [
-  {
-    id: 1,
-    title: "Identity",
-    description: "International passport upload",
-    icon: <Shield className="w-5 h-5" />,
-  },
-  {
-    id: 2,
-    title: "Club Loyalty",
-    description: "Video mention of the club",
-    icon: <Video className="w-5 h-5" />,
-  },
-  {
-    id: 3,
-    title: "Trust",
-    description: "Video call verification",
-    icon: <Phone className="w-5 h-5" />,
-  },
-];
-
-const ACHIEVEMENTS: {
-  key: string;
-  label: string;
-  Icon: React.ComponentType<{ className?: string }>;
-}[] = [
-  { key: "disco_queen", label: "Disco Queen", Icon: Sparkles },
-  { key: "gem", label: "Gem", Icon: Gem },
-  { key: "party", label: "Party", Icon: PartyPopper },
-];
-
-const statusForLevel = (id: number, kycLevel: number): KycStatus =>
-  id <= kycLevel ? "completed" : id === kycLevel + 1 ? "pending" : "locked";
 
 const isFilled = (v: unknown) =>
   v !== null && v !== undefined && String(v).trim() !== "";
@@ -161,12 +397,18 @@ const formatDate = (iso: string) => {
 
 // ─── Small UI primitives ─────────────────────────────────────────────
 
-function ProfileCompletionBar({ percentage }: { percentage: number }) {
+function ProfileCompletionBar({
+  percentage,
+  label,
+}: {
+  percentage: number;
+  label: string;
+}) {
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs tracking-[0.2em] uppercase text-zinc-500 font-medium">
-          Profile Completion
+        <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 font-medium">
+          {label}
         </span>
         <span className="text-xs tracking-[0.15em] text-amber-200/80 font-medium">
           {percentage}%
@@ -187,175 +429,149 @@ function ProfileCompletionBar({ percentage }: { percentage: number }) {
   );
 }
 
-function KYCStatusBadge({ status }: { status: KycStatus }) {
-  const config = {
-    completed: {
-      icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-      text: "Completed",
-      className: "bg-emerald-950/40 text-emerald-400/90 border-emerald-800/30",
-    },
-    pending: {
-      icon: <Clock className="w-3.5 h-3.5" />,
-      text: "Pending",
-      className: "bg-amber-950/30 text-amber-300/80 border-amber-800/20",
-    },
-    locked: {
-      icon: <Lock className="w-3.5 h-3.5" />,
-      text: "Locked",
-      className: "bg-zinc-900/60 text-zinc-500 border-zinc-800/40",
-    },
-  } as const;
-
-  const c = config[status];
-
-  return (
-    <div
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] tracking-[0.12em] uppercase font-semibold border ${c.className}`}
-    >
-      {c.icon}
-      {c.text}
-    </div>
-  );
-}
-
-function KYCCard({
-  meta,
-  status,
-  isAdmin,
-  onConfirm,
-  onRevoke,
+/** Панель рядом с кардхолдером: круг, путь к следующему, заполненность, KYC */
+function CircleStatusPanel({
+  t,
+  circle,
+  next,
+  index,
+  progress,
+  completion,
+  kycLevel,
+  loading,
 }: {
-  meta: (typeof KYC_META)[number];
-  status: KycStatus;
-  isAdmin: boolean;
-  onConfirm: () => void;
-  onRevoke: () => void;
+  t: Dict;
+  circle: CircleConfig;
+  next: CircleConfig | null;
+  index: number;
+  progress: number;
+  completion: number;
+  kycLevel: number;
+  loading: boolean;
 }) {
-  const isLocked = status === "locked";
-  const isCompleted = status === "completed";
+  const skin = skinFor(circle.key);
+  const rank = CIRCLE_ORDER.indexOf(circle.key as CircleKey);
 
   return (
-    <div
-      className={`group relative overflow-hidden rounded-xl border transition-all duration-500 ${
-        isLocked
-          ? "bg-zinc-900/20 border-zinc-800/30 opacity-60"
-          : isCompleted
-          ? "bg-zinc-900/40 border-zinc-800/40 hover:border-emerald-900/40"
-          : "bg-zinc-900/40 border-zinc-800/40 hover:border-amber-900/30"
-      }`}
-    >
-      <div
-        className={`absolute top-0 left-0 right-0 h-[1px] ${
-          isCompleted
-            ? "bg-emerald-500/20"
-            : isLocked
-            ? "bg-zinc-700/20"
-            : "bg-amber-500/15"
-        }`}
-      />
-
-      <div className="p-5 flex items-start gap-4">
-        <div
-          className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center border transition-colors duration-500 ${
-            isCompleted
-              ? "bg-emerald-950/30 border-emerald-800/30 text-emerald-400"
-              : isLocked
-              ? "bg-zinc-900/50 border-zinc-800/40 text-zinc-600"
-              : "bg-amber-950/20 border-amber-800/20 text-amber-300/70"
-          }`}
-        >
-          {meta.icon}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-600 font-semibold">
-                Level {meta.id}
-              </span>
-              <KYCStatusBadge status={status} />
-            </div>
-          </div>
-          <h4
-            className={`text-sm font-medium tracking-wide ${
-              isLocked ? "text-zinc-500" : "text-zinc-200"
+    <div className="flex min-w-0 flex-col justify-between gap-5 rounded-[18px] border border-zinc-800/50 bg-zinc-900/45 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md sm:rounded-[22px] sm:p-6">
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-zinc-500">
+          {t.circleNow}
+        </p>
+        <div className="mt-2 flex items-baseline gap-2.5">
+          <span className={`${cormorant.className} text-[15px] text-zinc-500`}>
+            {toRoman(circle.level)}
+          </span>
+          <span
+            className={`${cormorant.className} text-[30px] italic leading-none transition-colors duration-700 sm:text-4xl ${
+              loading ? "opacity-60" : ""
             }`}
+            style={{ color: skin.accent, textShadow: `0 0 24px ${skin.glow}` }}
           >
-            {meta.title}
-          </h4>
-          <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
-            {meta.description}
-          </p>
+            {circle.title}
+          </span>
         </div>
 
-        {/* Admin controls / resident read-only chevron */}
-        {isAdmin ? (
-          <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
-            {status === "pending" && (
-              <button
-                onClick={onConfirm}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-emerald-950/40 border border-emerald-800/40 text-emerald-300 text-[10px] tracking-[0.12em] uppercase font-semibold hover:border-emerald-600/50 hover:bg-emerald-900/40 transition-all"
-              >
-                <Check className="w-3.5 h-3.5" />
-                Confirm
-              </button>
-            )}
-            {status === "completed" && (
-              <button
-                onClick={onRevoke}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-zinc-500 text-[10px] tracking-[0.12em] uppercase font-medium hover:text-amber-300/80 transition-colors"
-              >
-                <X className="w-3 h-3" />
-                Revoke
-              </button>
-            )}
-            {status === "locked" && (
-              <span className="text-[10px] text-zinc-600 tracking-wide">
-                Complete L{meta.id - 1}
-              </span>
-            )}
+        {/* шесть кругов: пройденные — золото, текущий — цвет круга, следующий — прогресс */}
+        <div aria-hidden className="mt-4 flex gap-1 sm:mt-[18px]">
+          {CIRCLE_ORDER.map((k, i) => (
+            <span key={k} className="relative h-[3px] flex-1 overflow-hidden rounded-sm bg-white/[0.07]">
+              {i < rank && <span className="absolute inset-0 bg-[#d4a853]/50" />}
+              {i === rank && (
+                <span
+                  className="absolute inset-0"
+                  style={{ background: skin.accent, boxShadow: `0 0 12px ${skin.glow}` }}
+                />
+              )}
+              {i === rank + 1 && next && (
+                <span
+                  className="absolute inset-y-0 left-0 bg-white/25 transition-[width] duration-700"
+                  style={{ width: `${Math.round(progress * 100)}%` }}
+                />
+              )}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-2.5 flex items-baseline justify-between gap-3">
+          <span className="truncate text-[10px] uppercase tracking-[0.18em] text-zinc-500 sm:tracking-[0.2em]">
+            {next ? `${t.next} · ${next.title}` : t.topCircle}
+          </span>
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-400" title={t.influence}>
+            {fmtPoints(index)}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 border-t border-white/[0.06] pt-4">
+        <ProfileCompletionBar percentage={completion} label={t.completion} />
+
+        <div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">{t.kycShort}</span>
+            <span className="font-mono text-[11px] text-zinc-400">
+              {Math.max(0, Math.min(3, kycLevel))} / 3
+            </span>
           </div>
-        ) : (
-          !isLocked && (
-            <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-400 transition-colors mt-1" />
-          )
-        )}
+          <div aria-hidden className="mt-2 flex gap-1">
+            {[1, 2, 3].map((lvl) => (
+              <span
+                key={lvl}
+                className={`h-[3px] flex-1 rounded-sm ${
+                  lvl <= kycLevel
+                    ? "bg-emerald-400/70"
+                    : lvl === kycLevel + 1
+                      ? "bg-amber-300/35"
+                      : "bg-white/[0.07]"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <p className={`${cormorant.className} text-[15px] italic leading-snug text-zinc-500`}>
+          {t.cardAutoNote}
+        </p>
       </div>
     </div>
   );
 }
 
-function VaultRow() {
+function VaultRow({ t, address }: { t: Dict; address: string | null }) {
   const [revealed, setRevealed] = useState(false);
-  const walletShort = "T8x...7mK2";
-  const walletFull =
-    "T8x9aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890AbCdEfGhIjKlMnOpQrStUvWxYz7mK2";
+  const short =
+    address && address.length > 12 ? `${address.slice(0, 3)}···${address.slice(-4)}` : address;
 
   return (
-    <div className="flex items-center justify-between py-3.5">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-zinc-800/40 border border-zinc-700/30 flex items-center justify-center text-zinc-500">
-          <CreditCard className="w-4 h-4" />
+    <div className="flex items-center justify-between gap-3 py-3.5">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-700/30 bg-zinc-800/40 text-zinc-500">
+          <Wallet className="h-4 w-4" />
         </div>
-        <div>
-          <p className="text-[11px] tracking-[0.15em] uppercase text-zinc-500 font-medium">
-            USDT Wallet
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-[0.15em] text-zinc-500">
+            {t.usdtWallet}
           </p>
-          <p className="text-sm text-zinc-300 mt-0.5 font-mono tracking-wide">
-            {revealed ? walletFull : walletShort}
-          </p>
+          {address ? (
+            <p className="mt-0.5 break-all font-mono text-sm tracking-wide text-zinc-300">
+              {revealed ? address : short}
+            </p>
+          ) : (
+            <p className="mt-0.5 text-sm text-zinc-400">{t.walletNotOpened}</p>
+          )}
         </div>
       </div>
-      <button
-        onClick={() => setRevealed(!revealed)}
-        className="p-1.5 rounded-md hover:bg-zinc-800/50 text-zinc-600 hover:text-zinc-400 transition-all"
-      >
-        {revealed ? (
-          <EyeOff className="w-3.5 h-3.5" />
-        ) : (
-          <Eye className="w-3.5 h-3.5" />
-        )}
-      </button>
+      {address && (
+        <button
+          type="button"
+          aria-label={revealed ? t.hideAddress : t.showAddress}
+          aria-pressed={revealed}
+          onClick={() => setRevealed((v) => !v)}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-all hover:bg-zinc-800/50 hover:text-zinc-300"
+        >
+          {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      )}
     </div>
   );
 }
@@ -382,6 +598,10 @@ function ToggleSwitch({
         <span className="text-sm text-zinc-300">{label}</span>
       </div>
       <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
         disabled={disabled}
         onClick={() => !disabled && onChange(!checked)}
         className={`relative w-10 h-5 rounded-full transition-all duration-300 border ${
@@ -432,6 +652,7 @@ function EditableText({
   multiline = false,
   mono = false,
   format,
+  editHint,
 }: {
   value: string | number | null | undefined;
   onSave: (v: string) => void;
@@ -441,6 +662,7 @@ function EditableText({
   multiline?: boolean;
   mono?: boolean;
   format?: (v: string) => string;
+  editHint?: string;
 }) {
   const raw = value === null || value === undefined ? "" : String(value);
   const [editing, setEditing] = useState(false);
@@ -496,7 +718,7 @@ function EditableText({
   return (
     <span
       onClick={() => editable && setEditing(true)}
-      title={editable ? "Нажмите, чтобы изменить" : undefined}
+      title={editable ? editHint : undefined}
       className={`text-sm tracking-wide ${
         hasValue ? "text-zinc-200" : "text-zinc-600"
       } ${mono ? "font-mono" : ""} ${
@@ -516,9 +738,12 @@ function EditableText({
 
 // ─── Main Page ──────────────────────────────────────────────────────
 export default function ResidentProfilePage() {
-  // Единственный вызов хука useAuth в компоненте
-  const { user, setUser } = useAuth();
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  const { user, hasRole } = useAuth();
+  const { lang } = useLanguage();
+  const t: Dict = translations[lang] ?? translations.EN;
+
+  // UI-проверка; настоящая защита — RLS и триггер в базе
+  const isAdmin = hasRole(["owner", "admin"]) || user?.email === LEGACY_ADMIN_EMAIL;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [photoSrcs, setPhotoSrcs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -528,6 +753,13 @@ export default function ResidentProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canEditOwn = !!user; // владелец редактирует свою базовую анкету
+
+  // Имя и аватар — единый источник правды: AuthContext (меняются в настройках)
+  const displayName = user?.fullName ?? null;
+  const avatarUrl = user?.avatarUrl ?? null;
+
+  // Circle резидента из базы — цвет кардхолдера меняется сам при повышении
+  const standing = useClubStanding(user?.id, profile?.status);
 
   // ── Генерация signed URL для приватного бакета ──────────────────────
   const resolvePhotos = useCallback(async (entries: string[]) => {
@@ -567,7 +799,7 @@ export default function ResidentProfilePage() {
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
-        .eq('user_id', user.id)
+        .eq("id", user.id) // profiles.id = auth user id (user_id в таблице пустой)
         .maybeSingle();
 
       if (!active) return;
@@ -582,7 +814,7 @@ export default function ResidentProfilePage() {
             ...data,
             smoking: !!data.smoking,
             alcohol: !!data.alcohol,
-            kyc_level: data.kyc_level ?? 1,
+            kyc_level: data.kyc_level ?? 0,
             achievements: data.achievements ?? [],
             photo_urls: data.photo_urls ?? [],
           }
@@ -602,27 +834,21 @@ export default function ResidentProfilePage() {
   const updateProfile = useCallback(
     async (patch: Partial<Profile>) => {
       if (!user) return;
-      
-      // 2. Обновляем локальный стейт
+
       setProfile((prev) => (prev ? { ...prev, ...patch } : prev));
-      
-      // 3. ЕСЛИ меняется имя — обновляем «мозг» (AuthContext)
-      if (patch.full_name) {
-        setUser({ ...user, name: patch.full_name });
-      }
 
       setSaving(true);
       const { error } = await supabase
         .from("profiles")
         .upsert({ id: user.id, ...patch }, { onConflict: "id" });
       setSaving(false);
-      
+
       if (error) console.error("Ошибка сохранения:", error.message);
     },
-    [user, setUser] // Добавили setUser в зависимости
+    [user]
   );
-  // ── Загрузка фото в Storage ─────────────────────────────────────────
-// ── Загрузка фото в Storage (С защитой от кэша!) ────────────────────
+
+  // ── Загрузка фото портфолио в Storage (с защитой от кэша) ───────────
   const handleFiles = useCallback(
     async (files: FileList | null) => {
       if (!files || !user || !profile) return;
@@ -632,22 +858,20 @@ export default function ResidentProfilePage() {
       const added: string[] = [];
 
       for (const file of Array.from(files)) {
-        // 1. Убираем пробелы и русские буквы из названия файла на всякий случай
-        const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        // 2. Добавляем уникальную метку времени!
+        const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
         const uniqueFileName = `${Date.now()}_${safeName}`;
-        const path = `${user.id}/${uniqueFileName}`; 
-        
+        const path = `${user.id}/${uniqueFileName}`;
+
         const { error } = await supabase.storage
           .from("user-uploads")
           .upload(path, file, { upsert: true, cacheControl: "3600" });
-          
+
         if (error) {
           console.error("Загрузка не удалась:", error.message);
-          alert("Ошибка при загрузке фото. Проверь консоль (F12).");
+          alert(t.uploadError);
           continue;
         }
-        
+
         if (!existing.includes(path) && !added.includes(path)) {
           added.push(path);
         }
@@ -660,8 +884,9 @@ export default function ResidentProfilePage() {
       }
       setUploading(false);
     },
-    [user, profile, updateProfile, resolvePhotos]
+    [user, profile, updateProfile, resolvePhotos, t]
   );
+
   // ── Удаление фото (владелец) ────────────────────────────────────────
   const removePhoto = useCallback(
     async (index: number) => {
@@ -670,7 +895,6 @@ export default function ResidentProfilePage() {
       const target = entries[index];
       const next = entries.filter((_, i) => i !== index);
 
-      // если это путь (а не внешний URL) — удаляем из бакета
       if (target && !/^https?:\/\//.test(target)) {
         await supabase.storage.from("user-uploads").remove([target]);
       }
@@ -682,8 +906,8 @@ export default function ResidentProfilePage() {
 
   const openFilePicker = () => fileInputRef.current?.click();
 
-  // ── Ачивки (только админ) ───────────────────────────────────────────
-  const toggleAchievement = (key: string) => {
+  // ── Ачивки (только персонал) ────────────────────────────────────────
+  const toggleAchievement = (key: AchievementKey) => {
     if (!profile || !isAdmin) return;
     const cur = profile.achievements ?? [];
     const next = cur.includes(key)
@@ -692,16 +916,18 @@ export default function ResidentProfilePage() {
     updateProfile({ achievements: next });
   };
 
-  // ── KYC (только админ) ──────────────────────────────────────────────
-  const setKyc = (n: number) =>
+  // ── KYC (только персонал) ───────────────────────────────────────────
+  const setKyc = (n: number) => {
+    if (!isAdmin) return;
     updateProfile({ kyc_level: Math.max(0, Math.min(3, n)) });
+  };
 
   // ── Прогресс заполнения ─────────────────────────────────────────────
-  // 100% только если: все текстовые поля заполнены, ≥3 фото и kyc_level === 3
+  // 100% только если: все поля заполнены, ≥3 фото портфолио и kyc_level === 3
   const completion = useMemo(() => {
     if (!profile) return 0;
     const textFields = [
-      profile.full_name,
+      displayName,
       profile.location,
       profile.citizenship,
       profile.birth_date,
@@ -714,20 +940,18 @@ export default function ResidentProfilePage() {
     done += Math.min((profile.photo_urls ?? []).length, 3); // до 3
     done += profile.kyc_level >= 3 ? 1 : 0; // до 1
     return Math.round((done / 12) * 100);
-  }, [profile]);
+  }, [profile, displayName]);
 
   // ── Состояния загрузки / отсутствия пользователя ────────────────────
   if (!user && !loading) {
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-400 flex items-center justify-center">
-        <p className="text-sm tracking-wide">
-          Пожалуйста, войдите, чтобы открыть личный кабинет.
-        </p>
+        <p className="text-sm tracking-wide">{t.loginRequired}</p>
       </div>
     );
   }
 
-  if (loading || !profile) {
+  if (loading || !profile || !user) {
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-400 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-amber-300/70" />
@@ -735,12 +959,10 @@ export default function ResidentProfilePage() {
     );
   }
 
-  const activeAchievements = profile.achievements ?? [];
-
   // ───────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* hidden file input для загрузки фото */}
+    <div className="min-h-screen overflow-x-clip bg-zinc-950 text-zinc-100">
+      {/* hidden file input — только для портфолио */}
       <input
         ref={fileInputRef}
         type="file"
@@ -749,7 +971,7 @@ export default function ResidentProfilePage() {
         className="hidden"
         onChange={(e) => {
           handleFiles(e.target.files);
-          e.target.value = ""; // позволяет выбрать тот же файл повторно
+          e.target.value = "";
         }}
       />
 
@@ -776,90 +998,66 @@ export default function ResidentProfilePage() {
         <div className="fixed top-4 right-4 z-50 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-700/50 backdrop-blur-md">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-300/80" />
           <span className="text-[10px] tracking-[0.15em] uppercase text-zinc-400">
-            {uploading ? "Загрузка" : "Сохранение"}
+            {uploading ? t.uploading : t.saving}
           </span>
         </div>
       )}
 
-      <div className="relative max-w-3xl mx-auto px-6 py-12 md:py-16">
+      <div className="relative mx-auto max-w-4xl px-4 py-10 sm:px-6 md:py-16">
         {/* ── Header ─────────────────────────────────────────────── */}
         <header className="mb-12">
           <div className="flex items-center gap-3 mb-2">
             <Crown className="w-5 h-5 text-amber-200/60" />
-            <span className="text-[10px] tracking-[0.3em] uppercase text-zinc-600 font-semibold">
-              Voyage Private Club
+            <span className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-semibold">
+              {t.club}
             </span>
             {isAdmin && (
               <span className="text-[9px] tracking-[0.2em] uppercase px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-500/30 text-amber-300/80 font-semibold">
-                Admin
+                {t.admin}
               </span>
             )}
           </div>
           <h1
-            className="text-4xl md:text-5xl text-zinc-100 mb-6"
-            style={{ fontFamily: "'Cormorant Garamond', serif" }}
+            className={`${cormorant.className} text-[38px] font-medium leading-[1.05] text-zinc-100 sm:text-5xl md:text-[52px]`}
           >
-            Resident Profile
+            {t.pageTitle}
           </h1>
-          <ProfileCompletionBar percentage={completion} />
 
-          {/* ── Digital VIP Card — read-only статус для всех ────── */}
-          <div className="mt-6">
-            <VoyageIdCard
-              fullName={profile.full_name}
-              status={profile.status}
+          {/* ── Кардхолдер + статус ──────────────────────────────── */}
+          <div className="mt-7 grid gap-4 md:mt-9 md:grid-cols-[1.25fr_1fr] md:gap-6">
+            <div className="min-w-0">
+              <ClubCardholder
+                circleKey={standing.circle.key}
+                circleTitle={standing.circle.title}
+                circleLevel={standing.circle.level}
+                holderName={isFilled(displayName) ? (displayName as string) : "Voyage Resident"}
+                memberNo={formatMemberNo(profile.member_no, user.id)}
+                since={sinceRoman(profile.created_at)}
+              />
+              <p className="mt-3 text-center text-[9px] uppercase tracking-[0.3em] text-zinc-600 [@media(hover:hover)]:hidden">
+                {t.cardTapHint}
+              </p>
+            </div>
+            <CircleStatusPanel
+              t={t}
+              circle={standing.circle}
+              next={standing.next}
+              index={standing.index}
+              progress={standing.progress}
+              completion={completion}
               kycLevel={profile.kyc_level}
+              loading={standing.loading}
             />
           </div>
-          {/* ── Achievements ───────────────────────────────────── */}
-          <div
-            className="mt-6 relative rounded-xl overflow-hidden"
-            style={{
-              background:
-                "linear-gradient(135deg, rgba(212,168,83,0.02) 0%, rgba(24,24,24,0.4) 50%, rgba(212,168,83,0.015) 100%)",
-            }}
-          >
-            <div className="absolute inset-0 rounded-xl border border-amber-500/15 pointer-events-none" />
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-amber-500/20" />
-            <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-amber-500/8" />
 
-            <div className="p-5 md:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              {/* Label */}
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-amber-200/50" />
-                <p className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 font-semibold">
-                  Achievements
-                </p>
-              </div>
-
-              {/* Achievements — админ переключает, резидент видит только выданные */}
-              <div className="flex items-center gap-3">
-                {ACHIEVEMENTS.map(({ key, label, Icon }) => {
-                  const active = activeAchievements.includes(key);
-                  if (!isAdmin && !active) return null; // резидент видит только выданные
-                  return (
-                    <button
-                      key={key}
-                      title={label}
-                      onClick={() => toggleAchievement(key)}
-                      disabled={!isAdmin}
-                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border ${
-                        active
-                          ? "bg-amber-950/40 border-amber-500/30 text-amber-400 hover:shadow-[0_0_15px_rgba(253,230,138,0.2)] hover:border-amber-500/50"
-                          : "bg-zinc-900/40 border-zinc-700/40 text-zinc-600 hover:border-amber-500/30 hover:text-amber-300/60"
-                      } ${isAdmin ? "hover:scale-110 cursor-pointer" : "cursor-default"}`}
-                    >
-                      <Icon className="w-4 h-4" />
-                    </button>
-                  );
-                })}
-                {!isAdmin && activeAchievements.length === 0 && (
-                  <span className="text-[10px] text-zinc-600 tracking-wide">
-                    Нет наград
-                  </span>
-                )}
-              </div>
-            </div>
+          {/* ── Достижения ───────────────────────────────────────── */}
+          <div className="mt-10">
+            <AchievementShelf
+              lang={lang}
+              earned={profile.achievements}
+              isAdmin={isAdmin}
+              onToggle={toggleAchievement}
+            />
           </div>
         </header>
 
@@ -868,10 +1066,10 @@ export default function ResidentProfilePage() {
           <div className="flex items-center gap-2 mb-5">
             <User className="w-4 h-4 text-zinc-500" />
             <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
-              Personal Portfolio
+              {t.portfolio}
             </h2>
             <span className="text-[10px] text-zinc-600 ml-1">
-              — Verified Data
+              {t.verifiedData}
             </span>
           </div>
 
@@ -882,57 +1080,51 @@ export default function ResidentProfilePage() {
                 <div className="flex items-center gap-2 mb-4">
                   <User className="w-3.5 h-3.5 text-zinc-600" />
                   <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-600 font-semibold">
-                    Identity
+                    {t.identity}
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
-                  {/* Avatar (первое фото) */}
-                  <div className="relative flex-shrink-0">
-                    <div className="w-20 h-20 rounded-full bg-zinc-800/50 border border-amber-500/30 flex items-center justify-center overflow-hidden">
-                      {photoSrcs[0] ? (
+                  {/* Avatar — только из настроек (user.avatarUrl), без загрузки */}
+                  <div className="relative flex-shrink-0" title={t.avatarHint}>
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-zinc-800/50 border border-amber-500/30 flex items-center justify-center overflow-hidden">
+                      {avatarUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={photoSrcs[0]}
-                          alt="avatar"
+                          src={avatarUrl}
+                          alt={displayName ?? "avatar"}
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <User className="w-9 h-9 text-zinc-500" />
                       )}
                     </div>
-                    {canEditOwn && (
-                      <button
-                        onClick={openFilePicker}
-                        className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-zinc-900 border border-amber-500/40 flex items-center justify-center text-amber-400 hover:text-amber-300 hover:border-amber-500/60 transition-all shadow-lg"
-                      >
-                        <Camera className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-                    <div>
+                  <div className="grid min-w-0 grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                    <div className="min-w-0">
                       <p className="text-[11px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-1">
-                        Full Name
+                        {t.fullName}
                       </p>
-                      <EditableText
-                        value={profile.full_name}
-                        editable={canEditOwn}
-                        placeholder="Укажите имя"
-                        onSave={(v) =>
-                          updateProfile({ full_name: v || null })
-                        }
-                      />
+                      <span
+                        className={`block truncate text-sm tracking-wide ${
+                          isFilled(displayName)
+                            ? "text-zinc-200"
+                            : "text-zinc-600"
+                        }`}
+                      >
+                        {isFilled(displayName) ? displayName : t.nameNotSet}
+                      </span>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[11px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-1">
-                        Current Location
+                        {t.currentLocation}
                       </p>
                       <div className="flex items-center gap-1.5">
                         <MapPin className="w-3 h-3 text-zinc-500 flex-shrink-0" />
                         <EditableText
                           value={profile.location}
                           editable={canEditOwn}
-                          placeholder="Город"
+                          editHint={t.clickToEdit}
+                          placeholder={t.locationPlaceholder}
                           onSave={(v) =>
                             updateProfile({ location: v || null })
                           }
@@ -950,18 +1142,19 @@ export default function ResidentProfilePage() {
                 <div className="flex items-center gap-2 mb-4">
                   <Flag className="w-3.5 h-3.5 text-zinc-600" />
                   <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-600 font-semibold">
-                    Citizenship
+                    {t.citizenship}
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <p className="text-[11px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-1">
-                      Nationality
+                      {t.nationality}
                     </p>
                     <EditableText
                       value={profile.citizenship}
                       editable={canEditOwn}
-                      placeholder="Гражданство"
+                      editHint={t.clickToEdit}
+                      placeholder={t.nationalityPlaceholder}
                       onSave={(v) =>
                         updateProfile({ citizenship: v || null })
                       }
@@ -969,16 +1162,17 @@ export default function ResidentProfilePage() {
                   </div>
                   <div>
                     <p className="text-[11px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-1">
-                      Date of Birth
+                      {t.dob}
                     </p>
                     <div className="flex items-center gap-1.5">
                       <Calendar className="w-3 h-3 text-zinc-500 flex-shrink-0" />
                       <EditableText
                         value={profile.birth_date}
                         editable={canEditOwn}
+                        editHint={t.clickToEdit}
                         type="date"
                         mono
-                        placeholder="дд.мм.гггг"
+                        placeholder={t.dobPlaceholder}
                         format={formatDate}
                         onSave={(v) =>
                           updateProfile({ birth_date: v || null })
@@ -996,28 +1190,29 @@ export default function ResidentProfilePage() {
                 <div className="flex items-center gap-2 mb-4">
                   <Activity className="w-3.5 h-3.5 text-zinc-600" />
                   <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-600 font-semibold">
-                    Physical Parameters
+                    {t.physical}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-2 sm:gap-4">
                   <div className="text-center">
                     <div className="w-10 h-10 mx-auto rounded-lg bg-zinc-800/40 border border-zinc-700/30 flex items-center justify-center text-zinc-500 mb-2">
                       <Ruler className="w-4 h-4" />
                     </div>
-                    <p className="text-[11px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-0.5">
-                      Height
+                    <p className="text-[10px] sm:text-[11px] tracking-[0.12em] sm:tracking-[0.15em] uppercase text-zinc-500 font-medium mb-0.5">
+                      {t.height}
                     </p>
                     <p className="text-sm text-zinc-200 font-mono tracking-wide flex items-center justify-center gap-1">
                       <EditableText
                         value={profile.height}
                         editable={canEditOwn}
+                        editHint={t.clickToEdit}
                         type="number"
                         mono
                         placeholder="—"
                         onSave={(v) => updateProfile({ height: v || null })}
                       />
                       {isFilled(profile.height) && (
-                        <span className="text-zinc-500 text-xs">cm</span>
+                        <span className="text-zinc-500 text-xs">{t.cm}</span>
                       )}
                     </p>
                   </div>
@@ -1025,20 +1220,21 @@ export default function ResidentProfilePage() {
                     <div className="w-10 h-10 mx-auto rounded-lg bg-zinc-800/40 border border-zinc-700/30 flex items-center justify-center text-zinc-500 mb-2">
                       <Weight className="w-4 h-4" />
                     </div>
-                    <p className="text-[11px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-0.5">
-                      Weight
+                    <p className="text-[10px] sm:text-[11px] tracking-[0.12em] sm:tracking-[0.15em] uppercase text-zinc-500 font-medium mb-0.5">
+                      {t.weight}
                     </p>
                     <p className="text-sm text-zinc-200 font-mono tracking-wide flex items-center justify-center gap-1">
                       <EditableText
                         value={profile.weight}
                         editable={canEditOwn}
+                        editHint={t.clickToEdit}
                         type="number"
                         mono
                         placeholder="—"
                         onSave={(v) => updateProfile({ weight: v || null })}
                       />
                       {isFilled(profile.weight) && (
-                        <span className="text-zinc-500 text-xs">kg</span>
+                        <span className="text-zinc-500 text-xs">{t.kg}</span>
                       )}
                     </p>
                   </div>
@@ -1046,13 +1242,14 @@ export default function ResidentProfilePage() {
                     <div className="w-10 h-10 mx-auto rounded-lg bg-zinc-800/40 border border-zinc-700/30 flex items-center justify-center text-zinc-500 mb-2">
                       <Activity className="w-4 h-4" />
                     </div>
-                    <p className="text-[11px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-0.5">
-                      Measurements
+                    <p className="text-[10px] sm:text-[11px] tracking-[0.12em] sm:tracking-[0.15em] uppercase text-zinc-500 font-medium mb-0.5">
+                      {t.measurements}
                     </p>
                     <p className="text-sm text-zinc-200 font-mono tracking-wide">
                       <EditableText
                         value={profile.measurements}
                         editable={canEditOwn}
+                        editHint={t.clickToEdit}
                         mono
                         placeholder="90 / 60 / 90"
                         onSave={(v) =>
@@ -1071,19 +1268,19 @@ export default function ResidentProfilePage() {
                 <div className="flex items-center gap-2 mb-2">
                   <Cigarette className="w-3.5 h-3.5 text-zinc-600" />
                   <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-600 font-semibold">
-                    Lifestyle Habits
+                    {t.lifestyle}
                   </span>
                 </div>
                 <div className="divide-y divide-zinc-800/30">
                   <ToggleSwitch
-                    label="Smoking Status"
+                    label={t.smoking}
                     icon={<Cigarette className="w-4 h-4" />}
                     checked={profile.smoking}
                     disabled={!canEditOwn}
                     onChange={(v) => updateProfile({ smoking: v })}
                   />
                   <ToggleSwitch
-                    label="Alcohol Consumption"
+                    label={t.alcohol}
                     icon={<Wine className="w-4 h-4" />}
                     checked={profile.alcohol}
                     disabled={!canEditOwn}
@@ -1099,15 +1296,16 @@ export default function ResidentProfilePage() {
                 <div className="flex items-center gap-2 mb-4">
                   <AlignLeft className="w-3.5 h-3.5 text-zinc-600" />
                   <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-600 font-semibold">
-                    About & Preferences
+                    {t.about}
                   </span>
                 </div>
                 <div className="bg-zinc-950/40 rounded-lg border border-zinc-800/30 p-4 text-xs text-zinc-400">
                   <EditableText
                     value={profile.about}
                     editable={canEditOwn}
+                    editHint={t.clickToEdit}
                     multiline
-                    placeholder="Расскажите о себе, своих предпочтениях в путешествиях…"
+                    placeholder={t.aboutPlaceholder}
                     onSave={(v) => updateProfile({ about: v || null })}
                   />
                 </div>
@@ -1121,10 +1319,10 @@ export default function ResidentProfilePage() {
           <div className="flex items-center gap-2 mb-5">
             <Camera className="w-4 h-4 text-zinc-500" />
             <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
-              Visual Portfolio
+              {t.visualPortfolio}
             </h2>
             <span className="text-[10px] text-zinc-600 ml-1">
-              — Polaroids &amp; Digitals
+              {t.polaroids}
             </span>
           </div>
 
@@ -1137,7 +1335,7 @@ export default function ResidentProfilePage() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={src}
-                  alt={`Photo ${i + 1}`}
+                  alt={`${t.photo} ${i + 1}`}
                   className="absolute inset-0 w-full h-full object-cover"
                 />
                 <div
@@ -1154,31 +1352,34 @@ export default function ResidentProfilePage() {
                 </div>
                 {canEditOwn && (
                   <button
+                    type="button"
                     onClick={() => removePhoto(i)}
-                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-zinc-950/70 border border-zinc-700/50 flex items-center justify-center text-zinc-400 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:border-red-500/40 transition-all"
-                    title="Удалить фото"
+                    aria-label={t.deletePhoto}
+                    className="absolute top-1 right-1 w-9 h-9 rounded-full flex items-center justify-center text-zinc-300 opacity-100 transition-all [@media(hover:hover)]:opacity-0 group-hover:opacity-100 hover:text-red-400"
+                    title={t.deletePhoto}
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <span className="flex w-6 h-6 items-center justify-center rounded-full bg-zinc-950/70 border border-zinc-700/50">
+                      <X className="w-3.5 h-3.5" />
+                    </span>
                   </button>
                 )}
                 <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-zinc-950/80 to-transparent">
                   <p className="text-[10px] tracking-[0.15em] uppercase text-zinc-300 font-medium">
-                    Photo {String(i + 1).padStart(2, "0")}
+                    {t.photo} {String(i + 1).padStart(2, "0")}
                   </p>
                 </div>
               </div>
             ))}
 
-            {/* placeholder, если фото нет */}
             {photoSrcs.length === 0 && (
               <div className="relative aspect-[3/4] rounded-xl bg-zinc-900/50 border border-zinc-800/40 overflow-hidden flex items-center justify-center">
                 <ImageIcon className="w-6 h-6 text-zinc-700" />
               </div>
             )}
 
-            {/* Upload Button */}
             {canEditOwn && (
               <button
+                type="button"
                 onClick={openFilePicker}
                 disabled={uploading}
                 className="relative aspect-[3/4] rounded-xl bg-transparent border border-dashed border-zinc-700 hover:border-amber-500/50 transition-all duration-300 flex flex-col items-center justify-center gap-2 group disabled:opacity-50"
@@ -1191,7 +1392,7 @@ export default function ResidentProfilePage() {
                   )}
                 </div>
                 <span className="text-[11px] tracking-[0.12em] uppercase text-zinc-500 group-hover:text-amber-300/80 transition-colors font-medium">
-                  {uploading ? "Uploading…" : "Add Photo"}
+                  {uploading ? t.uploadingShort : t.addPhoto}
                 </span>
               </button>
             )}
@@ -1199,52 +1400,52 @@ export default function ResidentProfilePage() {
         </section>
 
         {/* ── KYC Verification ───────────────────────────────────── */}
-        <section className="mb-10">
-          <div className="flex items-center gap-2 mb-5">
-            <UserCheck className="w-4 h-4 text-zinc-500" />
-            <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
-              KYC Verification
-            </h2>
-            <span className="text-[10px] text-zinc-600 ml-1">— Trust Tiers</span>
-          </div>
-
-          <div className="space-y-3">
-            {KYC_META.map((meta) => (
-              <KYCCard
-                key={meta.id}
-                meta={meta}
-                status={statusForLevel(meta.id, profile.kyc_level)}
-                isAdmin={isAdmin}
-                onConfirm={() => setKyc(meta.id)}
-                onRevoke={() => setKyc(meta.id - 1)}
-              />
-            ))}
-          </div>
-        </section>
+        <KycSection
+          userId={user.id}
+          lang={lang}
+          kycLevel={profile.kyc_level}
+          isAdmin={isAdmin}
+          onSetLevel={setKyc}
+        />
 
         {/* ── Personal Vault ─────────────────────────────────────── */}
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-5">
             <Shield className="w-4 h-4 text-zinc-500" />
             <h2 className="text-[11px] tracking-[0.25em] uppercase text-zinc-400 font-semibold">
-              Personal Vault
+              {t.vault}
             </h2>
-            <span className="text-[10px] text-zinc-600 ml-1">— Encrypted</span>
+            <span className="text-[10px] text-zinc-600 ml-1">
+              {t.encrypted}
+            </span>
           </div>
 
-          <div className="bg-zinc-900/40 backdrop-blur-md rounded-xl border border-zinc-800/40 p-5">
-            <VaultRow />
+          <div className="relative overflow-hidden rounded-xl border border-zinc-800/40 bg-zinc-900/40 px-4 pt-5 pb-1 backdrop-blur-md sm:px-6 sm:pt-6">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -right-10 -top-16 h-40 w-60 rounded-full"
+              style={{
+                background:
+                  "radial-gradient(circle, rgba(212,168,83,0.1) 0%, rgba(212,168,83,0) 70%)",
+              }}
+            />
+            <p
+              className={`${cormorant.className} relative max-w-[48ch] text-[19px] leading-[1.4] text-zinc-200 sm:text-[21px]`}
+            >
+              {t.vaultPitch} <span className="italic text-[#ecd08c]">{t.vaultMars}</span>.
+            </p>
+            <div className="relative mt-4 border-t border-white/[0.06] sm:mt-5">
+              <VaultRow t={t} address={profile.usdt_wallet ?? null} />
+            </div>
           </div>
         </section>
 
         {/* ── Footer ─────────────────────────────────────────────── */}
         <footer className="text-center pt-6 border-t border-zinc-900">
-          <p className="text-[10px] tracking-[0.2em] text-zinc-700 uppercase">
-            Voyage Private Club — Confidential
+          <p className="text-[10px] tracking-[0.2em] text-zinc-600 uppercase">
+            {t.footerTitle}
           </p>
-          <p className="text-[10px] text-zinc-800 mt-1">
-            All data is encrypted and stored under strict NDA
-          </p>
+          <p className="text-[10px] text-zinc-700 mt-1">{t.footerNote}</p>
         </footer>
       </div>
     </div>

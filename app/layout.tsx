@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond } from "next/font/google";
-import { AuthProvider } from "./context/AuthContext"; // Импортируем провайдер
+import { AuthProvider } from "./context/AuthContext"; // "Мозг" авторизации
+import { LanguageProvider } from "./context/LanguageContext"; // Глобальный язык
+import Navbar from "./components/Navbar";
 import "./globals.css";
 
 const cormorant = Cormorant_Garamond({
@@ -20,11 +22,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru" className={cormorant.variable}>
-      <body className="bg-zinc-950 text-zinc-100 antialiased">
-        {/* Оборачиваем всё приложение в наш "Мозг" (AuthProvider) */}
+    // lang по умолчанию "en" (как и язык в контексте),
+    // LanguageProvider сам обновит его при переключении языка.
+    <html lang="en" className={cormorant.variable} suppressHydrationWarning>
+      <body className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
+        {/* Порядок: сначала авторизация, внутри — язык */}
         <AuthProvider>
-          {children}
+          <LanguageProvider>
+            <Navbar />
+            <main className="pt-24">{children}</main>
+          </LanguageProvider>
         </AuthProvider>
       </body>
     </html>

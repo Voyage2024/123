@@ -11,37 +11,38 @@ import {
   MapPin,
   ChevronRight,
   X,
+  Loader2,
+  UserRound,
+  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import { useLanguage } from "@/app/context/LanguageContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
-// ─────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────
-type Lang = "EN" | "RU";
+type Lang = "EN" | "RU" | "ES" | "PT";
+
+type Localized = Record<Lang, string>;
 
 interface Hub {
   id: string;
-  name: { EN: string; RU: string };
-  subtitle: { EN: string; RU: string };
-  description: { EN: string; RU: string };
+  name: Localized;
+  subtitle: Localized;
+  description: Localized;
   rates: { split: string; shot: string; incall: string; outcall: string };
-  accommodation: { EN: string; RU: string };
-  services: { EN: string; RU: string };
+  accommodation: Localized;
+  services: Localized;
   x: number;
   y: number;
 }
 
 interface Highlight {
   icon: React.ReactNode;
-  title: { EN: string; RU: string };
-  body: { EN: string; RU: string };
+  title: Localized;
+  body: Localized;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Map — единый стандарт пропорций (4:3) + cover-«сцена».
-// Карта 1928×1452 ≈ 4:3, поэтому кроп минимальный.
-// ─────────────────────────────────────────────────────────────
 const MAP_W = 1928;
 const MAP_H = 1452;
 const TARGET_RATIO = 4 / 3;
@@ -51,262 +52,6 @@ const STAGE_STYLE: React.CSSProperties =
     ? { height: "100%", width: `${(IMG_RATIO / TARGET_RATIO) * 100}%` }
     : { width: "100%", height: `${(TARGET_RATIO / IMG_RATIO) * 100}%` };
 
-// ─────────────────────────────────────────────────────────────
-// Data — координаты выверены по /map-americas.jpg (1928×1452).
-// ─────────────────────────────────────────────────────────────
-const HUBS: Hub[] = [
-  {
-    id: "toronto",
-    name: { EN: "TORONTO", RU: "ТОРОНТО" },
-    subtitle: { EN: "Canadian Premium", RU: "Канадский премиум" },
-    description: {
-      EN: "Canada's financial heart. Massive verified client base guaranteeing $15k-$25k per month. High-end apartments and an honest, transparent partnership.",
-      RU: "Финансовое сердце Канады. Огромная база проверенных гостей, гарантирующая от $15k до $25k в месяц. Лучшие районы и честное, прозрачное партнерство."
-    },
-    rates: {
-      split: "50/50 (Income, Tickets, Housing)",
-      shot: "30m: $200 - $250",
-      incall: "1h: $350 - $400",
-      outcall: "Optional (Tips & extras 100% yours)",
-    },
-    accommodation: {
-      EN: "Premium apartments in top districts. 50/50 split.",
-      RU: "Премиальные апартаменты в лучших районах. Оплата 50/50."
-    },
-    services: {
-      EN: "Hours: 11:00-02:00 (Weekends till 04:00). Airport pickup, 24/7 support, and professional photoshoot provided.",
-      RU: "График: 11:00-02:00 (Выходные до 04:00). Встреча в аэропорту, поддержка 24/7, предоставляется фотосессия."
-    },
-    x: 72.0,
-    y: 31.1,
-  },
-  {
-    id: "vancouver",
-    name: { EN: "VANCOUVER", RU: "ВАНКУВЕР" },
-    subtitle: { EN: "West Coast Luxury", RU: "Роскошь Западного побережья" },
-    description: {
-      EN: "Breathtaking Pacific wealth. A highly secure environment with extremely vetted guests. Perfect for well-groomed girls seeking long-term stability and top earnings.",
-      RU: "Тихоокеанское богатство. Максимально безопасная среда со строго проверенными гостями. Идеально для ухоженных девушек, ищущих стабильность и топ-доходы."
-    },
-    rates: {
-      split: "50/50 (Income, Tickets, Housing)",
-      shot: "30m: $200 - $250",
-      incall: "1h: $350 - $400",
-      outcall: "Optional (Tips & extras 100% yours)",
-    },
-    accommodation: {
-      EN: "Luxury apartments/hotels in top districts. 50/50 split.",
-      RU: "Люксовые апартаменты/отели в лучших районах. Оплата 50/50."
-    },
-    services: {
-      EN: "Min tour: 14 days. Absolute confidentiality and 24/7 personal support.",
-      RU: "Мин. тур: 14 дней. Абсолютная конфиденциальность и личная поддержка 24/7."
-    },
-    x: 12.5,
-    y: 20.0,
-  },
-  {
-    id: "seattle",
-    name: { EN: "SEATTLE", RU: "СИЭТЛ" },
-    subtitle: { EN: "Tech Hub Elite", RU: "Элита IT-индустрии" },
-    description: {
-      EN: "The home of global tech giants. Incredibly wealthy, polite IT professionals and investors willing to pay top dollar for elite companionship.",
-      RU: "Дом мировых IT-гигантов. Невероятно богатые и вежливые профессионалы и инвесторы, готовые щедро платить за элитную компанию."
-    },
-    rates: {
-      split: "50/50",
-      shot: "30m: $400",
-      incall: "1h: $500 / 2h: $1000",
-      outcall: "Outcall: +$100",
-    },
-    accommodation: {
-      EN: "4-5* Hotels ($100-$200/day). Split 50/50.",
-      RU: "Отели 4-5* ($100-$200 в сутки). Оплата 50/50."
-    },
-    services: {
-      EN: "Strict safety protocols. Vetted high-net-worth individuals.",
-      RU: "Строгие протоколы безопасности. Только проверенные состоятельные гости."
-    },
-    x: 11.9,
-    y: 26.3,
-  },
-  {
-    id: "portland",
-    name: { EN: "PORTLAND", RU: "ПОРТЛЕНД" },
-    subtitle: { EN: "Northwest Exclusivity", RU: "Эксклюзив Северо-Запада" },
-    description: {
-      EN: "A highly discreet market with a relaxed vibe but serious budgets. Perfect for exclusive meetings away from the spotlight.",
-      RU: "Крайне закрытый рынок с расслабленным вайбом, но серьезными бюджетами. Идеально для эксклюзивных встреч вдали от посторонних глаз."
-    },
-    rates: {
-      split: "50/50",
-      shot: "30m: $400",
-      incall: "1h: $500 / 2h: $1000",
-      outcall: "Outcall: +$100",
-    },
-    accommodation: {
-      EN: "4-5* Hotels ($100-$200/day). Split 50/50.",
-      RU: "Отели 4-5* ($100-$200 в сутки). Оплата 50/50."
-    },
-    services: {
-      EN: "High privacy standards. Premium hotel living.",
-      RU: "Высочайшие стандарты приватности. Проживание в премиум-отелях."
-    },
-    x: 10.9,
-    y: 33.8,
-  },
-  {
-    id: "philadelphia",
-    name: { EN: "PHILADELPHIA", RU: "ФИЛАДЕЛЬФИЯ" },
-    subtitle: { EN: "East Coast Wealth", RU: "Богатство Восточного побережья" },
-    description: {
-      EN: "Historic wealth and massive business hubs. A very active market with generous regulars looking for top-tier aesthetics.",
-      RU: "Исторический капитал и крупные бизнес-хабы. Очень активный рынок со щедрыми постоянниками, ценящими высшую эстетику."
-    },
-    rates: {
-      split: "50/50",
-      shot: "30m: $400",
-      incall: "1h: $500 / 2h: $1000",
-      outcall: "Outcall: +$100",
-    },
-    accommodation: {
-      EN: "4-5* Hotels ($100-$200/day). Split 50/50.",
-      RU: "Отели 4-5* ($100-$200 в сутки). Оплата 50/50."
-    },
-    services: {
-      EN: "Consistent demand and high daily earnings. Complete security.",
-      RU: "Стабильный спрос и высокие ежедневные доходы. Полная безопасность."
-    },
-    x: 77.3,
-    y: 41.5,
-  },
-  {
-    id: "washington",
-    name: { EN: "WASHINGTON DC", RU: "ВАШИНГТОН" },
-    subtitle: { EN: "Capital Prestige", RU: "Столичный престиж" },
-    description: {
-      EN: "The ultimate power center. Politicians, diplomats, and tycoons. Absolute confidentiality is mandatory, and the payouts match the status.",
-      RU: "Абсолютный центр власти. Политики, дипломаты и магнаты. Требуется безупречная конфиденциальность, а выплаты полностью соответствуют статусу."
-    },
-    rates: {
-      split: "50/50",
-      shot: "30m: $400",
-      incall: "1h: $500 / 2h: $1000",
-      outcall: "Outcall: +$100",
-    },
-    accommodation: {
-      EN: "4-5* Hotels ($100-$200/day). Split 50/50.",
-      RU: "Отели 4-5* ($100-$200 в сутки). Оплата 50/50."
-    },
-    services: {
-      EN: "NDA-level discretion. The most elite circle of clients in the USA.",
-      RU: "Секретность уровня NDA. Самый элитный круг клиентов в США."
-    },
-    x: 75.8,
-    y: 44.5,
-  },
-  {
-    id: "los_angeles",
-    name: { EN: "LOS ANGELES", RU: "ЛОС-АНДЖЕЛЕС" },
-    subtitle: { EN: "Hollywood Glamour", RU: "Голливудский гламур" },
-    description: {
-      EN: "The entertainment capital of the world. Crazy budgets, celebrity-level guests, and a fast-paced luxury lifestyle.",
-      RU: "Мировая столица развлечений. Сумасшедшие бюджеты, гости уровня селебрити и роскошный, динамичный лайфстайл."
-    },
-    rates: {
-      split: "50/50",
-      shot: "30m: $400",
-      incall: "1h: $500 / 2h: $1000",
-      outcall: "Outcall: +$100",
-    },
-    accommodation: {
-      EN: "4-5* Hotels ($100-$200/day). Split 50/50.",
-      RU: "Отели 4-5* ($100-$200 в сутки). Оплата 50/50."
-    },
-    services: {
-      EN: "Extreme wealth concentration. High standards for visual aesthetics.",
-      RU: "Экстремальная концентрация богатства. Высочайшие требования к визуальной эстетике."
-    },
-    x: 15.5,
-    y: 54.8,
-  },
-  {
-    id: "la_coast",
-    name: { EN: "LA COAST", RU: "ПОБЕРЕЖЬЕ LA" },
-    subtitle: { EN: "California Riviera", RU: "Калифорнийская Ривьера" },
-    description: {
-      EN: "Pasadena, Santa Barbara, Santa Monica, and Glendale. Relaxed beachfront wealth, private mansions, and incredibly generous locals.",
-      RU: "Пасадена, Санта-Барбара, Санта-Моника. Расслабленная роскошь побережья, частные особняки и невероятно щедрые местные жители."
-    },
-    rates: {
-      split: "50/50",
-      shot: "30m: $400",
-      incall: "1h: $500 / 2h: $1000",
-      outcall: "Outcall: +$100",
-    },
-    accommodation: {
-      EN: "4-5* Hotels ($100-$200/day). Split 50/50.",
-      RU: "Отели 4-5* ($100-$200 в сутки). Оплата 50/50."
-    },
-    services: {
-      EN: "Vip Outcalls and high-end hotel Incalls. Safe and highly profitable.",
-      RU: "VIP-выезды и инколл в топовых отелях. Безопасно и крайне прибыльно."
-    },
-    x: 13.6,
-    y: 51.1,
-  },
-  {
-    id: "san_diego",
-    name: { EN: "SAN DIEGO", RU: "САН-ДИЕГО" },
-    subtitle: { EN: "Sunny Elite", RU: "Солнечная элита" },
-    description: {
-      EN: "Endless summer meets serious capital. A pristine market heavily favored by wealthy vacationers and local elites seeking the best.",
-      RU: "Бесконечное лето и серьезные капиталы. Чистейший рынок, который обожают богатые туристы и местная элита, ищущая только лучшее."
-    },
-    rates: {
-      split: "50/50",
-      shot: "30m: $400",
-      incall: "1h: $500 / 2h: $1000",
-      outcall: "Outcall: +$100",
-    },
-    accommodation: {
-      EN: "4-5* Hotels ($100-$200/day). Split 50/50.",
-      RU: "Отели 4-5* ($100-$200 в сутки). Оплата 50/50."
-    },
-    services: {
-      EN: "Excellent weather, perfect vibe, and massive cash flow.",
-      RU: "Шикарная погода, идеальный вайб и колоссальный кэшфлоу."
-    },
-    x: 17.6,
-    y: 57.7,
-  },
-  {
-    id: "san_francisco",
-    name: { EN: "SAN FRANCISCO", RU: "САН-ФРАНЦИСКО" },
-    subtitle: { EN: "Silicon Valley Gold", RU: "Золото Кремниевой долины" },
-    description: {
-      EN: "The epicenter of global tech money. Unbelievable budgets, fast-paced bookings, and a clientele that does not look at the price tag.",
-      RU: "Эпицентр мировых IT-денег. Невероятные бюджеты, быстрые букинги и клиентура, которая вообще не смотрит на ценник."
-    },
-    rates: {
-      split: "50/50",
-      shot: "30m: $400",
-      incall: "1h: $500 / 2h: $1000",
-      outcall: "Outcall: +$100",
-    },
-    accommodation: {
-      EN: "4-5* Hotels ($100-$200/day). Split 50/50.",
-      RU: "Отели 4-5* ($100-$200 в сутки). Оплата 50/50."
-    },
-    services: {
-      EN: "Top-tier earning potential. 100% verified guests.",
-      RU: "Потенциал заработка самого высшего уровня. 100% проверенные гости."
-    },
-    x: 11.0,
-    y: 45.1,
-  }
-];
-
 const ARTERIES: string[] = [
   "12.5,20 11.9,26.3 10.9,33.8 11,45.1 13.6,51.1 15.5,54.8 17.6,57.7",
   "72,31.1 77.3,41.5 75.8,44.5",
@@ -315,57 +60,35 @@ const ARTERIES: string[] = [
 const HIGHLIGHTS: Highlight[] = [
   {
     icon: <Users className="w-7 h-7" />,
-    title: { EN: "Elite Networking", RU: "Элитный нетворкинг" },
+    title: { EN: "Elite Networking", RU: "Элитный нетворкинг", ES: "Networking de élite", PT: "Networking de elite" },
     body: {
       EN: "Access to closed business communities and private clubs.",
       RU: "Доступ в закрытые бизнес-сообщества и частные клубы.",
+      ES: "Acceso a comunidades empresariales cerradas y clubes privados.",
+      PT: "Acesso a comunidades empresariais fechadas e clubes privados.",
     },
   },
   {
     icon: <Gem className="w-7 h-7" />,
-    title: { EN: "Premium Lifestyle", RU: "Люксовый лайфстайл" },
+    title: { EN: "Premium Lifestyle", RU: "Люксовый лайфстайл", ES: "Estilo de vida premium", PT: "Estilo de vida premium" },
     body: {
       EN: "Penthouse residencies, superyachts, and private jet charters.",
       RU: "Резиденции в пентхаусах, суперяхты и чартеры частных джетов.",
+      ES: "Residencias en áticos, superyates y vuelos chárter en jets privados.",
+      PT: "Residências em coberturas, superiates e fretamento de jatos particulares.",
     },
   },
   {
     icon: <Sparkles className="w-7 h-7" />,
-    title: { EN: "Exclusive Parties", RU: "Закрытые вечеринки" },
+    title: { EN: "Exclusive Parties", RU: "Закрытые вечеринки", ES: "Fiestas exclusivas", PT: "Festas exclusivas" },
     body: {
       EN: "VIP access to the most high-profile image events.",
       RU: "VIP-доступ на самые громкие имиджевые мероприятия.",
+      ES: "Acceso VIP a los eventos de imagen más destacados.",
+      PT: "Acesso VIP aos eventos de imagem de maior destaque.",
     },
   },
 ];
-
-// ─────────────────────────────────────────────────────────────
-// Components
-// ─────────────────────────────────────────────────────────────
-
-function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
-  return (
-    <div className="relative flex items-center bg-zinc-900/80 border border-zinc-800 rounded-full p-1 w-fit">
-      <motion.div
-        layout
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="absolute top-1 bottom-1 rounded-full bg-zinc-800"
-        style={{ width: "calc(50% - 4px)", left: lang === "EN" ? "4px" : "calc(50%)" }}
-      />
-      {(["EN", "RU"] as Lang[]).map((l) => (
-        <button
-          key={l}
-          onClick={() => setLang(l)}
-          className={`relative z-10 px-5 py-1.5 text-xs font-medium tracking-widest transition-colors duration-200 ${
-            lang === l ? "text-amber-200" : "text-zinc-500 hover:text-zinc-300"
-          }`}
-        >
-          {l}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function RadarNode({ active }: { active: boolean }) {
   return (
@@ -402,9 +125,52 @@ function RadarNode({ active }: { active: boolean }) {
 }
 
 export default function AmericasPage() {
-  const [lang, setLang] = useState<Lang>("EN");
+  const { lang, setLang } = useLanguage();
+  const { user } = useAuth();
+  const currentLang = lang as Lang;
+
+  const [hubs, setHubs] = useState<Hub[]>([]);
+  const [loadingHubs, setLoadingHubs] = useState(true);
+
   const [activeHub, setActiveHub] = useState<string | null>(null);
   const [selected, setSelected] = useState<Hub | null>(null);
+  const [applicationStatus, setApplicationStatus] = useState<
+    "idle" | "checking" | "active" | "rejected_wait" | "submitting" | "error"
+  >("idle");
+  const [applicationError, setApplicationError] = useState<string | null>(null);
+  const [applicationErrorType, setApplicationErrorType] = useState<"check" | "submit" | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadHubs = async () => {
+      setLoadingHubs(true);
+      const { data, error } = await supabase
+        .from("map_hubs")
+        .select("*")
+        .eq("region", "americas")
+        .eq("is_active", true)
+        .order("id");
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Map hubs fetch error:", error);
+        setHubs([]);
+      } else {
+        setHubs(
+          (data ?? []).map((hub) => ({
+            ...hub,
+            x: Number(hub.x),
+            y: Number(hub.y),
+          })) as Hub[]
+        );
+      }
+      setLoadingHubs(false);
+    };
+
+    void loadHubs();
+    return () => { cancelled = true; };
+  }, []);
 
   const openHub = (hub: Hub) => {
     setActiveHub(hub.id);
@@ -418,26 +184,240 @@ export default function AmericasPage() {
     };
   }, [selected]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkApplication = async () => {
+      if (!selected || !user) {
+        setApplicationStatus("idle");
+        setApplicationError(null);
+        setApplicationErrorType(null);
+        return;
+      }
+
+      setApplicationStatus("checking");
+      setApplicationError(null);
+      setApplicationErrorType(null);
+
+      const { data, error } = await supabase
+        .from("applications")
+        .select("status, created_at")
+        .eq("user_id", user.id)
+        .eq("hub_id", selected.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        setApplicationStatus("error");
+        setApplicationError(error.message);
+        setApplicationErrorType("check");
+        return;
+      }
+
+      if (!data) {
+        setApplicationStatus("idle");
+        return;
+      }
+
+      if (data.status === "pending" || data.status === "approved") {
+        setApplicationStatus("active");
+        return;
+      }
+
+      if (data.status === "rejected") {
+        const rejectedAt = new Date(data.created_at);
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+        setApplicationStatus(rejectedAt > oneMonthAgo ? "rejected_wait" : "idle");
+        return;
+      }
+
+      setApplicationStatus("idle");
+    };
+
+    void checkApplication();
+    return () => { cancelled = true; };
+  }, [selected, user]);
+
+  const applyForTour = async () => {
+    if (!selected || !user || applicationStatus !== "idle") return;
+
+    setApplicationStatus("submitting");
+    setApplicationError(null);
+    setApplicationErrorType(null);
+
+    const { error } = await supabase.from("applications").insert({
+      user_id: user.id,
+      hub_id: selected.id,
+      status: "pending",
+    });
+
+    if (error) {
+      setApplicationError(error.message);
+      setApplicationErrorType("submit");
+      setApplicationStatus("idle");
+      return;
+    }
+
+    setApplicationStatus("active");
+  };
+
   const t = useMemo(
     () => ({
-      back: { EN: "Back to Global Map", RU: "К глобальной карте" },
-      heroTitle: { EN: "AMERICAS", RU: "АМЕРИКА" },
+      back: {
+        EN: "Back to Global Map",
+        RU: "К глобальной карте",
+        ES: "Volver al mapa global",
+        PT: "Voltar ao mapa global",
+      },
+      heroTitle: {
+        EN: "AMERICAS",
+        RU: "АМЕРИКА",
+        ES: "AMÉRICAS",
+        PT: "AMÉRICAS",
+      },
       heroSubtitle: {
         EN: "An elite closed community across the United States & Canada — networking, premium lifestyle and private image events.",
         RU: "Элитное закрытое комьюнити в США и Канаде — нетворкинг, люксовый лайфстайл и приватные имидж-мероприятия.",
+        ES: "Una comunidad privada de élite en Estados Unidos y Canadá — networking, estilo de vida premium y eventos privados.",
+        PT: "Uma comunidade privada de elite nos Estados Unidos e Canadá — networking, estilo de vida premium e eventos privados.",
       },
-      hubsLabel: { EN: "Member Destinations", RU: "Направления клуба" },
-      mapLabel: { EN: "Regional Overview", RU: "Обзор региона" },
-      highlightsTitle: { EN: "Membership Privileges", RU: "Привилегии членства" },
-      drawerEyebrow: { EN: "Location Dossier", RU: "Досье локации" },
-      drawerCta: { EN: "Resident Access", RU: "Вход для резидентов" },
-      ratesLabel: { EN: "Rates", RU: "Тарифы" },
-      accommodationLabel: { EN: "Accommodation", RU: "Проживание" },
-      servicesLabel: { EN: "Services", RU: "Условия" },
-      splitLabel: { EN: "Split", RU: "Дележ" },
-      shotLabel: { EN: "Shot", RU: "Shot" },
-      incallLabel: { EN: "Incall", RU: "Incall" },
-      outcallLabel: { EN: "Outcall", RU: "Outcall" },
+      hubsLabel: {
+        EN: "Member Destinations",
+        RU: "Направления клуба",
+        ES: "Destinos para miembros",
+        PT: "Destinos para membros",
+      },
+      loadingLocations: {
+        EN: "Loading locations...",
+        RU: "Загрузка локаций...",
+        ES: "Cargando ubicaciones...",
+        PT: "Carregando localizações..."
+      },
+      mapLabel: {
+        EN: "Regional Overview",
+        RU: "Обзор региона",
+        ES: "Vista regional",
+        PT: "Visão regional",
+      },
+      highlightsTitle: {
+        EN: "Membership Privileges",
+        RU: "Привилегии членства",
+        ES: "Privilegios de membresía",
+        PT: "Privilégios da associação",
+      },
+      drawerEyebrow: {
+        EN: "Location Dossier",
+        RU: "Досье локации",
+        ES: "Dossier de ubicación",
+        PT: "Dossiê da localização",
+      },
+      residentLogin: {
+        EN: "Resident Access",
+        RU: "Вход для резидентов",
+        ES: "Acceso de residentes",
+        PT: "Acesso para residentes",
+      },
+      profile: {
+        EN: "Profile",
+        RU: "Профиль",
+        ES: "Perfil",
+        PT: "Perfil",
+      },
+      checking: {
+        EN: "Checking...",
+        RU: "Проверка...",
+        ES: "Comprobando...",
+        PT: "Verificando...",
+      },
+      applicationActive: {
+        EN: "Application Active",
+        RU: "Заявка активна",
+        ES: "Solicitud activa",
+        PT: "Inscrição ativa",
+      },
+      rejectedWait: {
+        EN: "Rejected (Wait 1 month)",
+        RU: "Отказ (повтор через месяц)",
+        ES: "Rechazada (espera 1 mes)",
+        PT: "Rejeitada (aguarde 1 mês)",
+      },
+      applyForTour: {
+        EN: "Apply for Tour",
+        RU: "Подать заявку",
+        ES: "Solicitar tour",
+        PT: "Candidatar-se ao tour",
+      },
+      submitting: {
+        EN: "Submitting...",
+        RU: "Отправка...",
+        ES: "Enviando...",
+        PT: "Enviando...",
+      },
+      checkError: {
+        EN: "Unable to check application",
+        RU: "Не удалось проверить заявку",
+        ES: "No se pudo comprobar la solicitud",
+        PT: "Não foi possível verificar a solicitação",
+      },
+      submitError: {
+        EN: "Application could not be submitted. Please try again.",
+        RU: "Не удалось отправить заявку. Попробуйте еще раз.",
+        ES: "No se pudo enviar la solicitud. Inténtalo de nuevo.",
+        PT: "Não foi possível enviar a solicitação. Tente novamente.",
+      },
+      ratesLabel: {
+        EN: "Rates",
+        RU: "Тарифы",
+        ES: "Tarifas",
+        PT: "Tarifas",
+      },
+      accommodationLabel: {
+        EN: "Accommodation",
+        RU: "Проживание",
+        ES: "Alojamiento",
+        PT: "Acomodação",
+      },
+      servicesLabel: {
+        EN: "Services",
+        RU: "Условия",
+        ES: "Condiciones",
+        PT: "Condições",
+      },
+      splitLabel: {
+        EN: "Split",
+        RU: "Дележ",
+        ES: "Reparto",
+        PT: "Divisão",
+      },
+      shotLabel: {
+        EN: "Shot",
+        RU: "Shot",
+        ES: "Sesión",
+        PT: "Sessão",
+      },
+      incallLabel: {
+        EN: "Incall",
+        RU: "Incall",
+        ES: "Incall",
+        PT: "Incall",
+      },
+      outcallLabel: {
+        EN: "Outcall",
+        RU: "Outcall",
+        ES: "Outcall",
+        PT: "Outcall",
+      },
+      commercialAccess: {
+        EN: "Detailed financial terms, rates, and logistics are available only to club residents. Please sign in to access them.",
+        RU: "Детальные финансовые условия, тарифы и логистика доступны только резидентам клуба. Пожалуйста, войдите в систему, чтобы получить доступ.",
+        ES: "Los detalles financieros, las tarifas y la logística están disponibles solo para los residentes del club. Inicia sesión para obtener acceso.",
+        PT: "As condições financeiras detalhadas, as tarifas e a logística estão disponíveis apenas para residentes do clube. Inicie sessão para obter acesso."
+      }
     }),
     []
   );
@@ -445,24 +425,55 @@ export default function AmericasPage() {
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-amber-200/20 selection:text-amber-100">
       {/* ── Navigation ── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-zinc-900/50 bg-zinc-950/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <Link href="/" className="group flex items-center gap-2 text-xs uppercase tracking-widest font-medium text-zinc-400 transition-colors hover:text-amber-200">
+      <nav className="fixed inset-x-0 top-0 z-50 h-16 min-h-16 border-b border-zinc-900/50 bg-zinc-950/95 backdrop-blur-md">
+        <div className="mx-auto flex h-full min-h-16 max-w-7xl items-center justify-between px-6 py-4">
+          <Link
+            href="/"
+            className="group flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-zinc-400 transition-colors hover:text-amber-200"
+          >
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-            {t.back[lang]}
+            {t.back[currentLang]}
           </Link>
-          <div className="flex items-center gap-4">
-            <LanguageToggle lang={lang} setLang={setLang} />
+
+          <div className="flex items-center gap-3">
+            <div
+              aria-label="Language"
+              className="hidden items-center gap-1 rounded-full border border-zinc-800/70 bg-zinc-900/60 p-1 sm:flex"
+            >
+              {(["EN", "RU", "ES", "PT"] as Lang[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setLang(item)}
+                  aria-pressed={currentLang === item}
+                  className={`rounded-full px-3 py-1.5 text-[10px] font-medium tracking-widest transition-all duration-200 ${
+                    currentLang === item
+                      ? "bg-zinc-800 text-amber-200 shadow-[0_0_14px_rgba(251,191,36,0.08)]"
+                      : "text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-200"
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+
+            <Link
+              href={user ? "/profile" : "/login"}
+              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-amber-200/20 bg-zinc-900/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200 transition-all duration-300 hover:border-amber-200/40 hover:bg-zinc-900 hover:text-amber-100"
+            >
+              <UserRound className="h-3.5 w-3.5" />
+              <span>{user ? t.profile[currentLang] : t.residentLogin[currentLang]}</span>
+            </Link>
           </div>
         </div>
       </nav>
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden pt-36 pb-16 px-6">
+      <section className="relative overflow-hidden pt-32 pb-16 px-6">
         <div className="mx-auto max-w-7xl">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: "easeOut" }}>
-            <h1 className="font-serif text-6xl font-light tracking-tight text-zinc-100 sm:text-7xl lg:text-8xl">{t.heroTitle[lang]}</h1>
-            <p className="mt-4 max-w-2xl text-lg font-light leading-relaxed text-zinc-400">{t.heroSubtitle[lang]}</p>
+            <h1 className="font-serif text-6xl font-light tracking-tight text-zinc-100 sm:text-7xl lg:text-8xl">{t.heroTitle[currentLang]}</h1>
+            <p className="mt-4 max-w-2xl text-lg font-light leading-relaxed text-zinc-400">{t.heroSubtitle[currentLang]}</p>
           </motion.div>
         </div>
         <div className="pointer-events-none absolute top-0 right-0 h-[500px] w-[500px] rounded-full bg-amber-400/5 blur-[120px]" />
@@ -476,31 +487,37 @@ export default function AmericasPage() {
             <div className="lg:col-span-5">
               <div className="mb-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-amber-200/60">
                 <MapPin className="h-3.5 w-3.5" />
-                {t.hubsLabel[lang]}
+                {t.hubsLabel[currentLang]}
               </div>
               <div className="space-y-1 pr-2 max-h-[680px] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                {HUBS.map((hub, idx) => {
-                  const isActive = activeHub === hub.id;
-                  const num = String(idx + 1).padStart(2, "0");
-                  return (
-                    <motion.div
-                      key={hub.id}
-                      onMouseEnter={() => setActiveHub(hub.id)}
-                      onMouseLeave={() => setActiveHub((cur) => (selected ? cur : null))}
-                      onClick={() => openHub(hub)}
-                      className={`group flex cursor-pointer items-center justify-between rounded-xl px-5 py-4 transition-all duration-300 ${isActive ? "bg-zinc-900/60 border border-zinc-800/80" : "border border-transparent hover:bg-zinc-900/30"}`}
-                    >
-                      <div className="flex items-center gap-5 min-w-0">
-                        <span className={`font-mono text-sm transition-colors duration-300 ${isActive ? "text-amber-200" : "text-zinc-700"}`}>{num}</span>
-                        <div className="min-w-0">
-                          <h3 className={`font-serif text-2xl font-light tracking-wide transition-colors duration-300 ${isActive ? "text-amber-200" : "text-zinc-300 group-hover:text-zinc-100"}`}>{hub.name[lang]}</h3>
-                          <p className={`mt-1 text-[11px] uppercase tracking-widest transition-colors duration-300 ${isActive ? "text-amber-200/70" : "text-zinc-600"}`}>{hub.subtitle[lang]}</p>
+                {loadingHubs ? (
+                  <div className="px-5 py-6 text-[10px] uppercase tracking-[0.2em] text-zinc-600">
+                    {t.loadingLocations[currentLang]}
+                  </div>
+                ) : (
+                  hubs.map((hub, idx) => {
+                    const isActive = activeHub === hub.id;
+                    const num = String(idx + 1).padStart(2, "0");
+                    return (
+                      <motion.div
+                        key={hub.id}
+                        onMouseEnter={() => setActiveHub(hub.id)}
+                        onMouseLeave={() => setActiveHub((cur) => (selected ? cur : null))}
+                        onClick={() => openHub(hub)}
+                        className={`group flex cursor-pointer items-center justify-between rounded-xl px-5 py-4 transition-all duration-300 ${isActive ? "bg-zinc-900/60 border border-zinc-800/80" : "border border-transparent hover:bg-zinc-900/30"}`}
+                      >
+                        <div className="flex items-center gap-5 min-w-0">
+                          <span className={`font-mono text-sm transition-colors duration-300 ${isActive ? "text-amber-200" : "text-zinc-700"}`}>{num}</span>
+                          <div className="min-w-0">
+                            <h3 className={`font-serif text-2xl font-light tracking-wide transition-colors duration-300 ${isActive ? "text-amber-200" : "text-zinc-300 group-hover:text-zinc-100"}`}>{hub.name[currentLang]}</h3>
+                            <p className={`mt-1 text-[11px] uppercase tracking-widest transition-colors duration-300 ${isActive ? "text-amber-200/70" : "text-zinc-600"}`}>{hub.subtitle[currentLang]}</p>
+                          </div>
                         </div>
-                      </div>
-                      <ChevronRight className={`h-5 w-5 shrink-0 transition-all duration-300 ${isActive ? "translate-x-0 text-amber-200 opacity-100" : "-translate-x-2 text-zinc-700 opacity-0 group-hover:translate-x-0 group-hover:opacity-100"}`} />
-                    </motion.div>
-                  );
-                })}
+                        <ChevronRight className={`h-5 w-5 shrink-0 transition-all duration-300 ${isActive ? "translate-x-0 text-amber-200 opacity-100" : "-translate-x-2 text-zinc-700 opacity-0 group-hover:translate-x-0 group-hover:opacity-100"}`} />
+                      </motion.div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -508,7 +525,7 @@ export default function AmericasPage() {
             <div className="lg:col-span-7">
               <div className="mb-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-amber-200/60">
                 <Globe className="h-3.5 w-3.5" />
-                {t.mapLabel[lang]}
+                {t.mapLabel[currentLang]}
               </div>
 
               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-950 shadow-2xl">
@@ -530,7 +547,7 @@ export default function AmericasPage() {
                     ))}
                   </svg>
 
-                  {HUBS.map((hub) => {
+                  {hubs.map((hub) => {
                     const labelAbove = hub.y > 82;
                     return (
                       <div key={hub.id} className="absolute -translate-x-1/2 -translate-y-1/2 z-10" style={{ left: `${hub.x}%`, top: `${hub.y}%` }}>
@@ -539,7 +556,7 @@ export default function AmericasPage() {
                           onMouseEnter={() => setActiveHub(hub.id)}
                           onMouseLeave={() => setActiveHub((cur) => (selected ? cur : null))}
                           onClick={() => openHub(hub)}
-                          aria-label={hub.name[lang]}
+                          aria-label={hub.name[currentLang]}
                           className="flex h-7 w-7 cursor-pointer items-center justify-center"
                         >
                           <RadarNode active={activeHub === hub.id} />
@@ -554,7 +571,7 @@ export default function AmericasPage() {
                               transition={{ duration: 0.2 }}
                               className={`pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap z-20 ${labelAbove ? "bottom-full mb-3" : "top-full mt-3"}`}
                             >
-                              <div className="rounded-lg bg-zinc-950/90 px-4 py-2 text-[10px] tracking-widest uppercase font-medium text-amber-200 shadow-xl border border-amber-200/20 backdrop-blur-md">{hub.name[lang]}</div>
+                              <div className="rounded-lg bg-zinc-950/90 px-4 py-2 text-[10px] tracking-widest uppercase font-medium text-amber-200 shadow-xl border border-amber-200/20 backdrop-blur-md">{hub.name[currentLang]}</div>
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -576,7 +593,7 @@ export default function AmericasPage() {
       <section className="border-t border-zinc-900 bg-zinc-950/50 px-6 py-24 relative z-10">
         <div className="mx-auto max-w-7xl">
           <motion.h2 initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="mb-14 font-serif text-4xl font-light text-zinc-100">
-            {t.highlightsTitle[lang]}
+            {t.highlightsTitle[currentLang]}
           </motion.h2>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {HIGHLIGHTS.map((item, i) => (
@@ -589,8 +606,8 @@ export default function AmericasPage() {
                 className="group relative overflow-hidden rounded-2xl border border-zinc-800/60 bg-zinc-900/30 p-8 transition-all duration-500 hover:border-amber-200/30 hover:bg-zinc-900/50"
               >
                 <div className="mb-6 w-12 h-12 rounded-full border border-amber-200/20 flex items-center justify-center text-amber-200/70 transition-colors duration-500 group-hover:border-amber-200/40 group-hover:text-amber-200">{item.icon}</div>
-                <h3 className="mb-3 font-serif text-2xl font-light text-zinc-100">{item.title[lang]}</h3>
-                <p className="text-sm font-light leading-relaxed text-zinc-500">{item.body[lang]}</p>
+                <h3 className="mb-3 font-serif text-2xl font-light text-zinc-100">{item.title[currentLang]}</h3>
+                <p className="text-sm font-light leading-relaxed text-zinc-500">{item.body[currentLang]}</p>
                 <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-400/5 blur-2xl transition-opacity duration-500 group-hover:opacity-100 opacity-0 pointer-events-none" />
               </motion.div>
             ))}
@@ -622,54 +639,115 @@ export default function AmericasPage() {
               className="fixed right-0 top-0 bottom-0 z-[70] w-full max-w-md overflow-y-auto border-l border-zinc-800/80 bg-zinc-950 p-8 sm:p-10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
             >
               <div className="flex items-start justify-between">
-                <span className="text-[11px] uppercase tracking-[0.3em] text-amber-200/60">{t.drawerEyebrow[lang]}</span>
+                <span className="text-[11px] uppercase tracking-[0.3em] text-amber-200/60">{t.drawerEyebrow[currentLang]}</span>
                 <button onClick={() => setSelected(null)} aria-label="Close" className="-mr-2 -mt-2 rounded-full p-2 text-zinc-500 transition-colors hover:text-amber-200">
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <h2 className="mt-10 font-serif text-5xl font-light leading-tight text-zinc-100">{selected.name[lang]}</h2>
-              <p className="mt-3 text-[11px] uppercase tracking-[0.25em] text-amber-200/70">{selected.subtitle[lang]}</p>
+              <h2 className="mt-10 font-serif text-5xl font-light leading-tight text-zinc-100">{selected.name[currentLang]}</h2>
+              <p className="mt-3 text-[11px] uppercase tracking-[0.25em] text-amber-200/70">{selected.subtitle[currentLang]}</p>
               <div className="my-8 h-px w-16 bg-amber-200/30" />
-              <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.description[lang]}</p>
+              
+              <div className="space-y-8">
+                <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.description[currentLang]}</p>
 
-              {/* Rates */}
-              <div className="mt-8">
-                <h4 className="text-[11px] uppercase tracking-[0.2em] text-amber-200/60 mb-3">{t.ratesLabel[lang]}</h4>
-                <div className="space-y-2 text-sm text-zinc-400">
-                  <div className="flex justify-between border-b border-zinc-800/60 pb-2">
-                    <span className="text-zinc-500">{t.splitLabel[lang]}</span>
-                    <span className="text-zinc-300">{selected.rates.split}</span>
+                {user ? (
+                  <>
+                    {/* Rates */}
+                    <div>
+                      <h4 className="text-[11px] uppercase tracking-[0.2em] text-amber-200/60 mb-3">{t.ratesLabel[currentLang]}</h4>
+                      <div className="space-y-2 text-sm text-zinc-400">
+                        <div className="flex justify-between border-b border-zinc-800/60 pb-2">
+                          <span className="text-zinc-500">{t.splitLabel[currentLang]}</span>
+                          <span className="text-right text-zinc-300">{selected.rates.split}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-zinc-800/60 pb-2">
+                          <span className="text-zinc-500">{t.shotLabel[currentLang]}</span>
+                          <span className="text-right text-zinc-300">{selected.rates.shot}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-zinc-800/60 pb-2">
+                          <span className="text-zinc-500">{t.incallLabel[currentLang]}</span>
+                          <span className="text-right text-zinc-300">{selected.rates.incall}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">{t.outcallLabel[currentLang]}</span>
+                          <span className="text-right text-zinc-300">{selected.rates.outcall}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Accommodation */}
+                    <div>
+                      <h4 className="text-[11px] uppercase tracking-[0.2em] text-amber-200/60 mb-3">{t.accommodationLabel[currentLang]}</h4>
+                      <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.accommodation[currentLang]}</p>
+                    </div>
+
+                    {/* Services */}
+                    <div>
+                      <h4 className="text-[11px] uppercase tracking-[0.2em] text-amber-200/60 mb-3">{t.servicesLabel[currentLang]}</h4>
+                      <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.services[currentLang]}</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="relative overflow-hidden rounded-2xl border border-amber-200/20 bg-zinc-900/30 p-6 backdrop-blur-md">
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(251,191,36,0.08),_transparent_45%)]" />
+                    <div className="relative flex flex-col items-center text-center">
+                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-amber-200/20 bg-zinc-950/60 text-amber-200/80 shadow-[0_0_25px_rgba(251,191,36,0.06)] backdrop-blur-sm">
+                        <Lock className="h-5 w-5" />
+                      </div>
+                      <p className="max-w-sm text-xs leading-relaxed text-zinc-400">
+                        {t.commercialAccess[currentLang]}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex justify-between border-b border-zinc-800/60 pb-2">
-                    <span className="text-zinc-500">{t.shotLabel[lang]}</span>
-                    <span className="text-zinc-300">{selected.rates.shot}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-zinc-800/60 pb-2">
-                    <span className="text-zinc-500">{t.incallLabel[lang]}</span>
-                    <span className="text-zinc-300">{selected.rates.incall}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500">{t.outcallLabel[lang]}</span>
-                    <span className="text-zinc-300">{selected.rates.outcall}</span>
-                  </div>
+                )}
+              </div>
+
+              {!user ? (
+                <Link
+                  href="/login"
+                  className="mt-10 inline-flex items-center justify-center rounded-full bg-amber-200 px-8 py-3 w-full text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100 hover:shadow-[0_0_30px_rgba(251,191,36,0.12)]"
+                >
+                  {t.residentLogin[currentLang]}
+                </Link>
+              ) : (
+                <div className="mt-10">
+                  <button
+                    type="button"
+                    onClick={applyForTour}
+                    disabled={applicationStatus !== "idle"}
+                    className={`inline-flex w-full items-center justify-center gap-2 rounded-full px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] transition-all ${
+                      applicationStatus === "idle"
+                        ? "bg-amber-200 text-zinc-950 hover:bg-amber-100"
+                        : "cursor-not-allowed border border-zinc-800 bg-zinc-900/60 text-zinc-500"
+                    }`}
+                  >
+                    {applicationStatus === "checking" || applicationStatus === "submitting" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : null}
+
+                    {applicationStatus === "checking"
+                      ? t.checking[currentLang]
+                      : applicationStatus === "active"
+                        ? t.applicationActive[currentLang]
+                        : applicationStatus === "rejected_wait"
+                          ? t.rejectedWait[currentLang]
+                          : applicationStatus === "submitting"
+                            ? t.submitting[currentLang]
+                            : applicationStatus === "error"
+                              ? t.checkError[currentLang]
+                              : t.applyForTour[currentLang]}
+                  </button>
+
+                  {applicationError && (
+                    <p className="mt-3 text-center text-[11px] leading-relaxed text-red-300/70">
+                      {applicationErrorType === "check"
+                        ? t.checkError[currentLang]
+                        : t.submitError[currentLang]}
+                    </p>
+                  )}
                 </div>
-              </div>
-
-              {/* Accommodation */}
-              <div className="mt-8">
-                <h4 className="text-[11px] uppercase tracking-[0.2em] text-amber-200/60 mb-3">{t.accommodationLabel[lang]}</h4>
-                <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.accommodation[lang]}</p>
-              </div>
-
-              {/* Services */}
-              <div className="mt-8">
-                <h4 className="text-[11px] uppercase tracking-[0.2em] text-amber-200/60 mb-3">{t.servicesLabel[lang]}</h4>
-                <p className="text-sm font-light leading-relaxed text-zinc-400">{selected.services[lang]}</p>
-              </div>
-
-              <Link href="/login" className="mt-10 inline-flex items-center justify-center rounded-full bg-amber-200 px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100">
-                {t.drawerCta[lang]}
-              </Link>
+              )}
             </motion.aside>
           </>
         )}
