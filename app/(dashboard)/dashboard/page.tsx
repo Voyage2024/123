@@ -995,7 +995,7 @@ export default function ResidentProfilePage() {
 
       {/* индикатор сохранения */}
       {(saving || uploading) && (
-        <div className="fixed top-4 right-4 z-50 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-700/50 backdrop-blur-md">
+        <div className="fixed right-4 top-[calc(var(--nav-h,0px)+0.75rem)] z-40 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-700/50 backdrop-blur-md">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-300/80" />
           <span className="text-[10px] tracking-[0.15em] uppercase text-zinc-400">
             {uploading ? t.uploading : t.saving}

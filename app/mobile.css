@@ -1,0 +1,46 @@
+/* ──────────────────────────────────────────────────────────────────────
+ * VOYAGE · мобильная страховка — app/mobile.css
+ * Подключить в корневом app/layout.tsx сразу после globals.css:
+ *   import "./globals.css";
+ *   import "./mobile.css";
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* Страница никогда не шире экрана: iOS не будет «отдалять» её целиком */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+@supports not (overflow: clip) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+}
+
+/* iOS не раздувает шрифты при повороте телефона */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+/* Без серой вспышки при тапе — у кнопок свои :active-состояния */
+a,
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS приближает страницу при фокусе на поле со шрифтом меньше 16px
+   и не возвращает масштаб. На телефоне поля — ровно 16px. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

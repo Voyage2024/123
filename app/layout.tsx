@@ -4,7 +4,15 @@ import { AuthProvider } from "./context/AuthContext"; // "Мозг" автори
 import { LanguageProvider } from "./context/LanguageContext"; // Глобальный язык
 import Navbar from "./components/Navbar";
 import "./globals.css";
+import "./mobile.css";
+import type { Viewport } from "next";
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#09090b",
+};
 const cormorant = Cormorant_Garamond({
   subsets: ["latin", "cyrillic"],
   weight: ["500", "600"],
