@@ -214,7 +214,7 @@ export default function LoginPage() {
       setUser({
         id: data.user.id,
         email: data.user.email || "",
-        name: userName,
+        fullName: userName,
       });
 
       // isLoading не сбрасываем — кнопка остаётся заблокированной до перехода
