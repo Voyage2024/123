@@ -38,6 +38,8 @@ type GlobalEvent = {
   description: string | null;
   conditions: string | null;
   is_active: boolean;
+  audience_segment: 'all' | 'working' | 'elite';
+  country_code: string | null;
   created_at: string;
 };
 
@@ -47,6 +49,8 @@ type FormState = {
   description: string;
   conditions: string;
   is_active: boolean;
+  audience_segment: 'all' | 'working' | 'elite';
+  country_code: string;
 };
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
@@ -59,6 +63,8 @@ const EMPTY_FORM: FormState = {
   description: '',
   conditions: '',
   is_active: true,
+  audience_segment: 'all',
+  country_code: '',
 };
 
 /* ------------------------------------------------------------------ */
@@ -95,6 +101,13 @@ const T = {
     fieldDescription: 'Description',
     fieldConditions: 'Conditions / details',
     fieldActive: 'Visible to residents',
+    fieldAudience: 'Resident segment',
+    audienceAll: 'All residents',
+    audienceWorking: 'Working',
+    audienceElite: 'Elite',
+    fieldCountryCode: 'Passport country code (ISO alpha-2)',
+    countryCodeHint: 'Optional, two letters (e.g. VN). Used as the default passport stamp when completing this event.',
+    invalidCountryCode: 'Use exactly two ISO letters.',
     phTitle: 'e.g. Yacht party in Sanya',
     phRegion: 'e.g. Asia',
     phDescription: 'Short description of the party…',
@@ -146,6 +159,13 @@ const T = {
     fieldDescription: 'Описание',
     fieldConditions: 'Условия / детали',
     fieldActive: 'Видна резидентам',
+    fieldAudience: 'Сегмент резидентов',
+    audienceAll: 'Все резиденты',
+    audienceWorking: 'Working',
+    audienceElite: 'Elite',
+    fieldCountryCode: 'Код страны для паспорта (ISO alpha-2)',
+    countryCodeHint: 'Необязательно, две буквы (например VN). Используется для штампа по умолчанию при завершении ивента.',
+    invalidCountryCode: 'Укажите ровно две латинские буквы ISO.',
     phTitle: 'Например: Яхты в Санье',
     phRegion: 'Например: Азия',
     phDescription: 'Краткое описание тусовки…',
@@ -197,6 +217,13 @@ const T = {
     fieldDescription: 'Descripción',
     fieldConditions: 'Condiciones / detalles',
     fieldActive: 'Visible para residentes',
+    fieldAudience: 'Segmento de residentes',
+    audienceAll: 'Todos',
+    audienceWorking: 'Working',
+    audienceElite: 'Elite',
+    fieldCountryCode: 'Código de país del pasaporte (ISO alpha-2)',
+    countryCodeHint: 'Opcional, dos letras (p. ej. VN). Se usa como sello predeterminado al completar el evento.',
+    invalidCountryCode: 'Introduce exactamente dos letras ISO.',
     phTitle: 'p. ej. Yates en Sanya',
     phRegion: 'p. ej. Asia',
     phDescription: 'Breve descripción de la fiesta…',
@@ -248,6 +275,13 @@ const T = {
     fieldDescription: 'Descrição',
     fieldConditions: 'Condições / detalhes',
     fieldActive: 'Visível para residentes',
+    fieldAudience: 'Segmento de residentes',
+    audienceAll: 'Todos',
+    audienceWorking: 'Working',
+    audienceElite: 'Elite',
+    fieldCountryCode: 'Código do país no passaporte (ISO alpha-2)',
+    countryCodeHint: 'Opcional, duas letras (ex.: VN). Será usado como carimbo padrão ao concluir o evento.',
+    invalidCountryCode: 'Informe exatamente duas letras ISO.',
     phTitle: 'ex.: Iates em Sanya',
     phRegion: 'ex.: Ásia',
     phDescription: 'Breve descrição da festa…',
@@ -305,7 +339,7 @@ export default function PartiesAdminPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [errors, setErrors] = useState<{ title?: boolean; region?: boolean }>({});
+  const [errors, setErrors] = useState<{ title?: boolean; region?: boolean; country_code?: boolean }>({});
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -360,6 +394,8 @@ export default function PartiesAdminPage() {
   }, [showToast, t]);
 
   useEffect(() => {
+    // Sync the list from Supabase when the page mounts or locale changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadEvents();
   }, [loadEvents]);
 
@@ -392,6 +428,8 @@ export default function PartiesAdminPage() {
       description: ev.description ?? '',
       conditions: ev.conditions ?? '',
       is_active: ev.is_active,
+      audience_segment: ev.audience_segment ?? 'all',
+      country_code: ev.country_code ?? '',
     });
     setErrors({});
     setModalOpen(true);
@@ -419,9 +457,10 @@ export default function PartiesAdminPage() {
 
     const title = form.title.trim();
     const region = form.region.trim();
-    const nextErrors = { title: !title, region: !region };
+    const countryCode = form.country_code.trim().toUpperCase();
+    const nextErrors = { title: !title, region: !region, country_code: Boolean(countryCode && !/^[A-Z]{2}$/.test(countryCode)) };
     setErrors(nextErrors);
-    if (nextErrors.title || nextErrors.region) return;
+    if (nextErrors.title || nextErrors.region || nextErrors.country_code) return;
 
     setSaving(true);
     const payload = {
@@ -430,6 +469,8 @@ export default function PartiesAdminPage() {
       description: form.description.trim() || null,
       conditions: form.conditions.trim() || null,
       is_active: form.is_active,
+      audience_segment: form.audience_segment,
+      country_code: countryCode || null,
     };
 
     if (editingId) {
@@ -618,9 +659,11 @@ export default function PartiesAdminPage() {
                     <h3 className={`${cormorant.className} truncate text-2xl font-semibold text-neutral-100`}>
                       {ev.title}
                     </h3>
-                    <div className="mt-1 flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-amber-200/80">
-                      <MapPin className="h-3.5 w-3.5" />
-                      {ev.region}
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.15em] text-amber-200/80">
+                      <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{ev.region}</span>
+                      <span className={`rounded-full border px-2 py-0.5 text-[9px] tracking-wider ${ev.audience_segment === 'elite' ? 'border-amber-200/35 bg-amber-200/10 text-amber-100' : ev.audience_segment === 'working' ? 'border-white/10 bg-white/[0.04] text-neutral-400' : 'border-neutral-700 bg-neutral-900 text-neutral-500'}`}>
+                        {ev.audience_segment === 'elite' ? 'ELITE' : ev.audience_segment === 'working' ? 'WORKING' : 'ALL'}
+                      </span>
                     </div>
                   </div>
                   <span
@@ -782,6 +825,33 @@ export default function PartiesAdminPage() {
                   rows={7}
                   className={`${inputBase} resize-y border-neutral-800 font-mono text-[13px] leading-relaxed`}
                 />
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">{t.fieldAudience}</label>
+                  <select
+                    value={form.audience_segment}
+                    onChange={(e) => setForm((f) => ({ ...f, audience_segment: e.target.value as FormState['audience_segment'] }))}
+                    className={`${inputBase} border-neutral-800`}
+                  >
+                    <option value="all">{t.audienceAll}</option>
+                    <option value="working">{t.audienceWorking}</option>
+                    <option value="elite">{t.audienceElite}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">{t.fieldCountryCode}</label>
+                  <input
+                    value={form.country_code}
+                    onChange={(e) => setForm((f) => ({ ...f, country_code: e.target.value.toUpperCase().slice(0, 2) }))}
+                    placeholder="VN"
+                    maxLength={2}
+                    className={`${inputBase} ${errors.country_code ? 'border-red-500/60' : 'border-neutral-800'}`}
+                  />
+                  <p className="mt-1 text-[11px] leading-relaxed text-neutral-500">{t.countryCodeHint}</p>
+                  {errors.country_code && <p className="mt-1 text-xs text-red-400">{t.invalidCountryCode}</p>}
+                </div>
               </div>
 
               <label className="flex cursor-pointer items-center justify-between rounded-xl border border-neutral-800 bg-black/30 px-4 py-3">

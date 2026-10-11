@@ -1,0 +1,4 @@
+DELETE this file from the existing application:
+app/middleware.ts
+
+The replacement protection file is the root-level middleware.ts beside app/ and package.json.

@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { Trophy, Crown, Medal, Award, Sparkles, MapPin, Star, RefreshCw, Gem, ArrowUpRight, Flag, Infinity as InfinityIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/app/context/LanguageContext';
+import { useAuth } from '@/app/context/AuthContext';
 import { resolveAvatarUrl } from '@/lib/memberCards';
 
 /* ───────────────────────── Types ───────────────────────── */
@@ -59,7 +60,7 @@ const T = {
       'Every tour point stays in your Index for good — alongside stamps, legendary combos and patronage. It sets your Circle and your place in the global ranking.',
     globalLink: 'Global ranking',
     leaderboard: 'Tour leaders',
-    top: 'Top 50 · points from this tour',
+    top: 'Top 50 · global tour points in this segment',
     currentTour: 'Current tour',
     rank: 'Rank',
     member: 'Resident',
@@ -76,6 +77,22 @@ const T = {
     error: 'Failed to load the tour ranking.',
     retry: 'Retry',
     anonymous: 'Resident',
+    eliteTitle: 'The Elite Ranking',
+    eliteSubtitle: 'Closed events and yacht engagements define the Elite ranking. Completed event points also contribute to your Influence Index.',
+    eliteStep1: 'Join a closed event',
+    eliteStep2: 'Complete the engagement',
+    eliteStep3: 'Build your Elite ranking',
+    eliteSprintTitle: 'Sprint · Elite events',
+    eliteSprintText: 'The ranking is based on completed closed-event engagements. Each completed event adds points to your Elite score.',
+    eliteMarathonTitle: 'Marathon · Influence Index',
+    eliteMarathonText: 'Your total Influence Index also includes legacy points, passport stamps, combos and patronage.',
+    eliteLeaderboard: 'Elite residents',
+    eliteTop: 'Top 50 · completed event points in the Elite segment',
+    elitePoints: 'Event points',
+    eliteYourPlace: 'Your place in Elite',
+    eliteNotRanked: 'No completed event points yet',
+    eliteNotRankedHint: 'Points are awarded after the club team marks a closed event as completed.',
+    eliteEmpty: 'No Elite event points yet. Completed closed events will open the race for the lead.',
   },
   ru: {
     eyebrow: 'Клуб Voyage',
@@ -92,7 +109,7 @@ const T = {
       'Каждый балл тура навсегда остаётся в вашем Индексе — вместе со штампами, легендарными комбо и патронажем. Он определяет ваш Circle и место в глобальном рейтинге.',
     globalLink: 'Глобальный рейтинг',
     leaderboard: 'Лидеры тура',
-    top: 'Топ-50 · баллы этого тура',
+    top: 'Топ-50 · общие баллы туров внутри сегмента',
     currentTour: 'Текущий тур',
     rank: 'Место',
     member: 'Резидент',
@@ -109,6 +126,22 @@ const T = {
     error: 'Не удалось загрузить рейтинг тура.',
     retry: 'Повторить',
     anonymous: 'Резидент',
+    eliteTitle: 'Рейтинг Elite',
+    eliteSubtitle: 'Закрытые мероприятия и выходы на яхтах формируют рейтинг Elite. Баллы завершённых ивентов также входят в ваш Influence Index.',
+    eliteStep1: 'Подайте заявку на закрытый ивент',
+    eliteStep2: 'Завершите мероприятие',
+    eliteStep3: 'Повышайте рейтинг Elite',
+    eliteSprintTitle: 'Спринт · закрытые ивенты',
+    eliteSprintText: 'Рейтинг основан на завершённых закрытых мероприятиях. Каждый завершённый ивент добавляет баллы в рейтинг Elite.',
+    eliteMarathonTitle: 'Марафон · Influence Index',
+    eliteMarathonText: 'Общий Influence Index также включает прежние баллы, паспортные штампы, комбо и патронаж.',
+    eliteLeaderboard: 'Резиденты Elite',
+    eliteTop: 'Топ-50 · баллы завершённых ивентов в сегменте Elite',
+    elitePoints: 'Баллы ивентов',
+    eliteYourPlace: 'Ваше место в Elite',
+    eliteNotRanked: 'Пока нет баллов за завершённые ивенты',
+    eliteNotRankedHint: 'Баллы начисляются после того, как команда клуба отмечает закрытый ивент как завершённый.',
+    eliteEmpty: 'Баллов Elite пока нет. Завершённые закрытые мероприятия откроют гонку за лидерство.',
   },
   es: {
     eyebrow: 'Club Voyage',
@@ -125,7 +158,7 @@ const T = {
       'Cada punto del tour queda para siempre en tu Index, junto con los sellos, los combos legendarios y el patronazgo. Define tu Circle y tu lugar en el ranking global.',
     globalLink: 'Ranking global',
     leaderboard: 'Líderes del tour',
-    top: 'Top 50 · puntos de este tour',
+    top: 'Top 50 · puntos globales de tours por segmento',
     currentTour: 'Tour actual',
     rank: 'Puesto',
     member: 'Residente',
@@ -142,6 +175,22 @@ const T = {
     error: 'No se pudo cargar el ranking del tour.',
     retry: 'Reintentar',
     anonymous: 'Residente',
+    eliteTitle: 'Ranking Elite',
+    eliteSubtitle: 'Los eventos privados y las salidas en yate definen el ranking Elite. Los puntos de eventos completados también se suman a tu Influence Index.',
+    eliteStep1: 'Solicita un evento privado',
+    eliteStep2: 'Completa el evento',
+    eliteStep3: 'Mejora tu ranking Elite',
+    eliteSprintTitle: 'Sprint · eventos Elite',
+    eliteSprintText: 'El ranking se basa en eventos privados completados. Cada evento completado suma puntos a tu puntuación Elite.',
+    eliteMarathonTitle: 'Maratón · Influence Index',
+    eliteMarathonText: 'Tu Influence Index también incluye puntos anteriores, sellos del pasaporte, combos y patrocinio.',
+    eliteLeaderboard: 'Residentes Elite',
+    eliteTop: 'Top 50 · puntos de eventos completados en Elite',
+    elitePoints: 'Puntos de eventos',
+    eliteYourPlace: 'Tu puesto en Elite',
+    eliteNotRanked: 'Aún no tienes puntos de eventos completados',
+    eliteNotRankedHint: 'Los puntos se conceden cuando el equipo del club marca un evento privado como completado.',
+    eliteEmpty: 'Aún no hay puntos Elite. Los eventos privados completados abrirán la competencia por el liderato.',
   },
   pt: {
     eyebrow: 'Clube Voyage',
@@ -175,6 +224,22 @@ const T = {
     error: 'Não foi possível carregar o ranking do tour.',
     retry: 'Tentar novamente',
     anonymous: 'Residente',
+    eliteTitle: 'Ranking Elite',
+    eliteSubtitle: 'Eventos privados e saídas de iate definem o ranking Elite. Os pontos de eventos concluídos também entram no seu Influence Index.',
+    eliteStep1: 'Candidate-se a um evento privado',
+    eliteStep2: 'Conclua o evento',
+    eliteStep3: 'Suba no ranking Elite',
+    eliteSprintTitle: 'Sprint · eventos Elite',
+    eliteSprintText: 'O ranking considera eventos privados concluídos. Cada evento concluído adiciona pontos à sua pontuação Elite.',
+    eliteMarathonTitle: 'Maratona · Influence Index',
+    eliteMarathonText: 'Seu Influence Index também inclui pontos anteriores, carimbos do passaporte, combos e patrocínio.',
+    eliteLeaderboard: 'Residentes Elite',
+    eliteTop: 'Top 50 · pontos de eventos concluídos no segmento Elite',
+    elitePoints: 'Pontos de eventos',
+    eliteYourPlace: 'Sua posição no Elite',
+    eliteNotRanked: 'Você ainda não tem pontos de eventos concluídos',
+    eliteNotRankedHint: 'Os pontos são concedidos quando a equipe do clube marca um evento privado como concluído.',
+    eliteEmpty: 'Ainda não há pontos Elite. Eventos privados concluídos abrirão a disputa pela liderança.',
   },
 } as const;
 
@@ -264,6 +329,7 @@ const rowKey = (r: LeaderRow) => r.profile_id ?? `${r.position}-${r.full_name ??
 
 export default function ToursPage() {
   const { lang } = useLanguage();
+  const { segment: residentSegment } = useAuth();
 
   // Приводим lang к нужному типу и защищаемся от неожиданных значений
   const currentLang: Lang = (['en', 'ru', 'es', 'pt'] as const).includes(lang?.toLowerCase() as Lang)
@@ -274,6 +340,23 @@ export default function ToursPage() {
   const nf = useMemo(() => new Intl.NumberFormat(LOCALES[currentLang]), [currentLang]);
 
   const [rows, setRows] = useState<LeaderRow[]>([]);
+  const [segment, setSegment] = useState<'working' | 'elite'>('working');
+  const title = segment === 'elite' ? t.eliteTitle : t.title;
+  const subtitle = segment === 'elite' ? t.eliteSubtitle : t.subtitle;
+  const step1 = segment === 'elite' ? t.eliteStep1 : t.step1;
+  const step2 = segment === 'elite' ? t.eliteStep2 : t.step2;
+  const step3 = segment === 'elite' ? t.eliteStep3 : t.step3;
+  const sprintTitle = segment === 'elite' ? t.eliteSprintTitle : t.sprintTitle;
+  const sprintText = segment === 'elite' ? t.eliteSprintText : t.sprintText;
+  const marathonTitle = segment === 'elite' ? t.eliteMarathonTitle : t.marathonTitle;
+  const marathonText = segment === 'elite' ? t.eliteMarathonText : t.marathonText;
+  const leaderboardTitle = segment === 'elite' ? t.eliteLeaderboard : t.leaderboard;
+  const leaderboardTop = segment === 'elite' ? t.eliteTop : t.top;
+  const pointsLabel = segment === 'elite' ? t.elitePoints : t.points;
+  const notRankedText = segment === 'elite' ? t.eliteNotRanked : t.notRanked;
+  const notRankedHintText = segment === 'elite' ? t.eliteNotRankedHint : t.notRankedHint;
+  const yourPlaceText = segment === 'elite' ? t.eliteYourPlace : t.yourPlace;
+  const emptyText = segment === 'elite' ? t.eliteEmpty : t.empty;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -281,8 +364,12 @@ export default function ToursPage() {
     if (!silent) setLoading(true);
     setError(false);
 
-    // Имя и аватар приходят из profiles (миграция 20261014) — всегда актуальные
-    const { data, error: rpcError } = await supabase.rpc('get_tour_leaderboard', { p_limit: 50 });
+    // Источник рейтинга - серверная витрина. Сегмент фильтруется внутри RPC,
+    // поэтому клиент не получает чужой сегмент как обычный список резидентов.
+    const { data, error: rpcError } = await supabase.rpc('get_segmented_tour_leaderboard', {
+      p_segment: segment,
+      p_limit: 50,
+    });
 
     if (rpcError) {
       console.error('[tours] leaderboard error:', rpcError.message);
@@ -303,9 +390,11 @@ export default function ToursPage() {
       );
     }
     if (!silent) setLoading(false);
-  }, []);
+  }, [segment]);
 
   useEffect(() => {
+    // Async data synchronization on mount and after a segment change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // вернулась на вкладку — тихо обновляем: баллы могли начислить, имя — смениться
     const onVisible = () => {
@@ -323,7 +412,7 @@ export default function ToursPage() {
   const tourTitle = rows.find((r) => r.tour_title)?.tour_title ?? null;
   // десятая строка (при равных баллах позиция «10» может не встретиться)
   const tenth = top.length >= 10 ? top[9] : null;
-  const showPinnedMe = !loading && !error && (!me || me.position > 10);
+  const showPinnedMe = segment === residentSegment && !loading && !error && (!me || me.position > 10);
   const gapToTop10 = me && tenth && me.position > 10 ? Math.max(tenth.tour_points - me.tour_points, 1) : null;
 
   const displayName = (r: LeaderRow) => r.full_name?.trim() || t.anonymous;
@@ -344,14 +433,14 @@ export default function ToursPage() {
             <Sparkles className="h-3.5 w-3.5" />
             {t.eyebrow}
           </div>
-          <h1 className="font-serif text-3xl font-light tracking-tight text-white sm:text-5xl">{t.title}</h1>
-          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-neutral-300 sm:text-base">{t.subtitle}</p>
+          <h1 className="font-serif text-3xl font-light tracking-tight text-white sm:text-5xl">{title}</h1>
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-neutral-300 sm:text-base">{subtitle}</p>
 
           <ol className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[
-              { Icon: MapPin, text: t.step1 },
-              { Icon: Star, text: t.step2 },
-              { Icon: Gem, text: t.step3 },
+              { Icon: MapPin, text: step1 },
+              { Icon: Star, text: step2 },
+              { Icon: Gem, text: step3 },
             ].map(({ Icon, text }, i) => (
               <li
                 key={text}
@@ -375,16 +464,16 @@ export default function ToursPage() {
         <div className="rounded-3xl border border-white/10 bg-neutral-950/60 p-5 sm:p-6">
           <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-300">
             <Flag className="h-4 w-4 text-[#c9a961]" strokeWidth={1.5} />
-            {t.sprintTitle}
+            {sprintTitle}
           </p>
-          <p className="mt-3 text-sm leading-relaxed text-neutral-400">{t.sprintText}</p>
+          <p className="mt-3 text-sm leading-relaxed text-neutral-400">{sprintText}</p>
         </div>
         <div className="relative overflow-hidden rounded-3xl border border-[#c9a961]/25 bg-gradient-to-br from-[#c9a961]/[0.07] via-neutral-950 to-neutral-950 p-5 sm:p-6">
           <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-[#c9a961]">
             <InfinityIcon className="h-4 w-4" strokeWidth={1.5} />
-            {t.marathonTitle}
+            {marathonTitle}
           </p>
-          <p className="mt-3 text-sm leading-relaxed text-neutral-300">{t.marathonText}</p>
+          <p className="mt-3 text-sm leading-relaxed text-neutral-300">{marathonText}</p>
           <Link
             href="/dashboard/leaderboard"
             className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[#c9a961]/40 px-3.5 py-1.5 text-xs text-[#c9a961] transition hover:bg-[#c9a961]/10"
@@ -397,10 +486,30 @@ export default function ToursPage() {
 
       {/* ───────────── Leaderboard ───────────── */}
       <section className="mt-10">
+        <div role="tablist" aria-label="Resident segment" className="mb-5 inline-flex rounded-full border border-white/10 bg-zinc-900/70 p-1 backdrop-blur-xl">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={segment === 'working'}
+            onClick={() => setSegment('working')}
+            className={`rounded-full px-5 py-2 text-xs font-medium tracking-[0.12em] transition ${segment === 'working' ? 'bg-amber-200 text-zinc-950 shadow-[0_0_24px_-10px_rgba(253,230,138,0.6)]' : 'text-zinc-400 hover:text-zinc-100'}`}
+          >
+            WORKING
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={segment === 'elite'}
+            onClick={() => setSegment('elite')}
+            className={`rounded-full px-5 py-2 text-xs font-medium tracking-[0.12em] transition ${segment === 'elite' ? 'bg-amber-200 text-zinc-950 shadow-[0_0_24px_-10px_rgba(253,230,138,0.6)]' : 'text-zinc-400 hover:text-zinc-100'}`}
+          >
+            ELITE
+          </button>
+        </div>
         <div className="mb-5 flex items-end justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="text-xl font-medium text-white sm:text-2xl">{t.leaderboard}</h2>
-            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-neutral-500">{t.top}</p>
+            <h2 className="text-xl font-medium text-white sm:text-2xl">{leaderboardTitle}</h2>
+            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-neutral-500">{leaderboardTop}</p>
             {tourTitle && (
               <p className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-neutral-300">
                 <MapPin className="h-3.5 w-3.5 shrink-0 text-[#c9a961]" />
@@ -437,7 +546,7 @@ export default function ToursPage() {
         {!loading && !error && top.length === 0 && (
           <div className="rounded-2xl border border-white/10 bg-neutral-900/50 p-10 text-center">
             <Trophy className="mx-auto h-10 w-10 text-[#c9a961]/50" strokeWidth={1.25} />
-            <p className="mx-auto mt-4 max-w-md text-sm text-neutral-400">{t.empty}</p>
+            <p className="mx-auto mt-4 max-w-md text-sm text-neutral-400">{emptyText}</p>
           </div>
         )}
 
@@ -505,7 +614,7 @@ export default function ToursPage() {
                 <div className="grid grid-cols-[3rem_1fr_auto] gap-3 border-b border-white/5 px-4 py-3 text-[10px] uppercase tracking-[0.18em] text-neutral-500 sm:px-6">
                   <span>{t.rank}</span>
                   <span>{t.member}</span>
-                  <span className="text-right">{t.points}</span>
+                  <span className="text-right">{pointsLabel}</span>
                 </div>
                 <ul>
                   {rest.map((r) => (
@@ -568,7 +677,7 @@ export default function ToursPage() {
                   <Avatar src={me.avatar_url} name={me.full_name} size={40} ringClass="ring-[#c9a961]/60" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[10px] uppercase tracking-[0.18em] text-neutral-500">{t.yourPlace}</p>
+                  <p className="truncate text-[10px] uppercase tracking-[0.18em] text-neutral-500">{yourPlaceText}</p>
                   <p className="truncate text-sm text-white">{displayName(me)}</p>
                   {gapToTop10 !== null && (
                     <p className="mt-0.5 text-xs text-neutral-400">
@@ -586,7 +695,7 @@ export default function ToursPage() {
                   <p className="font-serif text-2xl font-light tabular-nums text-[#c9a961]">
                     {nf.format(me.tour_points)}
                   </p>
-                  <p className="text-[10px] uppercase tracking-wider text-neutral-500">{t.points}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-neutral-500">{pointsLabel}</p>
                 </div>
               </div>
             ) : (
@@ -595,8 +704,8 @@ export default function ToursPage() {
                   <Trophy className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-sm text-white">{t.notRanked}</p>
-                  <p className="mt-0.5 text-xs text-neutral-400">{t.notRankedHint}</p>
+                  <p className="text-sm text-white">{notRankedText}</p>
+                  <p className="mt-0.5 text-xs text-neutral-400">{notRankedHintText}</p>
                 </div>
               </div>
             )}

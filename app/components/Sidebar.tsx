@@ -27,7 +27,6 @@ import {
   Settings,
   MapPin,
   ClipboardList,
-  Users,
   ShieldAlert,
   Map,
   KeyRound,
@@ -41,7 +40,7 @@ import {
 } from "lucide-react";
 import { Cormorant_Garamond } from "next/font/google";
 import { useAuth, type Role } from "@/app/context/AuthContext";
-import { useLanguage } from "@/app/context/LanguageContext";
+import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import UserAvatar from "@/app/components/UserAvatar";
 import { supabase } from "@/lib/supabase";
 import { isClubAdmin } from "@/lib/access";
@@ -106,7 +105,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     key: "console",
     roles: STAFF,
-    items: [{ key: "overview", href: "/admin/directory", icon: LayoutDashboard }],
+    items: [{ key: "overview", href: "/admin", icon: LayoutDashboard }],
   },
   // ── Manager+ ──────────────────────────────────────────────
   {
@@ -122,9 +121,8 @@ const NAV_SECTIONS: NavSection[] = [
     key: "administration",
     roles: ["admin", "owner"],
     items: [
-      // Всё ниже — только owner и admin (в БД то же правило: club_is_admin)
-      // Справочник резидентов и KYC живёт в корне админки
-      { key: "directory", href: "/admin", icon: Users },
+      // Закрытые инструменты руководства клуба
+      { key: "database", href: "/admin/database", icon: Database },
       // Заявки на вступление с главной (/admin/requests)
       { key: "membershipRequests", href: "/admin/requests", icon: UserPlus },
       { key: "faceControl", href: "/admin/face-control", icon: ShieldAlert },
@@ -142,7 +140,6 @@ const NAV_SECTIONS: NavSection[] = [
     roles: ["owner"],
     items: [
       { key: "roleManagement", href: "/admin/roles", icon: KeyRound },
-      { key: "database", href: "/admin/database", icon: Database },
     ],
   },
   // ── Аккаунт: настройки профиля для всего персонала ─────────
@@ -165,7 +162,19 @@ function isActive(href: string, pathname: string) {
 
 /* ── Переводы ─────────────────────────────────────────────────────── */
 
-const translations = {
+type Dict = {
+  subtitle: Record<Role, string>;
+  sections: Record<SectionKey, string>;
+  nav: Record<NavKey, string>;
+  roles: Record<Role, string>;
+  logout: string;
+  pendingInvites: (n: number) => string;
+  openMenu: string;
+  closeMenu: string;
+  menu: string;
+};
+
+const T: Record<Lang, Dict> = {
   EN: {
     subtitle: {
       resident: "Private Club",
@@ -354,9 +363,7 @@ const translations = {
     closeMenu: "Fechar menu",
     menu: "Menu",
   },
-} as const;
-
-type LangKey = keyof typeof translations;
+};
 
 /** Сколько записей ждут решения — счётчик у «Заявок на вступление» и «Приглашений».
  *  Запрос идёт только у owner/admin (RLS всё равно не отдаст их другим). */
@@ -364,6 +371,8 @@ function usePendingCount(table: "club_invites" | "guest_applications", enabled: 
   const [count, setCount] = useState(0);
   useEffect(() => {
     if (!enabled) {
+      // Clear the counter when the current role cannot access it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCount(0);
       return;
     }
@@ -430,7 +439,7 @@ export default function Sidebar() {
     membershipRequests: pendingApplications,
   };
 
-  const t = translations[(lang as LangKey) in translations ? (lang as LangKey) : "EN"];
+  const t = T[lang] ?? T.EN;
 
   const sections = useMemo(
     () => (role ? NAV_SECTIONS.filter((s) => s.roles.includes(role)) : []),

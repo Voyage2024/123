@@ -1,73 +1,111 @@
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
-export async function POST(request: Request) {
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type CreateUserPayload = {
+  email?: unknown;
+  password?: unknown;
+  full_name?: unknown;
+  location?: unknown;
+  citizenship?: unknown;
+  status?: unknown;
+  kyc_level?: unknown;
+};
+
+function activeBan(until: unknown, permanent: unknown) {
+  if (permanent === true || until === "infinity") return true;
+  if (typeof until !== "string" || !until) return false;
+  const ms = Date.parse(until);
+  return Number.isFinite(ms) && ms > Date.now();
+}
+
+export async function POST(request: NextRequest) {
   try {
-    // 1. ЗАЩИТА: Проверяем, кто стучится в этот API
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: "Нет доступа" }, { status: 401 });
-    }
-    
-    const token = authHeader.replace('Bearer ', '');
-
-    // Создаем обычного клиента для проверки токена (без админских прав)
-    const supabaseNormal = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-
-    // Спрашиваем у базы: чей это токен?
-    const { data: { user }, error: userError } = await supabaseNormal.auth.getUser(token);
-
-    // Проверяем, что это именно ты!
-    if (userError || user?.email !== 'fridelltubaugh129@gmail.com') {
-      return NextResponse.json({ error: "Доступ запрещен. Только для админа." }, { status: 403 });
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !anonKey || !serviceKey) {
+      return NextResponse.json({ error: "Supabase server configuration is incomplete." }, { status: 503 });
     }
 
-    // 2. ЕСЛИ ЭТО ТЫ: Включаем режим Бога и создаем юзера
-    const body = await request.json();
-    const { email, password, full_name, location, citizenship, status, kyc_level } = body;
+    const authHeader = request.headers.get("authorization") ?? "";
+    const token = authHeader.match(/^Bearer\s+(.+)$/i)?.[1];
+    if (!token) return NextResponse.json({ error: "Требуется авторизация." }, { status: 401 });
 
-    if (!email || !password) {
-      return NextResponse.json({ error: "Email и пароль обязательны" }, { status: 400 });
+    const asUser = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: authResult, error: authError } = await asUser.auth.getUser(token);
+    if (authError || !authResult.user) {
+      return NextResponse.json({ error: "Сессия недействительна." }, { status: 401 });
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!, 
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
-
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: email,
-      password: password,
-      email_confirm: true,
-      user_metadata: { name: full_name }
-    });
-
-    if (authError) return NextResponse.json({ error: authError.message }, { status: 400 });
-
-    const newUserId = authData.user.id;
-
-    // 3. Обновляем профиль
-    const { error: profileError } = await supabaseAdmin
+    const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: actor, error: actorError } = await admin
       .from("profiles")
-      .upsert({
-        id: newUserId,
-        full_name: full_name || null,
-        location: location || null,
-        citizenship: citizenship || null,
-        status: status === "__none__" ? null : status,
-        kyc_level: Number(kyc_level) || 1,
-      }, { onConflict: "id" });
+      .select("role, banned_until, ban_permanent")
+      .eq("id", authResult.user.id)
+      .maybeSingle();
+    if (actorError || !actor) return NextResponse.json({ error: "Не удалось проверить роль пользователя." }, { status: 403 });
+    if (activeBan(actor.banned_until, actor.ban_permanent)) return NextResponse.json({ error: "Аккаунт заблокирован." }, { status: 403 });
+    if (actor.role !== "owner" && actor.role !== "admin") return NextResponse.json({ error: "Недостаточно прав." }, { status: 403 });
 
-    if (profileError) return NextResponse.json({ error: profileError.message }, { status: 400 });
+    const body = (await request.json()) as CreateUserPayload;
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const fullName = typeof body.full_name === "string" ? body.full_name.trim().replace(/\s+/g, " ") : "";
+    const location = typeof body.location === "string" ? body.location.trim().slice(0, 120) : "";
+    const citizenship = typeof body.citizenship === "string" ? body.citizenship.trim().slice(0, 120) : "";
 
-    // Обрати внимание: мы возвращаем userId, как и просил Клод!
-    return NextResponse.json({ success: true, userId: newUserId });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: "Укажите корректный email." }, { status: 400 });
+    }
+    if (password.length < 10 || password.length > 128) {
+      return NextResponse.json({ error: "Пароль должен содержать от 10 до 128 символов." }, { status: 400 });
+    }
+    if (fullName.length < 2 || fullName.length > 100) {
+      return NextResponse.json({ error: "ФИО должно содержать от 2 до 100 символов." }, { status: 400 });
+    }
 
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const requestedKyc = Number(body.kyc_level);
+    const kycLevel = Number.isInteger(requestedKyc) ? Math.min(3, Math.max(0, requestedKyc)) : 0;
+    const requestedStatus = typeof body.status === "string" ? body.status.trim() : "pending";
+    const status = ["pending", "approved", "rejected", "declined", "blocked"].includes(requestedStatus)
+      ? (requestedStatus === "declined" ? "rejected" : requestedStatus)
+      : "pending";
+
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName, name: fullName },
+    });
+    if (createError || !created.user) {
+      return NextResponse.json({ error: createError?.message ?? "Не удалось создать Auth-пользователя." }, { status: 400 });
+    }
+
+    const { error: profileError } = await admin.from("profiles").upsert({
+      id: created.user.id,
+      full_name: fullName,
+      name: fullName,
+      email,
+      location: location || null,
+      citizenship: citizenship || null,
+      status,
+      kyc_level: kycLevel,
+      role: "resident",
+      segment: "working",
+      reliability: 100,
+    }, { onConflict: "id" });
+
+    if (profileError) {
+      await admin.auth.admin.deleteUser(created.user.id);
+      return NextResponse.json({ error: `Не удалось создать профиль: ${profileError.message}` }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true, userId: created.user.id }, { status: 201 });
+  } catch (error) {
+    console.error("[admin/create-user] Unexpected error", error);
+    return NextResponse.json({ error: "Внутренняя ошибка сервера." }, { status: 500 });
   }
 }

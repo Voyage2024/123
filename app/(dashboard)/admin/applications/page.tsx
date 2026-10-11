@@ -27,6 +27,8 @@ import {
 
 import { supabase } from '@/lib/supabase';
 import RoleGuard from '@/app/components/RoleGuard';
+import { useAuth } from '@/app/context/AuthContext';
+import EventApplicationsPanel from './EventApplicationsPanel';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Настройки
@@ -38,7 +40,7 @@ const PORTFOLIO_BUCKET = 'user-uploads';
  * Типы
  * ──────────────────────────────────────────────────────────────────────────── */
 
-type AppStatus = 'pending' | 'approved' | 'rejected';
+type AppStatus = 'pending' | 'approved' | 'rejected' | 'completed';
 type StatusFilter = 'all' | AppStatus;
 
 interface ApplicationRow {
@@ -63,6 +65,9 @@ interface ModelProfile {
   photos: string[];
   bio: string | null;
   instagram: string | null;
+  segment: 'working' | 'elite';
+  level: number;
+  reliability: number;
 }
 
 interface ApplicationItem extends ApplicationRow {
@@ -145,6 +150,9 @@ function normalizeProfile(raw: RawProfile, resolve: (p: string) => string): Mode
     photos,
     bio: str(pick(raw, ['bio', 'about', 'description'])),
     instagram: str(pick(raw, ['instagram', 'instagram_handle', 'ig'])),
+    segment: String(raw.segment ?? 'working').toLowerCase() === 'elite' ? 'elite' : 'working',
+    level: Math.min(6, Math.max(1, Number(raw.level ?? 1) || 1)),
+    reliability: Math.min(100, Math.max(0, Number(raw.reliability ?? 100) || 0)),
   };
 }
 
@@ -194,6 +202,11 @@ const STATUS_META: Record<AppStatus, { label: string; cls: string; dot: string }
     cls: 'border-rose-400/30 bg-rose-400/10 text-rose-300',
     dot: 'bg-rose-400',
   },
+  completed: {
+    label: 'Тур завершён',
+    cls: 'border-amber-200/30 bg-amber-200/10 text-amber-100',
+    dot: 'bg-amber-200',
+  },
 };
 
 function kycMeta(status: string | null) {
@@ -220,6 +233,9 @@ export default function ApplicationsPage() {
 }
 
 function ApplicationsDashboard() {
+  const { role } = useAuth();
+  const canModerateEvents = role === 'owner' || role === 'admin';
+  const [activeTab, setActiveTab] = useState<'tours' | 'parties'>('tours');
   const [items, setItems] = useState<ApplicationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -279,6 +295,8 @@ function ApplicationsDashboard() {
   );
 
   useEffect(() => {
+    // Async data synchronization on mount; load manages its loading/error state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load('initial');
   }, [load]);
 
@@ -289,9 +307,13 @@ function ApplicationsDashboard() {
   }, [toast]);
 
   const updateStatus = useCallback(
-    async (id: string, next: AppStatus) => {
+    async (id: string, next: AppStatus, completion?: { completion_value: number; complexity_score: number; completion_country_code: string | null }) => {
       const current = items.find((i) => i.id === id);
       if (!current || current.status === next || busy[id]) return;
+      if (next === 'completed' && current.status !== 'approved') {
+        setToast({ type: 'error', text: 'Завершить можно только одобренную заявку.' });
+        return;
+      }
 
       const prevStatus = current.status;
       const name = current.profile?.fullName ?? 'Модель';
@@ -302,7 +324,7 @@ function ApplicationsDashboard() {
 
       const { data, error: updError } = await supabase
         .from('applications')
-        .update({ status: next })
+        .update({ status: next, ...(next === 'completed' && completion ? completion : {}) })
         .eq('id', id)
         .select('id, status');
 
@@ -323,7 +345,7 @@ function ApplicationsDashboard() {
 
       setToast({
         type: 'success',
-        text: next === 'approved' ? `${name} одобрена в тур «${hub}»` : `Заявка ${name} отклонена`,
+        text: next === 'approved' ? `${name} одобрена в тур «${hub}»` : next === 'completed' ? `Тур «${hub}» завершён. Баллы обработаны сервером.` : `Заявка ${name} отклонена`,
       });
     },
     [items, busy],
@@ -335,6 +357,7 @@ function ApplicationsDashboard() {
       pending: items.filter((i) => i.status === 'pending').length,
       approved: items.filter((i) => i.status === 'approved').length,
       rejected: items.filter((i) => i.status === 'rejected').length,
+      completed: items.filter((i) => i.status === 'completed').length,
     }),
     [items],
   );
@@ -351,6 +374,31 @@ function ApplicationsDashboard() {
   }, [items, filter, query]);
 
   const selected = items.find((i) => i.id === selectedId) ?? null;
+
+  function completeActivity(id: string) {
+    const rawValue = window.prompt('Коммерческая ценность поездки в USD (число, например 1200):', '0');
+    if (rawValue === null) return;
+    const value = Number(rawValue);
+    if (!Number.isFinite(value) || value < 0 || value > 100000000) {
+      setToast({ type: 'error', text: 'Укажите корректную коммерческую ценность.' });
+      return;
+    }
+    const rawComplexity = window.prompt('Сложность активности: 1, 2 или 3', '1');
+    if (rawComplexity === null) return;
+    const complexity = Number(rawComplexity);
+    if (![1, 2, 3].includes(complexity)) {
+      setToast({ type: 'error', text: 'Сложность должна быть 1, 2 или 3.' });
+      return;
+    }
+    const rawCountry = window.prompt('ISO-код страны из двух букв для паспорта (например VN). Оставь пустым, если штамп не нужен:', '');
+    if (rawCountry === null) return;
+    const country = rawCountry.trim().toUpperCase();
+    if (country && !/^[A-Z]{2}$/.test(country)) {
+      setToast({ type: 'error', text: 'Код страны должен состоять из двух букв ISO.' });
+      return;
+    }
+    void updateStatus(id, 'completed', { completion_value: value, complexity_score: complexity, completion_country_code: country || null });
+  }
 
   return (
     <div className="relative min-h-screen bg-zinc-950 text-zinc-100">
@@ -384,13 +432,29 @@ function ApplicationsDashboard() {
           </button>
         </header>
 
-        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mb-7 inline-flex rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur-xl" role="tablist" aria-label="Тип заявок">
+          <button type="button" role="tab" aria-selected={activeTab === 'tours'} onClick={() => setActiveTab('tours')} className={`rounded-full px-5 py-2 text-sm transition ${activeTab === 'tours' ? 'bg-amber-200 text-zinc-950 shadow-[0_0_24px_-10px_rgba(253,230,138,0.6)]' : 'text-zinc-400 hover:text-zinc-100'}`}>
+            <span className="inline-flex items-center gap-2"><MapPin size={15} /> Туры</span>
+          </button>
+          {canModerateEvents && (
+            <button type="button" role="tab" aria-selected={activeTab === 'parties'} onClick={() => setActiveTab('parties')} className={`rounded-full px-5 py-2 text-sm transition ${activeTab === 'parties' ? 'bg-amber-200 text-zinc-950 shadow-[0_0_24px_-10px_rgba(253,230,138,0.6)]' : 'text-zinc-400 hover:text-zinc-100'}`}>
+              <span className="inline-flex items-center gap-2"><Calendar size={15} /> Тусовки</span>
+            </button>
+          )}
+        </div>
+
+        {activeTab === 'parties' && canModerateEvents ? (
+          <EventApplicationsPanel />
+        ) : (
+          <>
+        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
           {(
             [
               ['all', 'Все заявки'],
               ['pending', 'Ожидают'],
               ['approved', 'Одобрены'],
               ['rejected', 'Отклонены'],
+              ['completed', 'Завершены'],
             ] as [StatusFilter, string][]
           ).map(([key, label]) => {
             const active = filter === key;
@@ -454,12 +518,12 @@ function ApplicationsDashboard() {
                   onOpen={() => setSelectedId(item.id)}
                   onApprove={() => updateStatus(item.id, 'approved')}
                   onReject={() => updateStatus(item.id, 'rejected')}
+                  onComplete={() => completeActivity(item.id)}
                 />
               ))}
             </ul>
           )}
         </section>
-      </div>
 
       {selected && (
         <DossierDrawer
@@ -469,10 +533,14 @@ function ApplicationsDashboard() {
           onClose={() => setSelectedId(null)}
           onApprove={() => updateStatus(selected.id, 'approved')}
           onReject={() => updateStatus(selected.id, 'rejected')}
+          onComplete={() => completeActivity(selected.id)}
         />
       )}
 
       <ToastView toast={toast} onClose={() => setToast(null)} />
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -483,12 +551,14 @@ function ApplicationRowView({
   onOpen,
   onApprove,
   onReject,
+  onComplete,
 }: {
   item: ApplicationItem;
   busyStatus?: AppStatus;
   onOpen: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onComplete: () => void;
 }) {
   const p = item.profile;
   const date = new Date(item.created_at);
@@ -502,6 +572,13 @@ function ApplicationRowView({
           <p className="truncate text-xs text-zinc-500">
             {[p?.city, p?.height, p?.measurements].filter(Boolean).join(' · ') || '—'}
           </p>
+          {p && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold tracking-[0.14em] ${p.segment === 'elite' ? 'border-amber-200/40 bg-amber-200/10 text-amber-100' : 'border-white/10 bg-white/[0.04] text-zinc-400'}`}>{p.segment.toUpperCase()}</span>
+              <span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] text-zinc-400">LVL {p.level}</span>
+              <span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] tabular-nums text-zinc-400">Надёжность {p.reliability}%</span>
+            </div>
+          )}
         </div>
       </button>
 
@@ -530,6 +607,12 @@ function ApplicationRowView({
           <Eye className="h-3.5 w-3.5" />
           Досье
         </button>
+        {(item.status === 'approved' || busyStatus === 'completed') && (
+          <button type="button" onClick={onComplete} disabled={Boolean(busyStatus)} className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/30 bg-amber-200/[0.06] px-3 py-1.5 text-xs text-amber-100 transition hover:border-amber-200/60 hover:bg-amber-200/10 disabled:opacity-50">
+            {busyStatus === 'completed' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            Завершить
+          </button>
+        )}
         <ActionButtons
           status={item.status}
           busyStatus={busyStatus}
@@ -560,7 +643,7 @@ function ActionButtons({
 
   return (
     <>
-      {status !== 'approved' || busyStatus === 'approved' ? (
+      {(status !== 'approved' && status !== 'completed') || busyStatus === 'approved' ? (
         <button
           onClick={onApprove}
           disabled={isBusy}
@@ -576,7 +659,7 @@ function ActionButtons({
         </button>
       ) : null}
 
-      {status !== 'rejected' || busyStatus === 'rejected' ? (
+      {(status !== 'rejected' && status !== 'completed') || busyStatus === 'rejected' ? (
         <button
           onClick={onReject}
           disabled={isBusy}
@@ -601,12 +684,14 @@ function DossierDrawer({
   onClose,
   onApprove,
   onReject,
+  onComplete,
 }: {
   item: ApplicationItem;
   busyStatus?: AppStatus;
   onClose: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onComplete: () => void;
 }) {
   const p = item.profile;
   const [shown, setShown] = useState(false);
@@ -759,7 +844,12 @@ function DossierDrawer({
           </div>
         </div>
 
-        <div className="flex gap-3 border-t border-white/10 bg-zinc-950/80 p-4 backdrop-blur-xl sm:p-6">
+        <div className="flex flex-wrap gap-3 border-t border-white/10 bg-zinc-950/80 p-4 backdrop-blur-xl sm:p-6">
+          {item.status === 'approved' && (
+            <button type="button" onClick={onComplete} disabled={Boolean(busyStatus)} className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-amber-200/30 bg-amber-200/[0.06] px-5 py-3 text-sm text-amber-100 transition hover:bg-amber-200/10 disabled:opacity-50">
+              <Check className="h-4 w-4" /> Завершить активность
+            </button>
+          )}
           <ActionButtons status={item.status} busyStatus={busyStatus} onApprove={onApprove} onReject={onReject} />
         </div>
       </aside>

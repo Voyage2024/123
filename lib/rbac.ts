@@ -30,7 +30,7 @@ export const ADMIN_ROUTE_RULES: RouteRule[] = [
   // ── Только Owner ──────────────────────────────
   { prefix: "/admin/roles", roles: OWNER_ROLES },
   { prefix: "/admin/global-tours", roles: OWNER_ROLES },
-  { prefix: "/admin/database", roles: OWNER_ROLES },
+  { prefix: "/admin/database", roles: ADMIN_ROLES },
 
   // ── Весь персонал (owner, admin, manager) ─────
   // Настройки своего профиля: имя, пароль, аватар.

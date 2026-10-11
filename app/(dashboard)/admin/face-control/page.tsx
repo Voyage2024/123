@@ -24,7 +24,7 @@ const cormorant = Cormorant_Garamond({
  * ──────────────────────────────────────────────────────────────────── */
 
 const SELECT_COLS =
-  "id, full_name, location, citizenship, status, kyc_level, photo_urls, " +
+  "id, email, telegram_id, full_name, location, citizenship, status, kyc_level, photo_urls, " +
   "temp_password, " +
   "birth_date, height, weight, measurements, smoking, alcohol, about";
 
@@ -87,7 +87,7 @@ export default function FaceControlPage() {
     const { data, error } = await supabase
       .from("profiles")
       .select(SELECT_COLS)
-      .or("kyc_level.eq.0,status.is.null,status.eq.pending");
+      .or("status.is.null,status.eq.pending");
 
     if (error) {
       console.error("[Face Control] Ошибка загрузки profiles:", {
@@ -111,6 +111,8 @@ export default function FaceControlPage() {
 
   useEffect(() => {
     if (authLoading) return;
+    // Async data synchronization after the auth context has initialized.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [authLoading, load]);
 
@@ -136,7 +138,16 @@ export default function FaceControlPage() {
         throw new Error(json?.error || `Ошибка сервера (${res.status})`);
       }
 
-      // Успех — убираем карточку из очереди.
+      // If Telegram is unavailable, show one-time fallback credentials to the
+      // DB-authorized administrator. The API does not log or store the password.
+      if (json?.credentials?.email && json?.credentials?.password) {
+        window.alert(
+          `Анкета одобрена, но Telegram не доставил доступы. Передайте их вручную:\n\nEmail: ${json.credentials.email}\nВременный пароль: ${json.credentials.password}\n\nПароль не будет показан повторно.`,
+        );
+      } else if (json?.warning) {
+        window.alert(json.warning);
+      }
+
       setApplications((prev) => prev.filter((a) => a.id !== app.id));
       return json as { ok: true; warning?: string };
     },

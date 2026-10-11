@@ -1,187 +1,136 @@
-import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
+import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
 
-// crypto.randomBytes → нужен Node-рантайм, не Edge.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/* ──────────────────────────────────────────────────────────────────────
- * POST /api/face-control  { id: string, action: "approve" | "decline" }
- *
- * Одобрение/отклонение кандидата. Проверяем, что вызывает залогиненный
- * админ (по access-token из заголовка Authorization), затем сервис-ключом
- * меняем статус, а при approve — создаём аккаунт, генерим логин/пароль и
- * шлём поздравление в Telegram по telegram_id.
- *
- * ENV (все секретные — БЕЗ NEXT_PUBLIC, только в .env.local / на сервере):
- *   NEXT_PUBLIC_SUPABASE_URL       (уже есть)
- *   NEXT_PUBLIC_SUPABASE_ANON_KEY  (уже есть)
- *   SUPABASE_SERVICE_ROLE_KEY      ← секрет! Settings → API → service_role
- *   TELEGRAM_BOT_TOKEN             ← секрет! токен бота от @BotFather
- *   NEXT_PUBLIC_SITE_URL           ← адрес сайта для ссылки на вход
- * ──────────────────────────────────────────────────────────────────── */
+function activeBan(until: unknown, permanent: unknown) {
+  if (permanent === true || until === "infinity") return true;
+  if (typeof until !== "string" || !until) return false;
+  const time = Date.parse(until);
+  return Number.isFinite(time) && time > Date.now();
+}
 
-const ADMIN_EMAIL = "fridelltubaugh129@gmail.com"; // тот же, что в Sidebar/admin
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const { id, action } = (await req.json()) as {
-      id?: string;
-      action?: "approve" | "decline";
-    };
-
-    if (!id || (action !== "approve" && action !== "decline")) {
-      return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !anonKey || !serviceKey) {
+      return NextResponse.json({ error: "Supabase server configuration is incomplete." }, { status: 503 });
     }
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-    // ── 1) Авторизация: вызывающий должен быть админом ──────────────────
-    const token = (req.headers.get("authorization") ?? "").replace(
-      /^Bearer\s+/i,
-      "",
-    );
-    if (!token) {
-      return NextResponse.json({ error: "Нет токена" }, { status: 401 });
+    const body = (await request.json().catch(() => null)) as { id?: unknown; action?: unknown } | null;
+    const targetId = typeof body?.id === "string" ? body.id : "";
+    const action = body?.action;
+    if (!targetId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetId)) {
+      return NextResponse.json({ error: "Некорректный ID анкеты." }, { status: 400 });
+    }
+    if (action !== "approve" && action !== "decline") {
+      return NextResponse.json({ error: "Некорректное действие." }, { status: 400 });
     }
 
-    // Клиент «от имени пользователя» — чтобы узнать, кто он.
-    const asUser = createClient(url, anonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: userData, error: userErr } = await asUser.auth.getUser();
-    if (userErr || !userData.user) {
-      return NextResponse.json({ error: "Сессия недействительна" }, { status: 401 });
-    }
-    const callerEmail = userData.user.email?.toLowerCase().trim();
-    if (callerEmail !== ADMIN_EMAIL.toLowerCase()) {
-      return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
-    }
+    const token = (request.headers.get("authorization") ?? "").match(/^Bearer\s+(.+)$/i)?.[1];
+    if (!token) return NextResponse.json({ error: "Необходима авторизация." }, { status: 401 });
 
-    // ── 2) Админский клиент (service role) для привилегированных операций ─
-    const admin = createClient(url, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const userClient = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: authData, error: authError } = await userClient.auth.getUser(token);
+    if (authError || !authData.user) return NextResponse.json({ error: "Сессия недействительна." }, { status: 401 });
 
-    // Тянем анкету (telegram_id обязателен для уведомления).
-    const { data: profile, error: pErr } = await admin
+    const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: actor, error: actorError } = await admin
       .from("profiles")
-      .select("id, full_name, telegram_id, status")
-      .eq("id", id)
-      .single();
-    if (pErr || !profile) {
-      return NextResponse.json({ error: "Анкета не найдена" }, { status: 404 });
-    }
+      .select("role, banned_until, ban_permanent")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+    if (actorError || !actor) return NextResponse.json({ error: "Не удалось проверить роль вызывающего." }, { status: 403 });
+    if (activeBan(actor.banned_until, actor.ban_permanent)) return NextResponse.json({ error: "Аккаунт заблокирован." }, { status: 403 });
+    if (actor.role !== "owner" && actor.role !== "admin") return NextResponse.json({ error: "Недостаточно прав." }, { status: 403 });
 
-    /* ── DECLINE ──────────────────────────────────────────────────────── */
+    const { data: profile, error: profileError } = await admin
+      .from("profiles")
+      .select("id, full_name, email, telegram_id, status, role, kyc_level")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (profileError || !profile) return NextResponse.json({ error: "Анкета не найдена." }, { status: 404 });
+    if (profile.role !== "resident") return NextResponse.json({ error: "Face Control доступен только для анкет резидентов." }, { status: 400 });
+
     if (action === "decline") {
-      const { error } = await admin
-        .from("profiles")
-        .update({ status: "declined", kyc_level: -1 })
-        .eq("id", id);
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
+      const { error } = await admin.from("profiles").update({ status: "rejected", kyc_level: 0 }).eq("id", targetId);
+      if (error) return NextResponse.json({ error: `Не удалось отклонить анкету: ${error.message}` }, { status: 500 });
       return NextResponse.json({ ok: true });
     }
 
-    /* ── APPROVE ──────────────────────────────────────────────────────── */
-    // Идемпотентность: если анкета уже одобрена — НЕ создаём второй аккаунт.
-    if (profile.status === "approved") {
-      return NextResponse.json(
-        { error: "Кандидат уже одобрен ранее." },
-        { status: 409 },
-      );
+    if (profile.status === "approved" && Number(profile.kyc_level ?? 0) >= 1) {
+      return NextResponse.json({ error: "Анкета уже одобрена." }, { status: 409 });
     }
 
-    // Генерируем логин и временный пароль криптостойко.
-    const login = `voyage_${crypto.randomBytes(3).toString("hex")}`;
-    const password = crypto.randomBytes(9).toString("base64url"); // ~12 симв.
-
-    // Supabase Auth логинит по email. Если в анкете нет реального email —
-    // делаем технический на основе логина (кандидат заходит по нему).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const realEmail = (profile as any).email?.trim?.();
-    const accountEmail = realEmail || `${login}@members.voyage-club.app`;
-
-    // Создаём аккаунт.
-    const { data: created, error: createErr } =
-      await admin.auth.admin.createUser({
-        email: accountEmail,
-        password,
-        email_confirm: true, // без письма-подтверждения
-        user_metadata: {
-          login,
-          full_name: profile.full_name,
-          profile_id: profile.id,
-          telegram_id: profile.telegram_id,
-        },
-      });
-    if (createErr) {
-      return NextResponse.json(
-        { error: `Не удалось создать аккаунт: ${createErr.message}` },
-        { status: 500 },
-      );
+    // Never create a second Auth identity: profiles.id is the canonical auth.users.id in this schema.
+    const { data: authTarget, error: targetAuthError } = await admin.auth.admin.getUserById(targetId);
+    if (targetAuthError || !authTarget.user) {
+      return NextResponse.json({ error: "У анкеты нет связанного Auth-аккаунта. Проверьте profiles.id и auth.users.id." }, { status: 409 });
     }
 
-    // Обновляем анкету: одобрено.
-    // Если добавишь колонку user_id (uuid) — можно связать профиль с аккаунтом:
-    //   user_id: created.user?.id
-    const { error: updErr } = await admin
+    const login = `voyage_${crypto.randomBytes(4).toString("hex")}`;
+    const password = crypto.randomBytes(14).toString("base64url");
+    const accountEmail = authTarget.user.email?.trim().toLowerCase() ||
+      (typeof profile.email === "string" && profile.email.includes("@")
+        ? profile.email.trim().toLowerCase()
+        : `${login}@members.voyage-club.app`);
+
+    const { error: credentialError } = await admin.auth.admin.updateUserById(targetId, {
+      email: accountEmail,
+      email_confirm: true,
+      password,
+      user_metadata: {
+        ...(authTarget.user.user_metadata ?? {}),
+        login,
+        full_name: profile.full_name,
+        profile_id: targetId,
+        telegram_id: profile.telegram_id,
+      },
+    });
+    if (credentialError) {
+      return NextResponse.json({ error: `Не удалось подготовить доступ: ${credentialError.message}` }, { status: 500 });
+    }
+
+    const { error: updateError } = await admin
       .from("profiles")
-      .update({ status: "approved", kyc_level: 1 })
-      .eq("id", id);
-    if (updErr) {
-      return NextResponse.json(
-        { error: `Аккаунт создан, но профиль не обновлён: ${updErr.message}` },
-        { status: 500 },
-      );
-    }
+      .update({ status: "approved", kyc_level: 1, email: accountEmail })
+      .eq("id", targetId);
+    if (updateError) return NextResponse.json({ error: `Auth доступ подготовлен, но профиль не обновлён: ${updateError.message}` }, { status: 500 });
 
-    // ── Telegram: поздравление с логином и паролем ──────────────────────
-    if (profile.telegram_id) {
-      const botToken = process.env.TELEGRAM_BOT_TOKEN!;
-      const text =
-        `🎉 Поздравляем! Ваша анкета одобрена.\n\n` +
-        `Теперь вам доступен личный кабинет для работы над зарубежными проектами.\n\n` +
-        `🔗 Вход: ${SITE_URL}/login\n` +
-        `👤 Логин: ${accountEmail}\n` +
-        `🔑 Временный пароль: ${password}\n\n` +
-        `⚠️ Обязательно смените пароль после первого входа.`;
-
-      const tgRes = await fetch(
-        `https://api.telegram.org/bot${botToken}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: profile.telegram_id, text }),
-        },
-      );
-
-      if (!tgRes.ok) {
-        const body = await tgRes.text().catch(() => "");
-        console.error("[face-control] Telegram sendMessage failed:", body);
-        // Аккаунт уже создан — не валим весь запрос, но предупреждаем.
-        return NextResponse.json({
-          ok: true,
-          warning: "Аккаунт создан, но уведомление в Telegram не отправлено.",
-        });
-      }
-    } else {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!profile.telegram_id || !botToken) {
       return NextResponse.json({
         ok: true,
-        warning: "Аккаунт создан, но у анкеты нет telegram_id — уведомление не отправлено.",
+        warning: !profile.telegram_id
+          ? "Анкета одобрена, но telegram_id не указан. Передайте доступы вручную через защищённый канал."
+          : "Анкета одобрена, но TELEGRAM_BOT_TOKEN не настроен. Передайте доступы вручную через защищённый канал.",
       });
+    }
+
+    const message =
+      `Ваша анкета VOYAGE одобрена.\n\n` +
+      `Вход: ${process.env.NEXT_PUBLIC_SITE_URL ?? "https://voyage-club.app"}/login\n` +
+      `Email: ${accountEmail}\n` +
+      `Временный пароль: ${password}\n\n` +
+      `После входа смените пароль.`;
+    const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: profile.telegram_id, text: message }),
+      cache: "no-store",
+    });
+    if (!telegramResponse.ok) {
+      console.error("[face-control] Telegram delivery failed:", await telegramResponse.text().catch(() => ""));
+      return NextResponse.json({ ok: true, warning: "Анкета одобрена, но Telegram не доставил сообщение. Передайте доступы вручную через защищённый канал." });
     }
 
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error("[face-control] route error:", e);
-    return NextResponse.json({ error: "Внутренняя ошибка сервера" }, { status: 500 });
+  } catch (error) {
+    console.error("[face-control] Unexpected error", error);
+    return NextResponse.json({ error: "Внутренняя ошибка сервера." }, { status: 500 });
   }
 }
