@@ -329,7 +329,8 @@ const rowKey = (r: LeaderRow) => r.profile_id ?? `${r.position}-${r.full_name ??
 
 export default function ToursPage() {
   const { lang } = useLanguage();
-  const { segment: residentSegment } = useAuth();
+  const { user } = useAuth();
+const residentSegment = (user as any)?.segment;
 
   // Приводим lang к нужному типу и защищаемся от неожиданных значений
   const currentLang: Lang = (['en', 'ru', 'es', 'pt'] as const).includes(lang?.toLowerCase() as Lang)
