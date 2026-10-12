@@ -68,7 +68,7 @@ export default function AdminRequestsPage() {
 
     try {
       const [appsRes, keysRes] = await Promise.all([
-        supabase.from("guest_applications").select("*").order("created_at", { ascending: false }).limit(500),
+        supabase.from("guest_applications").select("*").is("linked_profile_id", null).order("created_at", { ascending: false }).limit(500),
         // анкеты по ключам живут в «Приглашениях» — показываем мостик, если они ждут решения
         supabase.from("club_invites").select("id", { count: "exact", head: true }).eq("status", "pending"),
       ]);

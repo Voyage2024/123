@@ -11,7 +11,6 @@ type GuestApplicationInput = {
   telegram: string;
   whatsapp?: string | null;
   instagram: string;
-  portfolioUrl?: string | null;
   about?: string | null;
   consent: boolean;
   lang: string;
@@ -30,7 +29,7 @@ export type GuestApplicationFailureReason =
   | "security_unavailable"
   | "insert_failed";
 export type GuestApplicationResult =
-  | { ok: true; duplicate: boolean }
+  | { ok: true; duplicate: boolean; applicationId: string }
   | { ok: false; reason: GuestApplicationFailureReason };
 
 type TurnstileResult = "valid" | "invalid" | "unavailable";
@@ -40,15 +39,6 @@ function clean(value: unknown, max: number): string {
 }
 function nullable(value: unknown, max: number): string | null {
   return clean(value, max) || null;
-}
-function isSafeHttpUrl(value: string | null): boolean {
-  if (!value) return true;
-  try {
-    const url = new URL(value);
-    return (url.protocol === "https:" || url.protocol === "http:") && !!url.hostname;
-  } catch {
-    return false;
-  }
 }
 function normalizeTelegram(value: unknown): string | null {
   const raw = clean(value, 120);
@@ -150,7 +140,6 @@ export async function submitGuestApplication(input: GuestApplicationInput): Prom
   const telegram = normalizeTelegram(input.telegram);
   const whatsapp = normalizeWhatsApp(input.whatsapp);
   const instagram = normalizeInstagram(input.instagram);
-  const portfolioUrl = nullable(input.portfolioUrl, 500);
   const rawAbout = typeof input.about === "string" ? input.about : "";
   const about = nullable(rawAbout, 1000);
   const language = clean(input.lang, 5).toLowerCase();
@@ -166,8 +155,7 @@ export async function submitGuestApplication(input: GuestApplicationInput): Prom
     !instagram ||
     rawAbout.length > 1000 ||
     input.consent !== true ||
-    !["en", "ru", "es", "pt"].includes(language) ||
-    !isSafeHttpUrl(portfolioUrl)
+    !["en", "ru", "es", "pt"].includes(language)
   ) {
     return { ok: false, reason: "validation" };
   }
@@ -198,7 +186,6 @@ export async function submitGuestApplication(input: GuestApplicationInput): Prom
       telegram,
       whatsapp,
       instagram,
-      portfolio_url: portfolioUrl || null,
       about,
       consent: true,
       lang: language,
@@ -210,7 +197,25 @@ export async function submitGuestApplication(input: GuestApplicationInput): Prom
       source_metadata: { source, submitted_from: "landing", captcha: "cloudflare_turnstile" },
     });
     if (error) {
-      if (error.code === "23505") return { ok: true, duplicate: true };
+      if (error.code === "23505") {
+        // Return the existing pending application's ID so duplicate visitors can
+        // still open the correct Telegram deep link instead of being stranded.
+        const { data: existing, error: lookupError } = await supabase
+          .from("guest_applications")
+          .select("id")
+          .eq("telegram", telegram)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!lookupError && existing?.id) {
+          return { ok: true, duplicate: true, applicationId: String(existing.id) };
+        }
+        console.error("[guest-application] duplicate application could not be resolved", {
+          code: lookupError?.code ?? null,
+        });
+        return { ok: false, reason: "insert_failed" };
+      }
       console.error("[guest-application] insert failed", {
         code: error.code,
         message: error.message,
@@ -233,5 +238,5 @@ export async function submitGuestApplication(input: GuestApplicationInput): Prom
     instagram,
   });
   revalidatePath("/admin/requests");
-  return { ok: true, duplicate: false };
+  return { ok: true, duplicate: false, applicationId: id };
 }

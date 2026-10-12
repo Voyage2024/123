@@ -25,7 +25,7 @@ function isUuid(value: string): boolean {
 }
 
 export type ApproveProfileResult =
-  | { success: true; email: string; userId: string; notificationSent: boolean; warning?: string }
+  | { success: true; email: string; userId: string; notificationSent: boolean; warning?: string; manualCredentials?: { login: string; password: string } }
   | { success: false; error: string };
 
 /** Approves KYC, provisions game metrics through a DB trigger, and sends a fresh password via Telegram. */
@@ -37,7 +37,7 @@ export async function approveProfile(profileId: string): Promise<ApproveProfileR
     const admin = adminClient();
     const { data: profile, error: profileError } = await admin
       .from("profiles")
-      .select("id,email,full_name,status,user_id,kyc_level,telegram_id,credential_issue_id,banned_until,ban_permanent")
+      .select("id,email,full_name,status,user_id,kyc_level,telegram_id,credential_issue_id,banned_until,ban_permanent,source_metadata")
       .eq("id", profileId)
       .maybeSingle();
 
@@ -75,9 +75,12 @@ export async function approveProfile(profileId: string): Promise<ApproveProfileR
       .from("profiles")
       .update({
         status: "approved",
-        kyc_level: 0,
+        // The existing voyage_claim_telegram_delivery RPC requires kyc_level >= 1.
+        // Setting 0 here silently prevents credential delivery after approval.
+        kyc_level: 1,
         user_id: profile.id,
         email,
+        telegram_id: profile.telegram_id == null ? null : String(profile.telegram_id),
         temp_password: null,
         credential_issue_id: deliveryId,
       })
@@ -114,7 +117,29 @@ export async function approveProfile(profileId: string): Promise<ApproveProfileR
       fullName: profile.full_name,
     });
 
+    const sourceMetadata = profile.source_metadata && typeof profile.source_metadata === "object"
+      ? profile.source_metadata as Record<string, unknown>
+      : {};
+    const linkedApplicationIds = Array.from(new Set([
+      ...(typeof sourceMetadata.guest_application_id === "string" ? [sourceMetadata.guest_application_id] : []),
+      ...(Array.isArray(sourceMetadata.guest_application_ids)
+        ? sourceMetadata.guest_application_ids.filter((value): value is string => typeof value === "string")
+        : []),
+    ])).filter(isUuid);
+    let linkedApplicationWarning: string | null = null;
+    for (const guestApplicationId of linkedApplicationIds) {
+      const { error: linkedApplicationError } = await admin.from("guest_applications")
+        .update({ status: "approved" })
+        .eq("id", guestApplicationId)
+        .eq("telegram_id", String(profile.telegram_id ?? ""));
+      if (linkedApplicationError) {
+        console.error("[approveProfile] linked guest application status update failed", linkedApplicationError.code ?? "unknown");
+        linkedApplicationWarning = " One or more linked website application statuses could not be synchronized; check Admin Requests.";
+      }
+    }
+
     revalidatePath("/admin/face-control");
+    revalidatePath("/admin/requests");
     revalidatePath("/admin/database");
     revalidatePath(`/admin/database/${profile.id}`);
 
@@ -123,7 +148,10 @@ export async function approveProfile(profileId: string): Promise<ApproveProfileR
       email,
       userId: profile.id,
       notificationSent: delivery.sent,
-      ...(delivery.sent ? {} : { warning: `Profile approved, but credentials were not sent. ${delivery.error}` }),
+      ...(!delivery.sent ? {
+        warning: `Profile approved, but Telegram delivery failed. Use the credentials below to deliver access manually. ${delivery.error}${linkedApplicationWarning ?? ""}`,
+        manualCredentials: { login: email, password },
+      } : linkedApplicationWarning ? { warning: linkedApplicationWarning.trim() } : {}),
     };
   } catch (error) {
     if (error instanceof AuthorizationError) return { success: false, error: error.message };
@@ -185,7 +213,10 @@ export async function resendApprovedCredentials(profileId: string): Promise<Appr
       email,
       userId: profile.id,
       notificationSent: delivery.sent,
-      ...(delivery.sent ? {} : { warning: `The password was rotated but Telegram delivery failed. ${delivery.error}` }),
+      ...(!delivery.sent ? {
+        warning: `The password was rotated but Telegram delivery failed. Use the credentials below to deliver access manually. ${delivery.error}`,
+        manualCredentials: { login: email, password },
+      } : {}),
     };
   } catch (error) {
     if (error instanceof AuthorizationError) return { success: false, error: error.message };

@@ -33,6 +33,15 @@ export async function approveApplication(id: string): Promise<ActionResult> {
 export async function declineApplication(id: string): Promise<ActionResult> {
   const supabase = await createClient();
 
+  // Capture linked web lead metadata before the profile is removed from the queue.
+  const { data: profile, error: lookupError } = await supabase
+    .from("profiles")
+    .select("id,telegram_id,source_metadata")
+    .eq("id", id)
+    .maybeSingle();
+  if (lookupError) return { error: lookupError.message };
+  if (!profile) return { error: "Заявка не найдена, уже обработана или нет прав на изменение." };
+
   // Вариант по умолчанию — удаляем запись из очереди.
   const { error, count } = await supabase
     .from("profiles")
@@ -51,6 +60,22 @@ export async function declineApplication(id: string): Promise<ActionResult> {
   if (error) return { error: error.message };
   if (count === 0) {
     return { error: "Заявка не найдена, уже обработана или нет прав на изменение." };
+  }
+  const sourceMetadata = profile.source_metadata && typeof profile.source_metadata === "object"
+    ? profile.source_metadata as Record<string, unknown>
+    : {};
+  const linkedApplicationIds = Array.from(new Set([
+    ...(typeof sourceMetadata.guest_application_id === "string" ? [sourceMetadata.guest_application_id] : []),
+    ...(Array.isArray(sourceMetadata.guest_application_ids)
+      ? sourceMetadata.guest_application_ids.filter((value): value is string => typeof value === "string")
+      : []),
+  ])).filter((value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
+  for (const guestApplicationId of linkedApplicationIds) {
+    const { error: leadError } = await supabase.from("guest_applications")
+      .update({ status: "rejected" })
+      .eq("id", guestApplicationId)
+      .eq("telegram_id", String(profile.telegram_id ?? ""));
+    if (leadError) console.error("[Face Control] linked website application rejection sync failed", leadError.code ?? "unknown");
   }
   return { error: null };
 }

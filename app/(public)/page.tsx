@@ -26,11 +26,11 @@ const SERIF = "var(--font-cormorant), Georgia, serif";
  * Запись проходит только через Server Action: validation + Cloudflare Turnstile + rate limit.
  * Публичный INSERT через браузер закрывается миграцией join_turnstile_and_rate_limit. */
 
-type ApplyFields = { fullName: string; telegram: string; whatsapp: string; instagram: string; portfolio: string; about: string };
+type ApplyFields = { fullName: string; telegram: string; whatsapp: string; instagram: string; about: string };
 type ApplyField = keyof ApplyFields | "consent" | "captcha";
 type SubmitState = "idle" | "sending" | "sent" | "error";
 
-const EMPTY_APPLY: ApplyFields = { fullName: "", telegram: "", whatsapp: "", instagram: "", portfolio: "", about: "" };
+const EMPTY_APPLY: ApplyFields = { fullName: "", telegram: "", whatsapp: "", instagram: "", about: "" };
 const ABOUT_MAX = 1000;
 
 /** «@anna.k», «instagram.com/anna.k/», «https://www.instagram.com/anna.k?igsh=…» → «anna.k» */
@@ -61,18 +61,6 @@ function normalizeWhatsApp(raw: string): string | null | false {
   return value.startsWith("+") ? `+${digits}` : digits;
 }
 
-/** Ссылка на портфолио: '' — не указана, null — не похожа на ссылку */
-function portfolioUrl(raw: string): string | null {
-  const v = raw.trim();
-  if (!v) return "";
-  const url = /^https?:\/\//i.test(v) ? v : `https://${v}`;
-  try {
-    const u = new URL(url);
-    return u.hostname.includes(".") && !/\s/.test(url) && url.length <= 500 ? url : null;
-  } catch {
-    return null;
-  }
-}
 
 interface TrailParticle {
   id: number;
@@ -161,6 +149,7 @@ export default function HomePage() {
   const [applyErrors, setApplyErrors] = useState<Partial<Record<ApplyField, string>>>({});
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [alreadyReceived, setAlreadyReceived] = useState(false);
+  const [applicationId, setApplicationId] = useState<string | null>(null);
   const applySectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -227,13 +216,11 @@ export default function HomePage() {
       formNamePl: "Your name",
       formTelegram: "Telegram",
       formTelegramPl: "@username or t.me/username",
-      formTelegramHint: "Use a real Telegram account. Your login and password will be sent there.",
+      formTelegramHint: "Use your real Telegram username. After submitting, open our bot to link this application and receive its decision and access details.",
       formWhatsApp: "WhatsApp (optional)",
       formWhatsAppPl: "+1 555 123 4567",
       formInsta: "Instagram Profile",
       formInstaPl: "@username",
-      formPortfolio: "Portfolio / Snaps Link (optional)",
-      formPortfolioPl: "Google Drive / Dropbox",
       formStatement: "Statement",
       formStatementPl: "Briefly about your experience and why you want to join Voyage...",
       formConsent1: "I confirm that I am over 18 years old and agree to the ",
@@ -252,14 +239,15 @@ export default function HomePage() {
       errTelegram: "Enter a valid Telegram username or t.me link.",
       errWhatsApp: "Enter a valid WhatsApp number or leave this field blank.",
       errInsta: "Enter your Instagram — @username or a profile link.",
-      errPortfolio: "Paste a full link, e.g. https://drive.google.com/…",
       errConsent: "Please confirm you are over 18 and accept the Privacy Policy.",
       formError: "We couldn't send your application. Please check your connection and try again.",
       successEyebrow: "Application Received",
       successTitle: "Thank You",
-      successBody: "Your application has been received and passed to the club committee. We will contact you via the details you provided.",
-      successAlready: "Your application is already with the club committee. We will contact you via the details you provided.",
-      successContact: "We will reach you at"
+      successBody: "Your application is under review. You must open our Telegram bot to link this application and receive the decision and account access.",
+      successAlready: "Your application is already under review. Open our Telegram bot to link it and receive the decision and account access.",
+      successContact: "We will reach you at",
+      successTelegramButton: "Open Telegram bot",
+      successBotMissing: "Telegram bot link is not configured. Please contact support."
     },
     RU: {
       logo: "VOYAGE",
@@ -304,13 +292,11 @@ export default function HomePage() {
       formNamePl: "Ваше имя",
       formTelegram: "Telegram",
       formTelegramPl: "@username или t.me/username",
-      formTelegramHint: "Укажите реальный Telegram - на него придут ваши логин и пароль.",
+      formTelegramHint: "Укажите свой реальный Telegram. После отправки заявки откройте нашего бота, чтобы привязать заявку и получать решение и доступы.",
       formWhatsApp: "WhatsApp (необязательно)",
       formWhatsAppPl: "+7 999 123-45-67",
       formInsta: "Профиль Instagram",
       formInstaPl: "@username",
-      formPortfolio: "Портфолио / снепы (необязательно)",
-      formPortfolioPl: "Google Drive / Dropbox",
       formStatement: "О себе",
       formStatementPl: "Коротко о вашем опыте и почему вы хотите присоединиться к Voyage...",
       formConsent1: "Я подтверждаю, что мне больше 18 лет, и согласен(на) с ",
@@ -329,14 +315,15 @@ export default function HomePage() {
       errTelegram: "Укажите действующий Telegram (@username или ссылку t.me).",
       errWhatsApp: "Укажите корректный номер WhatsApp или оставьте поле пустым.",
       errInsta: "Укажите Instagram — @username или ссылку на профиль.",
-      errPortfolio: "Вставьте полную ссылку, например https://drive.google.com/…",
       errConsent: "Подтвердите, что вам больше 18 лет и вы согласны с Политикой конфиденциальности.",
       formError: "Не удалось отправить заявку. Проверьте подключение и попробуйте ещё раз.",
       successEyebrow: "Заявка получена",
       successTitle: "Благодарим вас",
-      successBody: "Ваша заявка принята и передана в комитет клуба. Мы свяжемся с вами по указанным контактам.",
-      successAlready: "Ваша заявка уже у комитета клуба. Мы свяжемся с вами по указанным контактам.",
-      successContact: "Мы напишем вам в"
+      successBody: "Заявка принята и находится на рассмотрении. Обязательно запустите нашего Telegram-бота, чтобы привязать заявку и получить решение и доступы.",
+      successAlready: "Ваша заявка уже находится на рассмотрении. Запустите нашего Telegram-бота, чтобы привязать её и получить решение и доступы.",
+      successContact: "Мы напишем вам в",
+      successTelegramButton: "Открыть Telegram-бота",
+      successBotMissing: "Ссылка на Telegram-бота не настроена. Обратитесь в поддержку."
     },
     ES: {
       logo: "VOYAGE",
@@ -381,13 +368,11 @@ export default function HomePage() {
       formNamePl: "Tu nombre",
       formTelegram: "Telegram",
       formTelegramPl: "@usuario o t.me/usuario",
-      formTelegramHint: "Indica tu Telegram real. Allí recibirás tu usuario y contraseña.",
+      formTelegramHint: "Indica tu usuario real de Telegram. Después de enviar la solicitud, abre nuestro bot para vincularla y recibir la decisión y los accesos.",
       formWhatsApp: "WhatsApp (opcional)",
       formWhatsAppPl: "+34 600 123 456",
       formInsta: "Perfil de Instagram",
       formInstaPl: "@usuario",
-      formPortfolio: "Enlace a portfolio / fotos (opcional)",
-      formPortfolioPl: "Google Drive / Dropbox",
       formStatement: "Sobre ti",
       formStatementPl: "Brevemente sobre tu experiencia...",
       formConsent1: "Confirmo que soy mayor de 18 años y acepto la ",
@@ -406,14 +391,15 @@ export default function HomePage() {
       errTelegram: "Indica un usuario de Telegram válido o un enlace t.me.",
       errWhatsApp: "Indica un número de WhatsApp válido o deja el campo vacío.",
       errInsta: "Indica tu Instagram: @usuario o el enlace a tu perfil.",
-      errPortfolio: "Pega un enlace completo, por ejemplo https://drive.google.com/…",
       errConsent: "Confirma que eres mayor de 18 años y aceptas la Política de Privacidad.",
       formError: "No pudimos enviar tu solicitud. Revisa tu conexión e inténtalo de nuevo.",
       successEyebrow: "Solicitud Recibida",
       successTitle: "Gracias",
-      successBody: "Tu solicitud ha sido aceptada y enviada al comité del club. Te contactaremos a través de los datos indicados.",
-      successAlready: "Tu solicitud ya está con el comité del club. Te contactaremos a través de los datos indicados.",
-      successContact: "Te escribiremos a"
+      successBody: "Tu solicitud está en revisión. Abre nuestro bot de Telegram para vincularla y recibir la decisión y los datos de acceso.",
+      successAlready: "Tu solicitud ya está en revisión. Abre nuestro bot de Telegram para vincularla y recibir la decisión y los datos de acceso.",
+      successContact: "Te escribiremos a",
+      successTelegramButton: "Abrir bot de Telegram",
+      successBotMissing: "El enlace del bot de Telegram no está configurado. Contacta con soporte."
     },
     PT: {
       logo: "VOYAGE",
@@ -458,13 +444,11 @@ export default function HomePage() {
       formNamePl: "Seu nome",
       formTelegram: "Telegram",
       formTelegramPl: "@usuario ou t.me/usuario",
-      formTelegramHint: "Informe seu Telegram real. Seu login e senha serão enviados por lá.",
+      formTelegramHint: "Informe seu usuário real do Telegram. Após enviar a inscrição, abra nosso bot para vinculá-la e receber a decisão e os acessos.",
       formWhatsApp: "WhatsApp (opcional)",
       formWhatsAppPl: "+55 11 91234-5678",
       formInsta: "Perfil do Instagram",
       formInstaPl: "@usuario",
-      formPortfolio: "Portfólio / link de fotos (opcional)",
-      formPortfolioPl: "Google Drive / Dropbox",
       formStatement: "Sobre você",
       formStatementPl: "Brevemente sobre a sua experiência...",
       formConsent1: "Confirmo que sou maior de 18 anos e concordo com a ",
@@ -483,18 +467,23 @@ export default function HomePage() {
       errTelegram: "Informe um usuário do Telegram válido ou link t.me.",
       errWhatsApp: "Informe um número válido do WhatsApp ou deixe o campo vazio.",
       errInsta: "Informe seu Instagram — @usuario ou o link do perfil.",
-      errPortfolio: "Cole um link completo, por exemplo https://drive.google.com/…",
       errConsent: "Confirme que você tem mais de 18 anos e aceita a Política de Privacidade.",
       formError: "Não foi possível enviar sua inscrição. Verifique sua conexão e tente novamente.",
       successEyebrow: "Inscrição Recebida",
       successTitle: "Obrigado",
-      successBody: "Sua inscrição foi aceita e encaminhada ao comitê do clube. Entraremos em contato pelos contatos informados.",
-      successAlready: "Sua inscrição já está com o comitê do clube. Entraremos em contato pelos contatos informados.",
-      successContact: "Vamos falar com você em"
+      successBody: "Sua inscrição está em análise. Abra nosso bot do Telegram para vinculá-la e receber a decisão e os dados de acesso.",
+      successAlready: "Sua inscrição já está em análise. Abra nosso bot do Telegram para vinculá-la e receber a decisão e os dados de acesso.",
+      successContact: "Vamos falar com você em",
+      successTelegramButton: "Abrir bot do Telegram",
+      successBotMissing: "O link do bot do Telegram não está configurado. Entre em contato com o suporte."
     }
   };
   // неизвестный язык (или в нижнем регистре) → английский, а не падение страницы
   const t = translations[String(lang).toUpperCase() as keyof typeof translations] ?? translations.EN;
+  const botUsername = (process.env.NEXT_PUBLIC_BOT_USERNAME ?? "").trim().replace(/^@/, "");
+  const telegramStartUrl = applicationId && /^[a-zA-Z][a-zA-Z0-9_]{4,31}$/.test(botUsername)
+    ? `https://t.me/${botUsername}?start=app_${applicationId}`
+    : null;
 
   const scrollToDestinations = () => {
     document.getElementById("destinations")?.scrollIntoView({ behavior: "smooth" });
@@ -513,7 +502,6 @@ export default function HomePage() {
     if (!normalizeTelegram(apply.telegram)) errors.telegram = t.errTelegram;
     if (apply.whatsapp.trim() && normalizeWhatsApp(apply.whatsapp) === false) errors.whatsapp = t.errWhatsApp;
     if (!instagramHandle(apply.instagram)) errors.instagram = t.errInsta;
-    if (portfolioUrl(apply.portfolio) === null) errors.portfolio = t.errPortfolio;
     if (!consent) errors.consent = t.errConsent;
     if (!captchaToken) errors.captcha = t.errCaptcha;
     return errors;
@@ -525,21 +513,22 @@ export default function HomePage() {
 
     const errors = validateApply();
     setApplyErrors(errors);
-    const firstInvalid = (["fullName", "telegram", "whatsapp", "instagram", "portfolio", "consent", "captcha"] as ApplyField[]).find((k) => errors[k]);
+    const firstInvalid = (["fullName", "telegram", "whatsapp", "instagram", "consent", "captcha"] as ApplyField[]).find((k) => errors[k]);
     if (firstInvalid) {
       document.getElementById(`apply-${firstInvalid}`)?.focus();
       return;
     }
 
-    const showSuccess = (already: boolean) => {
+    const showSuccess = (already: boolean, nextApplicationId: string | null = null) => {
       setAlreadyReceived(already);
+      setApplicationId(nextApplicationId);
       setSubmitState("sent");
       requestAnimationFrame(() => applySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     };
 
     // бот заполнил скрытое поле — вежливо «принимаем», ничего не сохраняя
     if (honeypot) {
-      showSuccess(false);
+      showSuccess(false, null);
       return;
     }
 
@@ -558,7 +547,6 @@ export default function HomePage() {
         telegram: normalizeTelegram(apply.telegram) ?? apply.telegram,
         whatsapp: normalizedWhatsApp,
         instagram: `@${instagramHandle(apply.instagram)}`,
-        portfolioUrl: portfolioUrl(apply.portfolio) || null,
         about: apply.about,
         consent: true,
         lang: String(lang).toLowerCase(),
@@ -575,8 +563,6 @@ export default function HomePage() {
           const message = result.reason === "rate_limited" ? t.rateLimited :
             result.reason === "captcha_unavailable" || result.reason === "security_unavailable" ? t.captchaUnavailable : t.errCaptcha;
           setApplyErrors((prev) => ({ ...prev, captcha: message }));
-          setCaptchaToken("");
-          setCaptchaResetVersion((value) => value + 1);
           setSubmitState("idle");
         } else {
           setSubmitState("error");
@@ -585,7 +571,7 @@ export default function HomePage() {
       }
       setCaptchaToken("");
       setCaptchaResetVersion((value) => value + 1);
-      showSuccess(result.duplicate);
+      showSuccess(result.duplicate, result.applicationId);
     } catch (err) {
       console.error("[Apply] Insert exception:", err);
       // A verification token may already have been consumed by Siteverify.
@@ -1024,6 +1010,18 @@ export default function HomePage() {
                   {t.successContact} <span className="normal-case tracking-normal text-amber-200/80">{apply.telegram.trim() || apply.whatsapp.trim()}</span>
                 </p>
               )}
+              {telegramStartUrl ? (
+                <a
+                  href={telegramStartUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-8 inline-flex items-center justify-center gap-2 rounded-full border border-amber-200/30 bg-amber-200/[0.08] px-6 py-3 text-xs font-medium uppercase tracking-[0.18em] text-amber-100 transition-colors hover:border-amber-200/60 hover:bg-amber-200/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/50"
+                >
+                  {t.successTelegramButton} <ArrowRight size={14} />
+                </a>
+              ) : applicationId ? (
+                <p role="alert" className="mt-6 text-xs text-amber-100/80">{t.successBotMissing}</p>
+              ) : null}
             </motion.div>
           ) : (
           <form className="space-y-10" onSubmit={handleApply} noValidate>
@@ -1131,30 +1129,6 @@ export default function HomePage() {
                 {fieldError("instagram")}
               </div>
 
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              <div className="space-y-3 relative group">
-                <label htmlFor="apply-portfolio" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
-                  {t.formPortfolio}
-                </label>
-                <input
-                  id="apply-portfolio"
-                  type="url"
-                  inputMode="url"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  maxLength={500}
-                  value={apply.portfolio}
-                  onChange={(e) => setField("portfolio", e.target.value)}
-                  disabled={sending}
-                  aria-invalid={!!applyErrors.portfolio}
-                  aria-describedby={applyErrors.portfolio ? "apply-portfolio-error" : undefined}
-                  className={fieldClass("portfolio")}
-                  placeholder={t.formPortfolioPl}
-                />
-                {fieldError("portfolio")}
-              </div>
             </div>
 
             <div className="space-y-3 relative group">

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Cormorant_Garamond } from "next/font/google";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2, Copy, Check, KeyRound } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/app/context/AuthContext";
 import FaceControlList, { type Application } from "./FaceControlList";
@@ -82,6 +82,8 @@ export default function FaceControlPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [manualCredentials, setManualCredentials] = useState<{ login: string; password: string } | null>(null);
+  const [credentialsCopied, setCredentialsCopied] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,10 +125,13 @@ export default function FaceControlPage() {
   const moderate = useCallback(
     async (app: Application, action: "approve" | "decline") => {
       setNotice(null);
+      setManualCredentials(null);
+      setCredentialsCopied(false);
       if (action === "approve") {
         const result = await approveProfile(app.id);
         if (!result.success) throw new Error(result.error);
         if (result.warning) setNotice(result.warning);
+        if (result.manualCredentials) setManualCredentials(result.manualCredentials);
         setApplications((prev) => prev.filter((item) => item.id !== app.id));
         return { ok: true, warning: result.warning };
       }
@@ -164,6 +169,31 @@ export default function FaceControlPage() {
         <div role="status" className="mb-5 rounded-xl border border-amber-200/20 bg-amber-200/[0.05] px-4 py-3 text-sm text-amber-100/90">
           {notice}
         </div>
+      )}
+      {manualCredentials && (
+        <section role="alert" className="mb-6 rounded-2xl border border-amber-300/35 bg-amber-950/25 p-5 shadow-[0_0_35px_rgba(251,191,36,0.06)]">
+          <div className="mb-2 flex items-center gap-2 text-amber-100">
+            <KeyRound size={17} />
+            <h2 className="text-sm font-semibold tracking-wide">Telegram-доставка не удалась - передайте доступы вручную</h2>
+          </div>
+          <p className="mb-4 text-xs leading-5 text-amber-100/70">Пароль уже установлен в Supabase Auth. Передайте эти данные пользователю по проверенному каналу, а не публикуйте их в общем чате.</p>
+          <dl className="space-y-2">
+            <div className="flex items-center gap-3 rounded-lg border border-amber-200/15 bg-zinc-950/60 px-3 py-2">
+              <dt className="w-20 shrink-0 text-xs uppercase tracking-wider text-zinc-500">Логин</dt>
+              <dd className="min-w-0 flex-1 break-all font-mono text-sm text-zinc-100">{manualCredentials.login}</dd>
+              <button type="button" onClick={async () => { await navigator.clipboard.writeText(manualCredentials.login); setCredentialsCopied(false); }} className="rounded-md p-2 text-zinc-400 transition-colors hover:text-amber-200" aria-label="Скопировать логин"><Copy size={14} /></button>
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border border-amber-200/15 bg-zinc-950/60 px-3 py-2">
+              <dt className="w-20 shrink-0 text-xs uppercase tracking-wider text-zinc-500">Пароль</dt>
+              <dd className="min-w-0 flex-1 break-all font-mono text-sm text-zinc-100">{manualCredentials.password}</dd>
+              <button type="button" onClick={async () => { await navigator.clipboard.writeText(manualCredentials.password); setCredentialsCopied(false); }} className="rounded-md p-2 text-zinc-400 transition-colors hover:text-amber-200" aria-label="Скопировать пароль"><Copy size={14} /></button>
+            </div>
+          </dl>
+          <button type="button" onClick={async () => { await navigator.clipboard.writeText(`Login: ${manualCredentials.login}\nPassword: ${manualCredentials.password}`); setCredentialsCopied(true); }} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-200/25 px-3 py-2 text-xs text-amber-100 transition-colors hover:bg-amber-200/10">
+            {credentialsCopied ? <Check size={14} /> : <Copy size={14} />}
+            {credentialsCopied ? "Скопировано" : "Скопировать оба поля"}
+          </button>
+        </section>
       )}
 
       {loading ? (
