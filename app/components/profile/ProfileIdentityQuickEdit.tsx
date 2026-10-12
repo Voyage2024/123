@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Camera, Check, Loader2, Pencil, X } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
@@ -9,37 +9,37 @@ import { supabase } from "@/lib/supabase";
 type Copy = {
   edit: string; title: string; name: string; photo: string; choosePhoto: string;
   save: string; cancel: string; required: string; unsupported: string;
-  tooLarge: string; saveFailed: string; saved: string; settingsHint: string;
+  tooLarge: string; saveFailed: string; saved: string; settingsHint: string; fileHint: string;
 };
 
 const T: Record<Lang, Copy> = {
   EN: {
-    edit: "Edit name & photo", title: "Identity settings", name: "Full name",
+    edit: "Profile settings", title: "Identity settings", name: "Full name",
     photo: "Profile photo", choosePhoto: "Choose photo", save: "Save changes", cancel: "Cancel",
     required: "Please enter your full name.", unsupported: "Use a JPG, PNG or WebP image.",
     tooLarge: "The image must be 5 MB or smaller.", saveFailed: "Changes could not be saved. Please try again.",
-    saved: "Profile identity updated.", settingsHint: "You can change your name and photo here or in Settings.",
+    saved: "Profile identity updated.", settingsHint: "Change your name or photo in one place.", fileHint: "JPG, PNG or WebP · 5 MB maximum",
   },
   RU: {
-    edit: "Изменить имя и фото", title: "Настройки данных", name: "Имя и фамилия",
+    edit: "Настройки профиля", title: "Настройки данных", name: "Имя и фамилия",
     photo: "Фото профиля", choosePhoto: "Выбрать фото", save: "Сохранить изменения", cancel: "Отмена",
     required: "Укажите имя и фамилию.", unsupported: "Используйте JPG, PNG или WebP.",
     tooLarge: "Размер изображения не должен превышать 5 МБ.", saveFailed: "Не удалось сохранить изменения. Попробуйте ещё раз.",
-    saved: "Данные профиля обновлены.", settingsHint: "Имя и фото можно изменить здесь или в настройках.",
+    saved: "Данные профиля обновлены.", settingsHint: "Меняйте имя и фото в одном месте.", fileHint: "JPG, PNG или WebP · максимум 5 МБ",
   },
   ES: {
-    edit: "Editar nombre y foto", title: "Datos de identidad", name: "Nombre completo",
+    edit: "Ajustes del perfil", title: "Datos de identidad", name: "Nombre completo",
     photo: "Foto de perfil", choosePhoto: "Elegir foto", save: "Guardar cambios", cancel: "Cancelar",
     required: "Escribe tu nombre completo.", unsupported: "Usa una imagen JPG, PNG o WebP.",
     tooLarge: "La imagen debe pesar 5 MB o menos.", saveFailed: "No se pudieron guardar los cambios. Inténtalo de nuevo.",
-    saved: "Se actualizaron los datos del perfil.", settingsHint: "Puedes cambiar tu nombre y foto aquí o en Ajustes.",
+    saved: "Se actualizaron los datos del perfil.", settingsHint: "Cambia tu nombre y foto desde aquí.", fileHint: "JPG, PNG o WebP · máximo 5 MB",
   },
   PT: {
-    edit: "Editar nome e foto", title: "Dados de identidade", name: "Nome completo",
+    edit: "Configurações do perfil", title: "Dados de identidade", name: "Nome completo",
     photo: "Foto do perfil", choosePhoto: "Escolher foto", save: "Salvar alterações", cancel: "Cancelar",
     required: "Informe seu nome completo.", unsupported: "Use uma imagem JPG, PNG ou WebP.",
     tooLarge: "A imagem deve ter no máximo 5 MB.", saveFailed: "Não foi possível salvar. Tente novamente.",
-    saved: "Os dados do perfil foram atualizados.", settingsHint: "Você pode alterar seu nome e foto aqui ou em Configurações.",
+    saved: "Os dados do perfil foram atualizados.", settingsHint: "Altere seu nome e sua foto aqui.", fileHint: "JPG, PNG ou WebP · máximo 5 MB",
   },
 };
 
@@ -63,10 +63,17 @@ export default function ProfileIdentityQuickEdit({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(currentName);
   const [file, setFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [busy, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (filePreview) URL.revokeObjectURL(filePreview);
+    };
+  }, [filePreview]);
 
   const close = () => {
     if (busy) return;
@@ -162,11 +169,28 @@ export default function ProfileIdentityQuickEdit({
             <label className="mb-2 block text-xs text-zinc-300" htmlFor="identity-full-name">{t.name}</label>
             <input id="identity-full-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} autoComplete="name" className="mb-5 w-full rounded-xl border border-zinc-700/50 bg-zinc-900/60 px-3.5 py-3 text-sm text-zinc-100 outline-none focus:border-amber-200/40" />
             <p className="mb-2 text-xs text-zinc-400">{t.photo}</p>
-            <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-            <button type="button" onClick={() => inputRef.current?.click()} className="mb-5 flex w-full items-center gap-3 rounded-xl border border-zinc-800/60 bg-zinc-900/45 px-3.5 py-3 text-left text-sm text-zinc-300 transition hover:border-amber-200/25">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 text-amber-200/80"><Camera size={15} /></span>
-              <span className="min-w-0 flex-1 truncate">{file?.name ?? t.choosePhoto}</span>
-            </button>
+            <div className="mb-5 flex items-center gap-4 rounded-xl border border-zinc-800/70 bg-zinc-900/40 p-3.5">
+              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full border border-amber-200/25 bg-zinc-900">
+                {(filePreview || user?.avatarUrl) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={filePreview || user?.avatarUrl || ""} alt={t.photo} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-amber-100/50"><Camera size={20} /></span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs text-zinc-300">{file?.name ?? t.photo}</p>
+                <p className="mt-1 text-[10px] leading-4 text-zinc-600">{t.fileHint}</p>
+                <button type="button" onClick={() => inputRef.current?.click()} className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-amber-200/25 bg-amber-200/[0.06] px-3 py-1.5 text-[11px] font-medium text-amber-100 transition hover:border-amber-200/45 hover:bg-amber-200/10">
+                  <Camera size={12} /> {t.choosePhoto}
+                </button>
+              </div>
+            </div>
+            <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => {
+              const nextFile = event.target.files?.[0] ?? null;
+              setFile(nextFile);
+              setFilePreview(nextFile ? URL.createObjectURL(nextFile) : null);
+            }} />
             {error && <p role="alert" className="mb-3 rounded-lg border border-red-900/40 bg-red-950/20 px-3 py-2 text-xs text-red-200/90">{error}</p>}
             {success && <p role="status" className="mb-3 flex items-center gap-2 text-xs text-emerald-200"><Check size={14} />{t.saved}</p>}
             </div>

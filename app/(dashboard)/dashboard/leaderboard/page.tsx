@@ -204,7 +204,7 @@ export default function LeaderboardPage() {
 
   if (error && !data) {
     return (
-      <div className="flex min-h-screen items-start justify-center bg-zinc-950 px-4 py-24">
+      <div className="flex min-h-screen items-start justify-center bg-zinc-950 px-4 pt-2 pb-8">
         <div role="alert" className="w-full max-w-lg rounded-2xl border border-red-500/25 bg-red-950/20 px-6 py-5">
           <p className="flex items-center gap-2.5 text-sm font-medium text-red-200">
             <AlertTriangle size={17} strokeWidth={1.5} aria-hidden />
@@ -226,7 +226,7 @@ export default function LeaderboardPage() {
 
   if (!data) {
     return (
-      <div className="flex min-h-screen items-start justify-center bg-zinc-950 px-4 py-32 text-sm text-zinc-500">
+      <div className="flex min-h-screen items-start justify-center bg-zinc-950 px-4 pt-2 pb-8 text-sm text-zinc-500">
         <span className="inline-flex items-center gap-2.5">
           <Loader2 size={17} strokeWidth={1.5} className="animate-spin" aria-hidden />
           {text.loading}

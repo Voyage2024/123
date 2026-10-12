@@ -407,7 +407,7 @@ function ApplicationsDashboard() {
         <div className="absolute bottom-0 right-0 h-[360px] w-[360px] rounded-full bg-amber-100/[0.03] blur-[100px]" />
       </div>
 
-      <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:py-12">
+      <div className="relative mx-auto max-w-6xl px-4 pb-8 pt-2 sm:px-6 lg:pb-12 lg:pt-2">
         <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.28em] text-amber-200/70">

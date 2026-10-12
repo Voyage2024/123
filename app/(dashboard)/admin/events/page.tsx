@@ -421,7 +421,7 @@ export default function AdminEventsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pb-16 pt-6 sm:px-6">
+    <div className="mx-auto w-full max-w-5xl px-4 pb-16 pt-2 sm:px-6">
       {/* ───────────── Header ───────────── */}
       <section className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-6 sm:p-8">
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-amber-200/10 blur-3xl" />

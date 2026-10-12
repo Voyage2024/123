@@ -1589,7 +1589,7 @@ export default function InviteClient({ data = DEMO_INVITE_DATA, onIssueKey = dem
     <div className="min-h-screen bg-zinc-950 text-zinc-300 antialiased">
       <style>{INVITE_CSS}</style>
 
-      <div className="mx-auto max-w-6xl space-y-16 px-4 py-10 sm:px-8 sm:py-14">
+      <div className="mx-auto max-w-6xl space-y-16 px-4 pb-10 pt-2 sm:px-8 sm:pb-14 sm:pt-2">
         {/* ── шапка ── */}
         <header className="max-w-3xl">
           <Eyebrow>Voyage · Patronage</Eyebrow>

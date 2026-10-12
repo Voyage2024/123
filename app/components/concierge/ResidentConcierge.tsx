@@ -126,7 +126,7 @@ export default function ResidentConcierge() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-6xl px-4 pb-8 pt-2 sm:px-6 lg:px-8">
       <motion.header initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className="mb-8">
         <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-200/20 bg-amber-200/[0.06] text-amber-200"><ConciergeBell size={21}/></div>
         <h1 className="text-3xl font-semibold tracking-tight text-zinc-100">{t.title}</h1>

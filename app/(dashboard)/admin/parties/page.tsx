@@ -582,7 +582,7 @@ export default function PartiesAdminPage() {
     'w-full rounded-xl border bg-black/40 px-4 py-3 text-sm text-neutral-100 placeholder:text-neutral-600 outline-none transition focus:border-amber-200/60 focus:ring-1 focus:ring-amber-200/30';
 
   return (
-    <div className="min-h-screen bg-neutral-950 px-4 py-8 text-neutral-200 sm:px-8">
+    <div className="min-h-screen bg-neutral-950 px-4 pb-8 pt-2 text-neutral-200 sm:px-8">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -644,7 +644,7 @@ export default function PartiesAdminPage() {
 
         {/* List */}
         {loading ? (
-          <div className="flex items-center justify-center gap-3 py-24 text-neutral-500">
+          <div className="flex items-center justify-center gap-3 py-8 text-neutral-500">
             <Loader2 className="h-5 w-5 animate-spin text-amber-200" />
             {t.loading}
           </div>

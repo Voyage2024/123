@@ -17,19 +17,20 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext"; // <-- ДОБАВИЛИ ИМПОРТ ГЛОБАЛЬНОГО ЯЗЫКА
 import { submitGuestApplication } from "@/app/actions/guest-applications";
+import TurnstileWidget from "@/app/components/security/TurnstileWidget";
 
 // next/font переименовывает шрифт, поэтому берём его через CSS-переменную
 const SERIF = "var(--font-cormorant), Georgia, serif";
 
 /* ─── Форма «Запросить приглашение» → public.guest_applications ───
- * Пишет анонимно (RLS: insert для всех, читать могут только owner/admin).
- * Миграция: supabase/migrations/20261011_guest_applications.sql */
+ * Запись проходит только через Server Action: validation + Cloudflare Turnstile + rate limit.
+ * Публичный INSERT через браузер закрывается миграцией join_turnstile_and_rate_limit. */
 
-type ApplyFields = { fullName: string; contact: string; instagram: string; portfolio: string; about: string };
-type ApplyField = keyof ApplyFields | "consent";
+type ApplyFields = { fullName: string; telegram: string; whatsapp: string; instagram: string; portfolio: string; about: string };
+type ApplyField = keyof ApplyFields | "consent" | "captcha";
 type SubmitState = "idle" | "sending" | "sent" | "error";
 
-const EMPTY_APPLY: ApplyFields = { fullName: "", contact: "", instagram: "", portfolio: "", about: "" };
+const EMPTY_APPLY: ApplyFields = { fullName: "", telegram: "", whatsapp: "", instagram: "", portfolio: "", about: "" };
 const ABOUT_MAX = 1000;
 
 /** «@anna.k», «instagram.com/anna.k/», «https://www.instagram.com/anna.k?igsh=…» → «anna.k» */
@@ -43,11 +44,21 @@ function instagramHandle(raw: string): string | null {
   return /^[a-z0-9._]{1,30}$/.test(handle) ? handle : null;
 }
 
-/** Telegram (@username, t.me/…) или телефон WhatsApp (не меньше 7 цифр) */
-function isContact(raw: string) {
-  const v = raw.trim();
-  if ((v.match(/\d/g) ?? []).length >= 7) return true;
-  return /^(@|(https?:\/\/)?t\.me\/)?[a-z0-9_]{4,32}$/i.test(v);
+/** A reachable Telegram username or t.me profile URL. */
+function normalizeTelegram(raw: string): string | null {
+  const value = raw.trim();
+  const linked = value.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/([a-z][a-z0-9_]{4,31})\/?$/i);
+  const handle = (linked?.[1] ?? value.replace(/^@/, "")).trim();
+  return /^[a-z][a-z0-9_]{4,31}$/i.test(handle) ? `@${handle}` : null;
+}
+
+/** WhatsApp is optional, but if filled must look like a phone number. */
+function normalizeWhatsApp(raw: string): string | null | false {
+  const value = raw.trim();
+  if (!value) return null;
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) return false;
+  return value.startsWith("+") ? `+${digits}` : digits;
 }
 
 /** Ссылка на портфолио: '' — не указана, null — не похожа на ссылку */
@@ -145,6 +156,8 @@ export default function HomePage() {
   const [apply, setApply] = useState<ApplyFields>(EMPTY_APPLY);
   const [consent, setConsent] = useState(false);
   const [honeypot, setHoneypot] = useState(""); // скрытое поле: его заполняют только боты
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaResetVersion, setCaptchaResetVersion] = useState(0);
   const [applyErrors, setApplyErrors] = useState<Partial<Record<ApplyField, string>>>({});
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [alreadyReceived, setAlreadyReceived] = useState(false);
@@ -212,11 +225,14 @@ export default function HomePage() {
       formDesc: "Membership in VOYAGE PRIVATE CLUB is strictly limited. We review each application individually. Please fill out the form below to initiate the verification process.",
       formName: "Full Name",
       formNamePl: "Your name",
-      formContact: "Telegram / WhatsApp",
-      formContactPl: "+1...",
+      formTelegram: "Telegram",
+      formTelegramPl: "@username or t.me/username",
+      formTelegramHint: "Use a real Telegram account. Your login and password will be sent there.",
+      formWhatsApp: "WhatsApp (optional)",
+      formWhatsAppPl: "+1 555 123 4567",
       formInsta: "Instagram Profile",
       formInstaPl: "@username",
-      formPortfolio: "Portfolio / Snaps Link",
+      formPortfolio: "Portfolio / Snaps Link (optional)",
       formPortfolioPl: "Google Drive / Dropbox",
       formStatement: "Statement",
       formStatementPl: "Briefly about your experience and why you want to join Voyage...",
@@ -226,8 +242,15 @@ export default function HomePage() {
       formSubmit: "Submit Application",
       formSending: "Sending…",
       formRequiredHint: "Required",
+      captchaTitle: "Security verification",
+      captchaHint: "Complete the check to send your request.",
+      captchaLoading: "Loading verification…",
+      captchaUnavailable: "Security verification is unavailable. Please try again later.",
+      errCaptcha: "Complete the security check before submitting.",
+      rateLimited: "Too many attempts from this network. Please wait and try again.",
       errName: "Please enter your full name.",
-      errContact: "Leave your Telegram (@username) or WhatsApp number.",
+      errTelegram: "Enter a valid Telegram username or t.me link.",
+      errWhatsApp: "Enter a valid WhatsApp number or leave this field blank.",
       errInsta: "Enter your Instagram — @username or a profile link.",
       errPortfolio: "Paste a full link, e.g. https://drive.google.com/…",
       errConsent: "Please confirm you are over 18 and accept the Privacy Policy.",
@@ -279,11 +302,14 @@ export default function HomePage() {
       formDesc: "Членство в VOYAGE PRIVATE CLUB строго лимитировано. Мы рассматриваем каждую заявку индивидуально. Пожалуйста, заполните форму ниже для инициации процесса верификации.",
       formName: "Имя и Фамилия",
       formNamePl: "Ваше имя",
-      formContact: "Telegram / WhatsApp",
-      formContactPl: "+7...",
+      formTelegram: "Telegram",
+      formTelegramPl: "@username или t.me/username",
+      formTelegramHint: "Укажите реальный Telegram - на него придут ваши логин и пароль.",
+      formWhatsApp: "WhatsApp (необязательно)",
+      formWhatsAppPl: "+7 999 123-45-67",
       formInsta: "Профиль Instagram",
       formInstaPl: "@username",
-      formPortfolio: "Ссылка на портфолио / Снепы",
+      formPortfolio: "Портфолио / снепы (необязательно)",
       formPortfolioPl: "Google Drive / Dropbox",
       formStatement: "О себе",
       formStatementPl: "Коротко о вашем опыте и почему вы хотите присоединиться к Voyage...",
@@ -293,8 +319,15 @@ export default function HomePage() {
       formSubmit: "Отправить заявку",
       formSending: "Отправляем…",
       formRequiredHint: "Обязательное поле",
+      captchaTitle: "Проверка безопасности",
+      captchaHint: "Пройдите проверку, чтобы отправить заявку.",
+      captchaLoading: "Загружаем проверку…",
+      captchaUnavailable: "Проверка безопасности временно недоступна. Попробуйте позже.",
+      errCaptcha: "Перед отправкой пройдите проверку безопасности.",
+      rateLimited: "Слишком много попыток из этой сети. Подождите и попробуйте снова.",
       errName: "Укажите имя и фамилию.",
-      errContact: "Оставьте Telegram (@username) или номер WhatsApp.",
+      errTelegram: "Укажите действующий Telegram (@username или ссылку t.me).",
+      errWhatsApp: "Укажите корректный номер WhatsApp или оставьте поле пустым.",
       errInsta: "Укажите Instagram — @username или ссылку на профиль.",
       errPortfolio: "Вставьте полную ссылку, например https://drive.google.com/…",
       errConsent: "Подтвердите, что вам больше 18 лет и вы согласны с Политикой конфиденциальности.",
@@ -346,11 +379,14 @@ export default function HomePage() {
       formDesc: "La membresía en VOYAGE PRIVATE CLUB es estrictamente limitada. Revisamos cada solicitud individualmente.",
       formName: "Nombre Completo",
       formNamePl: "Tu nombre",
-      formContact: "Telegram / WhatsApp",
-      formContactPl: "+1...",
+      formTelegram: "Telegram",
+      formTelegramPl: "@usuario o t.me/usuario",
+      formTelegramHint: "Indica tu Telegram real. Allí recibirás tu usuario y contraseña.",
+      formWhatsApp: "WhatsApp (opcional)",
+      formWhatsAppPl: "+34 600 123 456",
       formInsta: "Perfil de Instagram",
       formInstaPl: "@usuario",
-      formPortfolio: "Enlace al Portafolio / Snaps",
+      formPortfolio: "Enlace a portfolio / fotos (opcional)",
       formPortfolioPl: "Google Drive / Dropbox",
       formStatement: "Sobre ti",
       formStatementPl: "Brevemente sobre tu experiencia...",
@@ -360,8 +396,15 @@ export default function HomePage() {
       formSubmit: "Enviar Solicitud",
       formSending: "Enviando…",
       formRequiredHint: "Campo obligatorio",
+      captchaTitle: "Verificación de seguridad",
+      captchaHint: "Completa la verificación para enviar la solicitud.",
+      captchaLoading: "Cargando verificación…",
+      captchaUnavailable: "La verificación no está disponible temporalmente. Inténtalo más tarde.",
+      errCaptcha: "Completa la verificación de seguridad antes de enviar.",
+      rateLimited: "Demasiados intentos desde esta red. Espera e inténtalo de nuevo.",
       errName: "Indica tu nombre completo.",
-      errContact: "Deja tu Telegram (@usuario) o tu número de WhatsApp.",
+      errTelegram: "Indica un usuario de Telegram válido o un enlace t.me.",
+      errWhatsApp: "Indica un número de WhatsApp válido o deja el campo vacío.",
       errInsta: "Indica tu Instagram: @usuario o el enlace a tu perfil.",
       errPortfolio: "Pega un enlace completo, por ejemplo https://drive.google.com/…",
       errConsent: "Confirma que eres mayor de 18 años y aceptas la Política de Privacidad.",
@@ -413,11 +456,14 @@ export default function HomePage() {
       formDesc: "A adesão ao VOYAGE PRIVATE CLUB é estritamente limitada. Analisamos cada candidatura individualmente.",
       formName: "Nome Completo",
       formNamePl: "Seu nome",
-      formContact: "Telegram / WhatsApp",
-      formContactPl: "+1...",
+      formTelegram: "Telegram",
+      formTelegramPl: "@usuario ou t.me/usuario",
+      formTelegramHint: "Informe seu Telegram real. Seu login e senha serão enviados por lá.",
+      formWhatsApp: "WhatsApp (opcional)",
+      formWhatsAppPl: "+55 11 91234-5678",
       formInsta: "Perfil do Instagram",
       formInstaPl: "@usuario",
-      formPortfolio: "Link para Portfólio / Snaps",
+      formPortfolio: "Portfólio / link de fotos (opcional)",
       formPortfolioPl: "Google Drive / Dropbox",
       formStatement: "Sobre você",
       formStatementPl: "Brevemente sobre a sua experiência...",
@@ -427,8 +473,15 @@ export default function HomePage() {
       formSubmit: "Enviar Inscrição",
       formSending: "Enviando…",
       formRequiredHint: "Campo obrigatório",
+      captchaTitle: "Verificação de segurança",
+      captchaHint: "Conclua a verificação para enviar a solicitação.",
+      captchaLoading: "Carregando verificação…",
+      captchaUnavailable: "A verificação está temporariamente indisponível. Tente novamente mais tarde.",
+      errCaptcha: "Conclua a verificação de segurança antes de enviar.",
+      rateLimited: "Muitas tentativas nesta rede. Aguarde e tente novamente.",
       errName: "Informe seu nome completo.",
-      errContact: "Deixe seu Telegram (@usuario) ou número de WhatsApp.",
+      errTelegram: "Informe um usuário do Telegram válido ou link t.me.",
+      errWhatsApp: "Informe um número válido do WhatsApp ou deixe o campo vazio.",
       errInsta: "Informe seu Instagram — @usuario ou o link do perfil.",
       errPortfolio: "Cole um link completo, por exemplo https://drive.google.com/…",
       errConsent: "Confirme que você tem mais de 18 anos e aceita a Política de Privacidade.",
@@ -457,10 +510,12 @@ export default function HomePage() {
   const validateApply = () => {
     const errors: Partial<Record<ApplyField, string>> = {};
     if (apply.fullName.trim().replace(/\s+/g, " ").length < 2) errors.fullName = t.errName;
-    if (!isContact(apply.contact)) errors.contact = t.errContact;
+    if (!normalizeTelegram(apply.telegram)) errors.telegram = t.errTelegram;
+    if (apply.whatsapp.trim() && normalizeWhatsApp(apply.whatsapp) === false) errors.whatsapp = t.errWhatsApp;
     if (!instagramHandle(apply.instagram)) errors.instagram = t.errInsta;
     if (portfolioUrl(apply.portfolio) === null) errors.portfolio = t.errPortfolio;
     if (!consent) errors.consent = t.errConsent;
+    if (!captchaToken) errors.captcha = t.errCaptcha;
     return errors;
   };
 
@@ -470,7 +525,7 @@ export default function HomePage() {
 
     const errors = validateApply();
     setApplyErrors(errors);
-    const firstInvalid = (["fullName", "contact", "instagram", "portfolio", "consent"] as ApplyField[]).find((k) => errors[k]);
+    const firstInvalid = (["fullName", "telegram", "whatsapp", "instagram", "portfolio", "consent", "captcha"] as ApplyField[]).find((k) => errors[k]);
     if (firstInvalid) {
       document.getElementById(`apply-${firstInvalid}`)?.focus();
       return;
@@ -488,29 +543,54 @@ export default function HomePage() {
       return;
     }
 
+    const normalizedWhatsApp = normalizeWhatsApp(apply.whatsapp);
+    if (normalizedWhatsApp === false) {
+      setApplyErrors((prev) => ({ ...prev, whatsapp: t.errWhatsApp }));
+      document.getElementById("apply-whatsapp")?.focus();
+      return;
+    }
+
     setSubmitState("sending");
     try {
       const params = new URLSearchParams(window.location.search);
       const result = await submitGuestApplication({
         fullName: apply.fullName,
-        contact: apply.contact,
+        telegram: normalizeTelegram(apply.telegram) ?? apply.telegram,
+        whatsapp: normalizedWhatsApp,
         instagram: `@${instagramHandle(apply.instagram)}`,
-        portfolioUrl: portfolioUrl(apply.portfolio),
+        portfolioUrl: portfolioUrl(apply.portfolio) || null,
         about: apply.about,
         consent: true,
         lang: String(lang).toLowerCase(),
+        turnstileToken: captchaToken,
         utmSource: params.get("utm_source"),
         utmMedium: params.get("utm_medium"),
         utmCampaign: params.get("utm_campaign"),
       });
       if (!result.ok) {
+        setCaptchaToken("");
+        setCaptchaResetVersion((value) => value + 1);
         console.error("[Apply] server action rejected submission", result.reason);
-        setSubmitState("error");
+        if (["captcha_required", "captcha_invalid", "captcha_unavailable", "rate_limited", "security_unavailable"].includes(result.reason)) {
+          const message = result.reason === "rate_limited" ? t.rateLimited :
+            result.reason === "captcha_unavailable" || result.reason === "security_unavailable" ? t.captchaUnavailable : t.errCaptcha;
+          setApplyErrors((prev) => ({ ...prev, captcha: message }));
+          setCaptchaToken("");
+          setCaptchaResetVersion((value) => value + 1);
+          setSubmitState("idle");
+        } else {
+          setSubmitState("error");
+        }
         return;
       }
+      setCaptchaToken("");
+      setCaptchaResetVersion((value) => value + 1);
       showSuccess(result.duplicate);
     } catch (err) {
       console.error("[Apply] Insert exception:", err);
+      // A verification token may already have been consumed by Siteverify.
+      setCaptchaToken("");
+      setCaptchaResetVersion((value) => value + 1);
       setSubmitState("error");
     }
   };
@@ -939,9 +1019,9 @@ export default function HomePage() {
               <p className="mx-auto max-w-md text-sm font-light leading-relaxed text-zinc-300 md:text-base">
                 {alreadyReceived ? t.successAlready : t.successBody}
               </p>
-              {apply.contact.trim() && (
+              {(apply.telegram.trim() || apply.whatsapp.trim()) && (
                 <p className="mt-6 text-[11px] uppercase tracking-[0.2em] text-zinc-600">
-                  {t.successContact} <span className="normal-case tracking-normal text-amber-200/80">{apply.contact.trim()}</span>
+                  {t.successContact} <span className="normal-case tracking-normal text-amber-200/80">{apply.telegram.trim() || apply.whatsapp.trim()}</span>
                 </p>
               )}
             </motion.div>
@@ -982,28 +1062,52 @@ export default function HomePage() {
                 {fieldError("fullName")}
               </div>
               <div className="space-y-3 relative group">
-                <label htmlFor="apply-contact" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
-                  {t.formContact}
+                <label htmlFor="apply-telegram" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
+                  {t.formTelegram}
                   {requiredMark}
                 </label>
                 <input
-                  id="apply-contact"
+                  id="apply-telegram"
                   type="text"
-                  autoComplete="tel"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoComplete="off"
                   maxLength={120}
-                  value={apply.contact}
-                  onChange={(e) => setField("contact", e.target.value)}
+                  value={apply.telegram}
+                  onChange={(e) => setField("telegram", e.target.value)}
                   disabled={sending}
-                  aria-invalid={!!applyErrors.contact}
-                  aria-describedby={applyErrors.contact ? "apply-contact-error" : undefined}
-                  className={fieldClass("contact")}
-                  placeholder={t.formContactPl}
+                  aria-invalid={!!applyErrors.telegram}
+                  aria-describedby={applyErrors.telegram ? "apply-telegram-error" : "apply-telegram-hint"}
+                  className={fieldClass("telegram")}
+                  placeholder={t.formTelegramPl}
                 />
-                {fieldError("contact")}
+                <p id="apply-telegram-hint" className="text-[10px] leading-5 text-amber-100/65">{t.formTelegramHint}</p>
+                {fieldError("telegram")}
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              <div className="space-y-3 relative group">
+                <label htmlFor="apply-whatsapp" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
+                  {t.formWhatsApp}
+                </label>
+                <input
+                  id="apply-whatsapp"
+                  type="tel"
+                  autoComplete="tel"
+                  maxLength={40}
+                  value={apply.whatsapp}
+                  onChange={(e) => setField("whatsapp", e.target.value)}
+                  disabled={sending}
+                  aria-invalid={!!applyErrors.whatsapp}
+                  aria-describedby={applyErrors.whatsapp ? "apply-whatsapp-error" : undefined}
+                  className={fieldClass("whatsapp")}
+                  placeholder={t.formWhatsAppPl}
+                />
+                {fieldError("whatsapp")}
+              </div>
+
               <div className="space-y-3 relative group">
                 <label htmlFor="apply-instagram" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
                   {t.formInsta}
@@ -1026,6 +1130,10 @@ export default function HomePage() {
                 />
                 {fieldError("instagram")}
               </div>
+
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <div className="space-y-3 relative group">
                 <label htmlFor="apply-portfolio" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
                   {t.formPortfolio}
@@ -1063,6 +1171,21 @@ export default function HomePage() {
                 className={`${fieldClass("about")} resize-none`}
                 placeholder={t.formStatementPl}
               />
+            </div>
+
+            <div id="apply-captcha" tabIndex={-1} className="space-y-2 rounded-2xl border border-zinc-800/70 bg-black/15 p-4 outline-none focus-visible:ring-2 focus-visible:ring-amber-200/35">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">{t.captchaTitle}</p>
+              <p className="mb-3 text-[11px] leading-5 text-zinc-600">{t.captchaHint}</p>
+              <TurnstileWidget
+                lang={String(lang)}
+                resetVersion={captchaResetVersion}
+                onTokenChange={(token) => {
+                  setCaptchaToken(token);
+                  if (token) setApplyErrors((prev) => ({ ...prev, captcha: undefined }));
+                }}
+                labels={{ loading: t.captchaLoading, unavailable: t.captchaUnavailable }}
+              />
+              {fieldError("captcha")}
             </div>
 
             {/* ─── Legal Consent ─── */}

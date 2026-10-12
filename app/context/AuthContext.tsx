@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 // ---------------------------------------------------------------------------
 export const ROLES = ["owner", "admin", "manager", "resident"] as const;
 export type Role = (typeof ROLES)[number];
+export type ResidentSegment = "working" | "elite";
 export const DEFAULT_ROLE: Role = "resident";
 
 export const isRole = (value: unknown): value is Role =>
@@ -42,6 +43,7 @@ type ProfilePatch = Partial<Pick<AppUser, "fullName" | "avatarUrl">>;
 type AuthContextType = {
   user: AppUser | null;
   role: Role | null;
+  segment: ResidentSegment | null;
   setUser: (user: BaseUser | null) => void;
   /** Мгновенно обновляет имя/аватар в контексте на текущей вкладке после сохранения */
   updateProfile: (patch: ProfilePatch) => void;
@@ -82,7 +84,7 @@ const mapUser = (u: SupabaseUser): BaseUser => ({
   fullName: readMetaString(u, "full_name") ?? readMetaString(u, "name") ?? FALLBACK_NAME,
 });
 
-type ProfileMeta = { role: Role; fullName: string | null; avatarUrl: string | null };
+type ProfileMeta = { role: Role; segment: ResidentSegment; fullName: string | null; avatarUrl: string | null };
 
 /**
  * Забирает роль, имя и аватар из public.profiles — источника правды.
@@ -91,13 +93,13 @@ type ProfileMeta = { role: Role; fullName: string | null; avatarUrl: string | nu
 async function fetchProfileMeta(userId: string): Promise<ProfileMeta> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("role, full_name, avatar_url")
+    .select("role, full_name, avatar_url, segment")
     .eq("id", userId)
     .maybeSingle();
 
   if (error) {
     console.error("Не удалось получить профиль пользователя:", error.message);
-    return { role: DEFAULT_ROLE, fullName: null, avatarUrl: null };
+    return { role: DEFAULT_ROLE, segment: "working", fullName: null, avatarUrl: null };
   }
 
   const fullName = typeof data?.full_name === "string" ? data.full_name.trim() : "";
@@ -120,6 +122,7 @@ async function fetchProfileMeta(userId: string): Promise<ProfileMeta> {
 
   return {
     role: isRole(data?.role) ? data.role : DEFAULT_ROLE,
+    segment: data?.segment === "elite" ? "elite" : "working",
     fullName: fullName || null,
     avatarUrl,
   };
@@ -275,6 +278,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Данные профиля отдаём только если они относятся к текущему пользователю
   const currentMeta = baseUser && meta?.userId === baseUser.id ? meta : null;
   const role: Role | null = currentMeta?.role ?? null;
+  const segment: ResidentSegment | null = currentMeta?.segment ?? null;
   const avatarUrl = currentMeta?.avatarUrl ?? null;
   // profiles — источник правды; метадата сессии — пока профиль не загрузился
   const fullName = currentMeta?.fullName || baseUser?.fullName || FALLBACK_NAME;
@@ -304,8 +308,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [setUser]);
 
   const value = useMemo<AuthContextType>(
-    () => ({ user, role, setUser, updateProfile, logout, refreshRole, hasRole, loading }),
-    [user, role, setUser, updateProfile, logout, refreshRole, hasRole, loading]
+    () => ({ user, role, segment, setUser, updateProfile, logout, refreshRole, hasRole, loading }),
+    [user, role, segment, setUser, updateProfile, logout, refreshRole, hasRole, loading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

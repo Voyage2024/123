@@ -50,7 +50,7 @@ export default function DashboardMapPage() {
   const { lang } = useLanguage();
   const t = T[lang] ?? T.EN;
   return (
-    <main className="relative min-h-screen overflow-hidden bg-zinc-950 px-4 py-9 text-zinc-100 sm:px-7 lg:px-10 lg:py-12">
+    <main className="relative min-h-screen overflow-hidden bg-zinc-950 px-4 pt-2 pb-9 text-zinc-100 sm:px-7 lg:px-10 lg:pt-2 lg:pb-12">
       <div aria-hidden className="pointer-events-none absolute -top-36 left-1/2 h-96 w-[min(900px,100vw)] -translate-x-1/2 rounded-full bg-amber-200/[0.055] blur-[115px]" />
       <div className="relative mx-auto max-w-6xl">
         <header className="mb-8 max-w-3xl">

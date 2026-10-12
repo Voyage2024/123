@@ -116,6 +116,7 @@ export default function AdminRequestsPage() {
 
   useEffect(() => {
     if (authLoading || !allowed) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial async data load after role resolution.
     void load("initial");
   }, [authLoading, allowed, load]);
 
@@ -143,6 +144,7 @@ export default function AdminRequestsPage() {
   );
 
   const stats = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity -- Snapshot for the current render weekly metric.
     const now = Date.now();
     return [
       { label: t.statPending, value: applications.filter((a) => a.status === "pending").length, hot: true },
@@ -156,7 +158,7 @@ export default function AdminRequestsPage() {
 
   if (authLoading) {
     return (
-      <div className="flex items-center justify-center gap-2.5 py-32 text-sm text-zinc-500">
+      <div className="flex items-center justify-center gap-2.5 py-8 text-sm text-zinc-500">
         <Loader2 size={18} strokeWidth={1.5} className="animate-spin" />
         {t.loading}
       </div>
@@ -165,7 +167,7 @@ export default function AdminRequestsPage() {
 
   if (!allowed) {
     return (
-      <div className="mx-auto flex max-w-md flex-col items-center px-4 py-32 text-center">
+      <div className="mx-auto flex max-w-md flex-col items-center px-4 py-8 text-center">
         <span className="relative flex h-16 w-16 items-center justify-center rounded-full border border-zinc-700 text-zinc-400">
           <span className="absolute inset-[4px] rounded-full border border-current opacity-20" />
           <LockKeyhole size={24} strokeWidth={1.2} aria-hidden />
@@ -184,7 +186,7 @@ export default function AdminRequestsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
+    <div className="mx-auto max-w-6xl px-4 pb-8 pt-2 sm:px-8 sm:pb-10 sm:pt-2">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-zinc-950">
         <div className="absolute inset-0 bg-[radial-gradient(80%_50%_at_50%_-10%,rgba(253,230,138,0.06)_0%,transparent_60%)]" />
       </div>
@@ -280,7 +282,7 @@ export default function AdminRequestsPage() {
       )}
 
       {loading && !hasData ? (
-        <div className="flex items-center justify-center gap-2.5 py-24 text-sm text-zinc-500">
+        <div className="flex items-center justify-center gap-2.5 py-8 text-sm text-zinc-500">
           <Loader2 size={18} strokeWidth={1.5} className="animate-spin" />
           {t.loading}
         </div>

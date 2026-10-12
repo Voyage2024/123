@@ -1025,7 +1025,7 @@ export default function ResidentProfilePage() {
         </div>
       )}
 
-      <div className="relative mx-auto max-w-4xl px-4 py-10 sm:px-6 md:py-16">
+      <div className="relative mx-auto max-w-4xl px-4 pb-10 pt-2 sm:px-6 md:pb-16 md:pt-2">
         {/* ── Header ─────────────────────────────────────────────── */}
         <header className="mb-12">
           <div className="flex items-center gap-3 mb-2">
@@ -1044,6 +1044,18 @@ export default function ResidentProfilePage() {
           >
             {t.pageTitle}
           </h1>
+
+          {/* Identity editor stays above achievements and portfolio; it opens a modal. */}
+          <div className="mt-4">
+            <ProfileIdentityQuickEdit
+              currentName={displayName ?? ""}
+              onSaved={(fullName, avatarPath) => setProfile((prev) => prev ? {
+                ...prev,
+                full_name: fullName,
+                avatar_url: avatarPath ?? prev.avatar_url ?? null,
+              } : prev)}
+            />
+          </div>
 
           {/* ── Кардхолдер + статус ──────────────────────────────── */}
           <div className="mt-7 grid gap-4 md:mt-9 md:grid-cols-[1.25fr_1fr] md:gap-6">
@@ -1121,7 +1133,6 @@ export default function ResidentProfilePage() {
                         <User className="w-9 h-9 text-zinc-500" />
                       )}
                     </div>
-                    <p className="mt-2 max-w-[6.5rem] text-center text-[9px] leading-3 text-zinc-500">{t.avatarHint}</p>
                   </div>
                   <div className="grid min-w-0 grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
                     <div className="min-w-0">
@@ -1137,15 +1148,6 @@ export default function ResidentProfilePage() {
                       >
                         {isFilled(displayName) ? displayName : t.nameNotSet}
                       </span>
-                      <ProfileIdentityQuickEdit
-                        currentName={displayName ?? ""}
-                        showHint={false}
-                        onSaved={(fullName, avatarPath) => setProfile((prev) => prev ? {
-                          ...prev,
-                          full_name: fullName,
-                          avatar_url: avatarPath ?? prev.avatar_url ?? null,
-                        } : prev)}
-                      />
                     </div>
                     <div className="min-w-0">
                       <p className="text-[11px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-1">

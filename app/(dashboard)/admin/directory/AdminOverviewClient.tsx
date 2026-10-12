@@ -298,7 +298,7 @@ export default function AdminOverviewClient({
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <style>{STYLES}</style>
-      <div className="ov-root relative mx-auto w-full max-w-6xl px-4 pb-20 pt-10 sm:px-8 sm:pt-14">
+      <div className="ov-root relative mx-auto w-full max-w-6xl px-4 pb-20 pt-2 sm:px-8 sm:pt-2">
         <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
             <p className="flex items-center gap-3 text-[10px] uppercase tracking-[0.32em] text-amber-200/70">

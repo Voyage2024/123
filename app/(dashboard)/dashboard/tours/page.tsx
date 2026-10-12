@@ -329,8 +329,7 @@ const rowKey = (r: LeaderRow) => r.profile_id ?? `${r.position}-${r.full_name ??
 
 export default function ToursPage() {
   const { lang } = useLanguage();
-  const { user } = useAuth();
-const residentSegment = (user as any)?.segment;
+  const { segment: residentSegment } = useAuth();
 
   // Приводим lang к нужному типу и защищаемся от неожиданных значений
   const currentLang: Lang = (['en', 'ru', 'es', 'pt'] as const).includes(lang?.toLowerCase() as Lang)
@@ -419,7 +418,7 @@ const residentSegment = (user as any)?.segment;
   const displayName = (r: LeaderRow) => r.full_name?.trim() || t.anonymous;
 
   return (
-    <div className={`mx-auto w-full max-w-4xl px-4 pt-6 sm:px-6 ${showPinnedMe ? 'pb-56 md:pb-40' : 'pb-24 md:pb-12'}`}>
+    <div className={`mx-auto w-full max-w-4xl px-4 pt-0 sm:px-6 ${showPinnedMe ? 'pb-56 md:pb-40' : 'pb-24 md:pb-12'}`}>
       {/* ───────────── Hero ───────────── */}
       <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-neutral-900 via-neutral-950 to-black p-6 sm:p-10">
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[#c9a961]/15 blur-3xl" />

@@ -651,7 +651,7 @@ export default function PartiesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 py-8 text-zinc-100 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-zinc-950 px-4 pb-8 pt-2 text-zinc-100 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="mb-8 flex flex-col gap-5 border-b border-zinc-800/40 pb-7 md:flex-row md:items-end md:justify-between">

@@ -113,6 +113,7 @@ export function createVoyageTelegramBot(token: string): Bot {
   for (const lang of ["EN", "RU", "ES", "PT"] as const) {
     bot.callbackQuery(`lang:${lang}`, async (ctx) => {
       await ctx.answerCallbackQuery();
+      if (!ctx.from) return;
       await updateConversationLanguage(String(ctx.from.id), lang as TelegramLang, ctx.from.username);
       await sendWelcome(ctx, lang as TelegramLang);
     });

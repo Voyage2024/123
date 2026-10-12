@@ -1318,7 +1318,7 @@ export default function DirectoryClient({
         <div className="absolute -left-[10%] -top-[20%] h-[50%] w-[50%] rounded-full bg-[radial-gradient(circle,rgba(212,168,83,0.08)_0%,transparent_70%)]" />
       </div>
 
-      <div className="dir-root relative mx-auto w-full max-w-6xl px-4 pb-20 pt-8 sm:px-8 sm:pt-14">
+      <div className="dir-root relative mx-auto w-full max-w-6xl px-4 pb-20 pt-2 sm:px-8 sm:pt-2">
         {/* ── Заголовок ── */}
         <header className="mb-7 sm:mb-8">
           <div className="mb-3 flex flex-wrap items-center gap-3">

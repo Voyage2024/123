@@ -49,7 +49,7 @@ export default function ConciergeAdminChecklist() {
   };
   const filtered = filter === "all" ? rows : rows.filter((r)=>r.status === filter);
 
-  return <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+  return <main className="mx-auto w-full max-w-7xl px-4 pb-8 pt-2 sm:px-6 lg:px-8">
     <header className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-200/20 bg-amber-200/[0.06] text-amber-200"><ConciergeBell size={21}/></div><h1 className="text-3xl font-semibold tracking-tight text-zinc-100">{t.title}</h1><p className="mt-2 text-sm text-zinc-400">{t.subtitle}</p></div><button onClick={()=>void refresh()} className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3.5 py-2.5 text-sm text-zinc-300 transition hover:border-amber-200/20 hover:text-amber-100"><RefreshCw size={15}/>{t.refresh}</button></header>
     {notice && <div role="status" className={`mb-5 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm ${notice.ok ? "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-200" : "border-rose-500/20 bg-rose-500/[0.06] text-rose-200"}`}>{notice.ok?<CheckCircle2 size={16}/>:<AlertCircle size={16}/>} {notice.text}</div>}
     <div className="mb-5 flex flex-wrap gap-2">{(["all",...STATUSES] as const).map((s)=><button type="button" key={s} onClick={()=>setFilter(s)} className={`rounded-full border px-3.5 py-2 text-xs transition ${filter===s ? "border-amber-200/30 bg-amber-200/[0.08] text-amber-100" : "border-zinc-800 bg-zinc-900/40 text-zinc-500 hover:text-zinc-200"}`}>{s==="all"?t.allStatus:t[s]}</button>)}</div>

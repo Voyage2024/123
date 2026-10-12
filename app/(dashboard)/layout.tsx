@@ -20,11 +20,11 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-[100dvh] w-full max-w-full overflow-x-clip bg-zinc-950">
+    <div className="-mt-24 flex min-h-[100dvh] w-full max-w-full overflow-x-clip bg-zinc-950">
       <Sidebar />
 
       <main className="min-w-0 flex-1 md:ml-72">
-        <div className="mx-auto w-full max-w-6xl px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[calc(var(--nav-h,3.5rem)+0.5rem)] sm:px-6 md:px-12 md:py-14">
+        <div className="mx-auto w-full max-w-6xl px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[calc(var(--nav-h,3.5rem)+0.75rem)] sm:px-6 md:px-12 md:pt-[calc(var(--nav-h,4.75rem)+1rem)] md:pb-14">
           {children}
         </div>
       </main>

@@ -6,8 +6,6 @@ import {
   Clock,
   Lock,
   Shield,
-  FileText,
-  Upload,
   Eye,
   EyeOff,
   CreditCard,
@@ -30,7 +28,7 @@ import {
   Gem,
   PartyPopper,
   Camera,
-  Image,
+  Image as ImageIcon,
   Plus,
 } from "lucide-react";
 
@@ -310,7 +308,7 @@ export default function ResidentProfilePage() {
         />
       </div>
 
-      <div className="relative max-w-3xl mx-auto px-6 py-12 md:py-16">
+      <div className="relative max-w-3xl mx-auto px-6 pt-2 pb-12 md:pt-2 md:pb-16">
         {/* ── Header ─────────────────────────────────────────────── */}
         <header className="mb-12">
           <div className="flex items-center gap-3 mb-2">
@@ -566,7 +564,7 @@ Looking for curated group experiences with like-minded travelers. Open to both s
                 }}
               />
               <div className="absolute inset-0 flex items-center justify-center">
-                <Image className="w-6 h-6 text-zinc-700" />
+                <ImageIcon className="w-6 h-6 text-zinc-700" />
               </div>
               <div className="absolute top-2 left-2">
                 <div className="w-5 h-5 rounded-full bg-emerald-950/60 border border-emerald-800/40 flex items-center justify-center">
@@ -590,7 +588,7 @@ Looking for curated group experiences with like-minded travelers. Open to both s
                 }}
               />
               <div className="absolute inset-0 flex items-center justify-center">
-                <Image className="w-6 h-6 text-zinc-700" />
+                <ImageIcon className="w-6 h-6 text-zinc-700" />
               </div>
               <div className="absolute top-2 left-2">
                 <div className="w-5 h-5 rounded-full bg-emerald-950/60 border border-emerald-800/40 flex items-center justify-center">
@@ -614,7 +612,7 @@ Looking for curated group experiences with like-minded travelers. Open to both s
                 }}
               />
               <div className="absolute inset-0 flex items-center justify-center">
-                <Image className="w-6 h-6 text-zinc-700" />
+                <ImageIcon className="w-6 h-6 text-zinc-700" />
               </div>
               <div className="absolute top-2 left-2">
                 <div className="w-5 h-5 rounded-full bg-emerald-950/60 border border-emerald-800/40 flex items-center justify-center">

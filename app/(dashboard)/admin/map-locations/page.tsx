@@ -726,7 +726,7 @@ export default function MapLocationsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 py-6 text-zinc-100 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-zinc-950 px-4 pb-6 pt-2 text-zinc-100 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1600px]">
         <div className="mb-8 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div>

@@ -1781,7 +1781,7 @@ export default function GamificationClient({ demo = false }: { demo?: boolean })
   );
 
   return (
-    <div lang={lang} className="relative mx-auto max-w-5xl px-6 pb-24 pt-12 sm:px-8">
+    <div lang={lang} className="relative mx-auto max-w-5xl px-6 pb-24 pt-2 sm:px-8">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(90%_60%_at_50%_-10%,#191714_0%,#0a0a0b_55%,#060607_100%)]" />
 
       <header className="mb-14">

@@ -140,7 +140,7 @@ export default function FaceControlPage() {
   );
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
+    <div className="mx-auto max-w-4xl px-6 pb-10 pt-2">
       <header className="mb-8 flex items-end justify-between border-b border-zinc-800/80 pb-6">
         <div>
           <h1
@@ -167,7 +167,7 @@ export default function FaceControlPage() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center gap-2.5 py-24 text-sm text-zinc-500">
+        <div className="flex items-center justify-center gap-2.5 py-8 text-sm text-zinc-500">
           <Loader2 size={18} strokeWidth={1.5} className="animate-spin" />
           Загружаем очередь…
         </div>
