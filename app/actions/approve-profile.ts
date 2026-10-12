@@ -49,7 +49,7 @@ export async function approveProfile(profileId: string): Promise<ApproveProfileR
     if (profile.user_id && profile.user_id !== profile.id) {
       return { success: false, error: "The profile is linked to a different Auth ID. Approval stopped to avoid duplicate accounts." };
     }
-    if (profile.status === "approved" && Number(profile.kyc_level ?? 0) >= 1) {
+    if (profile.status === "approved") {
       return { success: false, error: "This application has already been approved. Use credential delivery retry from the dossier." };
     }
 
@@ -75,7 +75,7 @@ export async function approveProfile(profileId: string): Promise<ApproveProfileR
       .from("profiles")
       .update({
         status: "approved",
-        kyc_level: 1,
+        kyc_level: 0,
         user_id: profile.id,
         email,
         temp_password: null,
@@ -145,7 +145,7 @@ export async function resendApprovedCredentials(profileId: string): Promise<Appr
       .eq("id", profileId)
       .maybeSingle();
     if (profileError || !profile) return { success: false, error: "Profile not found." };
-    if (profile.status !== "approved" || Number(profile.kyc_level ?? 0) < 1) {
+    if (profile.status !== "approved") {
       return { success: false, error: "Approve the profile before resending credentials." };
     }
     const activeBanUntil = typeof profile.banned_until === "string" ? Date.parse(profile.banned_until) : NaN;

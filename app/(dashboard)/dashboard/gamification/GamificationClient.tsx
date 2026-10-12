@@ -414,13 +414,6 @@ function firstString(...values: unknown[]) {
   return undefined;
 }
 
-function nameFromEmail(email: string) {
-  const local = email.split("@")[0] ?? "";
-  const words = local.split(/[._\-+]+/).filter(Boolean);
-  if (!words.length) return undefined;
-  return words.map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
-}
-
 /* ICAO 9303: транслитерация кириллицы для машиночитаемой строки */
 const ICAO: Record<string, string> = {
   а: "A", б: "B", в: "V", г: "G", д: "D", е: "E", ё: "E", ж: "ZH", з: "Z",
@@ -468,6 +461,7 @@ type AuthLike = {
   user?: {
     id?: string;
     email?: string | null;
+    fullName?: string | null;
     created_at?: string;
     user_metadata?: Record<string, unknown> | null;
   } | null;
@@ -497,9 +491,8 @@ function buildResident(
     .filter((v): v is string => typeof v === "string" && v.trim() !== "")
     .join(" ");
   const name =
-    firstString(p.full_name, p.display_name, p.name, fromParts, meta.full_name, meta.name) ??
-    nameFromEmail(email) ??
-    "Voyage Resident";
+    firstString(p.full_name, p.display_name, p.name, fromParts, user?.fullName, meta.full_name, meta.name) ??
+    "VOYAGE Resident";
 
   const rawNo = [p.member_no, p.member_number, p.membership_number].find(
     (v) => typeof v === "number" || (typeof v === "string" && v.trim() !== ""),

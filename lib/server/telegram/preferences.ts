@@ -3,7 +3,8 @@ import "server-only";
 import { getTelegramServiceClient } from "./service-client";
 import { isTelegramLang, languageFromTelegram, type TelegramLang } from "./types";
 
-export async function getPreferredTelegramLanguage(telegramId: string, telegramLanguageCode?: string | null): Promise<TelegramLang> {
+/** Returns a manually selected language, or null if this user has not selected one yet. */
+export async function getStoredTelegramLanguage(telegramId: string): Promise<TelegramLang | null> {
   try {
     const { data, error } = await getTelegramServiceClient()
       .from("telegram_preferences")
@@ -14,7 +15,11 @@ export async function getPreferredTelegramLanguage(telegramId: string, telegramL
   } catch (error) {
     console.error("[telegram-webhook] language preference lookup failed", error instanceof Error ? error.name : "unknown");
   }
-  return languageFromTelegram(telegramLanguageCode);
+  return null;
+}
+
+export async function getPreferredTelegramLanguage(telegramId: string, telegramLanguageCode?: string | null): Promise<TelegramLang> {
+  return (await getStoredTelegramLanguage(telegramId)) ?? languageFromTelegram(telegramLanguageCode);
 }
 
 export async function savePreferredTelegramLanguage(

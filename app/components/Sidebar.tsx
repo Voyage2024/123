@@ -27,6 +27,7 @@ import {
   Settings,
   MapPin,
   ClipboardList,
+  Users,
   ShieldAlert,
   Map,
   KeyRound,
@@ -40,7 +41,7 @@ import {
 } from "lucide-react";
 import { Cormorant_Garamond } from "next/font/google";
 import { useAuth, type Role } from "@/app/context/AuthContext";
-import { useLanguage, type Lang } from "@/app/context/LanguageContext";
+import { useLanguage } from "@/app/context/LanguageContext";
 import UserAvatar from "@/app/components/UserAvatar";
 import { supabase } from "@/lib/supabase";
 import { isClubAdmin } from "@/lib/access";
@@ -55,6 +56,8 @@ type NavKey =
   | "myVoyage"
   | "myApplications"
   | "parties"
+  | "interactiveMap"
+  | "adminConcierge"
   | "tours"
   | "passport"
   | "leaderboard"
@@ -92,6 +95,7 @@ const NAV_SECTIONS: NavSection[] = [
       { key: "myVoyage", href: "/dashboard", icon: CreditCard },
       { key: "myApplications", href: "/dashboard/applications", icon: Inbox },
       { key: "parties", href: "/dashboard/parties", icon: GlassWater },
+      { key: "interactiveMap", href: "/dashboard/map", icon: Map },
       { key: "tours", href: "/dashboard/tours", icon: Plane },
       { key: "passport", href: "/dashboard/gamification", icon: Trophy },
       // Глобальный рейтинг клуба (Influence Index). Туры — локальные соревнования внутри тура
@@ -105,7 +109,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     key: "console",
     roles: STAFF,
-    items: [{ key: "overview", href: "/admin", icon: LayoutDashboard }],
+    items: [{ key: "overview", href: "/admin/directory", icon: LayoutDashboard }],
   },
   // ── Manager+ ──────────────────────────────────────────────
   {
@@ -113,7 +117,9 @@ const NAV_SECTIONS: NavSection[] = [
     roles: STAFF,
     items: [
       { key: "myLocation", href: "/admin/location", icon: MapPin },
+      { key: "interactiveMap", href: "/dashboard/map", icon: Map },
       { key: "applications", href: "/admin/applications", icon: ClipboardList },
+      { key: "adminConcierge", href: "/admin/concierge", icon: ConciergeBell },
     ],
   },
   // ── Admin+ ────────────────────────────────────────────────
@@ -121,8 +127,9 @@ const NAV_SECTIONS: NavSection[] = [
     key: "administration",
     roles: ["admin", "owner"],
     items: [
-      // Закрытые инструменты руководства клуба
-      { key: "database", href: "/admin/database", icon: Database },
+      // Всё ниже — только owner и admin (в БД то же правило: club_is_admin)
+      // Справочник резидентов и KYC живёт в корне админки
+      { key: "directory", href: "/admin", icon: Users },
       // Заявки на вступление с главной (/admin/requests)
       { key: "membershipRequests", href: "/admin/requests", icon: UserPlus },
       { key: "faceControl", href: "/admin/face-control", icon: ShieldAlert },
@@ -140,6 +147,7 @@ const NAV_SECTIONS: NavSection[] = [
     roles: ["owner"],
     items: [
       { key: "roleManagement", href: "/admin/roles", icon: KeyRound },
+      { key: "database", href: "/admin/database", icon: Database },
     ],
   },
   // ── Аккаунт: настройки профиля для всего персонала ─────────
@@ -162,19 +170,7 @@ function isActive(href: string, pathname: string) {
 
 /* ── Переводы ─────────────────────────────────────────────────────── */
 
-type Dict = {
-  subtitle: Record<Role, string>;
-  sections: Record<SectionKey, string>;
-  nav: Record<NavKey, string>;
-  roles: Record<Role, string>;
-  logout: string;
-  pendingInvites: (n: number) => string;
-  openMenu: string;
-  closeMenu: string;
-  menu: string;
-};
-
-const T: Record<Lang, Dict> = {
+const translations = {
   EN: {
     subtitle: {
       resident: "Private Club",
@@ -194,6 +190,8 @@ const T: Record<Lang, Dict> = {
       myVoyage: "My Voyage",
       myApplications: "My Applications",
       parties: "Parties / Themes",
+      interactiveMap: "Interactive map",
+      adminConcierge: "Concierge requests",
       tours: "Tours",
       passport: "My Passport",
       leaderboard: "Global Ranking",
@@ -241,6 +239,8 @@ const T: Record<Lang, Dict> = {
       myVoyage: "Мой Voyage",
       myApplications: "Мои заявки",
       parties: "Тусовки / Темы",
+      interactiveMap: "Интерактивная карта",
+      adminConcierge: "Запросы консьержу",
       tours: "Туры",
       passport: "Мой паспорт",
       leaderboard: "Глобальный рейтинг",
@@ -288,6 +288,8 @@ const T: Record<Lang, Dict> = {
       myVoyage: "Mi Voyage",
       myApplications: "Mis solicitudes",
       parties: "Fiestas / Temas",
+      interactiveMap: "Mapa interactivo",
+      adminConcierge: "Solicitudes de concierge",
       tours: "Tours",
       passport: "Mi pasaporte",
       leaderboard: "Ranking global",
@@ -335,6 +337,8 @@ const T: Record<Lang, Dict> = {
       myVoyage: "Meu Voyage",
       myApplications: "Minhas solicitações",
       parties: "Festas / Temas",
+      interactiveMap: "Mapa interativo",
+      adminConcierge: "Solicitações de concierge",
       tours: "Tours",
       passport: "Meu passaporte",
       leaderboard: "Ranking global",
@@ -363,19 +367,16 @@ const T: Record<Lang, Dict> = {
     closeMenu: "Fechar menu",
     menu: "Menu",
   },
-};
+} as const;
+
+type LangKey = keyof typeof translations;
 
 /** Сколько записей ждут решения — счётчик у «Заявок на вступление» и «Приглашений».
  *  Запрос идёт только у owner/admin (RLS всё равно не отдаст их другим). */
 function usePendingCount(table: "club_invites" | "guest_applications", enabled: boolean) {
   const [count, setCount] = useState(0);
   useEffect(() => {
-    if (!enabled) {
-      // Clear the counter when the current role cannot access it.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCount(0);
-      return;
-    }
+    if (!enabled) return;
     let alive = true;
     const load = async () => {
       const { count: n, error } = await supabase
@@ -394,7 +395,7 @@ function usePendingCount(table: "club_invites" | "guest_applications", enabled: 
       void supabase.removeChannel(channel);
     };
   }, [table, enabled]);
-  return count;
+  return enabled ? count : 0;
 }
 
 const ROLE_BADGE: Record<Role, string> = {
@@ -439,7 +440,7 @@ export default function Sidebar() {
     membershipRequests: pendingApplications,
   };
 
-  const t = T[lang] ?? T.EN;
+  const t = translations[(lang as LangKey) in translations ? (lang as LangKey) : "EN"];
 
   const sections = useMemo(
     () => (role ? NAV_SECTIONS.filter((s) => s.roles.includes(role)) : []),

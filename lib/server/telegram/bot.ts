@@ -4,7 +4,7 @@ import { Bot, GrammyError, HttpError } from "grammy";
 import { copy, faqMenu, languageMenu, mainMenu } from "./copy";
 import { cancelRegistration, beginRegistration, handleRegistrationPhoto, handleRegistrationText, sendWelcome, updateConversationLanguage } from "./onboarding";
 import { getTelegramServiceClient } from "./service-client";
-import { getPreferredTelegramLanguage } from "./preferences";
+import { getPreferredTelegramLanguage, getStoredTelegramLanguage, savePreferredTelegramLanguage } from "./preferences";
 import { languageFromTelegram, type TelegramLang } from "./types";
 
 function isBanned(profile: { banned_until?: string | null; ban_permanent?: boolean | null }): boolean {
@@ -39,12 +39,25 @@ export function createVoyageTelegramBot(token: string): Bot {
       await ctx.reply("Please use VOYAGE Concierge in a private chat.");
       return;
     }
-    const lang = await contextLanguage(ctx);
-    const profile = await getLinkedProfile(String(ctx.from.id));
+    const telegramId = String(ctx.from.id);
+    const storedLanguage = await getStoredTelegramLanguage(telegramId);
+    const telegramCode = (ctx.from.language_code ?? "").toLowerCase();
+    const supportedAutoLanguage = /^(en|ru|es|pt)(-|$)/.test(telegramCode);
+    if (!storedLanguage && !supportedAutoLanguage) {
+      // Unknown Telegram locale: show a localized language picker instead of
+      // surprising a new international user with a Russian-only greeting.
+      await ctx.reply("Choose your language / Выберите язык / Elige tu idioma / Escolha seu idioma:", { reply_markup: languageMenu() });
+      return;
+    }
+    const lang = storedLanguage ?? languageFromTelegram(ctx.from.language_code);
+    if (!storedLanguage) {
+      await savePreferredTelegramLanguage(telegramId, lang, ctx.from.username);
+    }
+    const profile = await getLinkedProfile(telegramId);
     if (profile) {
       const t = copy(lang);
       if (isBanned(profile)) await ctx.reply(t.alreadyBanned, { reply_markup: mainMenu(lang) });
-      else if (profile.status === "approved" && Number(profile.kyc_level ?? 0) >= 1) await ctx.reply(t.alreadyApproved, { reply_markup: mainMenu(lang) });
+      else if (profile.status === "approved") await ctx.reply(t.alreadyApproved, { reply_markup: mainMenu(lang) });
       else if (profile.status === "rejected") await ctx.reply(t.alreadyRejected, { reply_markup: mainMenu(lang) });
       else await ctx.reply(t.alreadyPending, { reply_markup: mainMenu(lang) });
       return;

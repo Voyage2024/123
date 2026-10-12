@@ -1,54 +1,56 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { AuthorizationError, requireRole } from "@/lib/server/require-role";
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Серверные экшены Face Control.
+ *
+ * Держим мутации на сервере: клиент лишь вызывает approve/decline и
+ * оптимистично убирает карточку, а фактическая запись в БД (и проверка
+ * прав через RLS/сессию) происходит здесь. Возвращаем { error } —
+ * клиент по нему решает, откатывать ли оптимистичное удаление.
+ * ──────────────────────────────────────────────────────────────────── */
 
 type ActionResult = { error: string | null };
 
-function errorResult(error: unknown): ActionResult {
-  if (error instanceof AuthorizationError) return { error: error.message };
-  console.error("[face-control action] failed:", error);
-  return { error: "Не удалось выполнить действие." };
-}
-
 export async function approveApplication(id: string): Promise<ActionResult> {
-  try {
-    await requireRole(["owner", "admin"]);
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
-      return { error: "Некорректный ID анкеты." };
-    }
-    const supabase = await createClient();
-    const { data, error, count } = await supabase
-      .from("profiles")
-      .update({ kyc_level: 1, status: "approved" }, { count: "exact" })
-      .eq("id", id)
-      .select("id");
-    if (error) return { error: error.message };
-    if (!data?.length || count === 0) return { error: "Заявка не найдена, уже обработана или нет прав." };
-    return { error: null };
-  } catch (error) {
-    return errorResult(error);
+  const supabase = await createClient();
+
+  // count: "exact" — чтобы отличить «обновили строку» от «строка не найдена
+  // или RLS не пропустил» (в обоих случаях Supabase вернёт error: null).
+  const { error, count } = await supabase
+    .from("profiles")
+    .update({ kyc_level: 0, status: "approved" }, { count: "exact" })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+  if (count === 0) {
+    return { error: "Заявка не найдена, уже обработана или нет прав на изменение." };
   }
+  return { error: null };
 }
 
 export async function declineApplication(id: string): Promise<ActionResult> {
-  try {
-    await requireRole(["owner", "admin"]);
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
-      return { error: "Некорректный ID анкеты." };
-    }
-    const supabase = await createClient();
-    // Soft rejection preserves the audit trail; never delete the profile or set KYC to -1.
-    const { data, error, count } = await supabase
-      .from("profiles")
-      .update({ status: "rejected" }, { count: "exact" })
-      .eq("id", id)
-      .neq("status", "approved")
-      .select("id");
-    if (error) return { error: error.message };
-    if (!data?.length || count === 0) return { error: "Заявка не найдена, уже обработана или нет прав." };
-    return { error: null };
-  } catch (error) {
-    return errorResult(error);
+  const supabase = await createClient();
+
+  // Вариант по умолчанию — удаляем запись из очереди.
+  const { error, count } = await supabase
+    .from("profiles")
+    .delete({ count: "exact" })
+    .eq("id", id);
+
+  // Если предпочитаете «мягкий» отказ вместо удаления — закомментируйте
+  // блок выше и раскомментируйте блок ниже (запись останется в БД,
+  // но с kyc_level = -1 и статусом declined, и выпадет из выборки очереди):
+  //
+  // const { error, count } = await supabase
+  //   .from("profiles")
+  //   .update({ kyc_level: -1, status: "declined" }, { count: "exact" })
+  //   .eq("id", id);
+
+  if (error) return { error: error.message };
+  if (count === 0) {
+    return { error: "Заявка не найдена, уже обработана или нет прав на изменение." };
   }
+  return { error: null };
 }

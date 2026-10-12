@@ -27,13 +27,23 @@ function activeBan(profile: { banned_until?: string | null; ban_permanent?: bool
   return Number.isFinite(until) && until > Date.now();
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function approvedMessage(lang: TelegramLang, input: ApprovedCredentials): string {
-  const name = input.fullName?.trim();
+  const safeName = input.fullName?.trim() ? ` ${escapeHtml(input.fullName.trim())}` : "";
+  const safeLogin = escapeHtml(input.login);
+  const safePassword = escapeHtml(input.password);
   const greeting: Record<TelegramLang, string> = {
-    EN: `Hello${name ? ` ${name}` : ""}! Your VOYAGE profile has been approved.`,
-    RU: `Здравствуйте${name ? `, ${name}` : ""}! Ваша анкета VOYAGE одобрена.`,
-    ES: `¡Hola${name ? `, ${name}` : ""}! Tu perfil de VOYAGE ha sido aprobado.`,
-    PT: `Olá${name ? `, ${name}` : ""}! Seu perfil VOYAGE foi aprovado.`,
+    EN: `Hello${safeName}! Your VOYAGE profile has been approved.`,
+    RU: `Здравствуйте${safeName}! Ваша анкета VOYAGE одобрена.`,
+    ES: `¡Hola${safeName}! Tu perfil de VOYAGE ha sido aprobado.`,
+    PT: `Olá${safeName}! Seu perfil VOYAGE foi aprovado.`,
   };
   const labels: Record<TelegramLang, { login: string; password: string; security: string; site: string }> = {
     EN: { login: "Login", password: "Temporary password", security: "Sign in and change this password immediately. For your safety, do not forward this message.", site: "VOYAGE account access" },
@@ -41,8 +51,10 @@ function approvedMessage(lang: TelegramLang, input: ApprovedCredentials): string
     ES: { login: "Usuario", password: "Contraseña temporal", security: "Inicia sesión y cambia esta contraseña de inmediato. Por seguridad, no reenvíes este mensaje.", site: "Acceso a VOYAGE" },
     PT: { login: "Login", password: "Senha temporária", security: "Entre e altere esta senha imediatamente. Por segurança, não encaminhe esta mensagem.", site: "Acesso à conta VOYAGE" },
   };
-  const copy = labels[lang];
-  return `✅ ${greeting[lang]}\n\n${copy.site}\n${copy.login}: ${input.login}\n${copy.password}: ${input.password}\n\n${copy.security}`;
+  const text = labels[lang];
+  // Telegram HTML <code> displays a copy-friendly monospace credential. All
+  // untrusted inserted values are escaped to prevent markup injection.
+  return `✅ ${greeting[lang]}\n\n<b>${text.site}</b>\n${text.login}: <code>${safeLogin}</code>\n${text.password}: <code>${safePassword}</code>\n\n${text.security}`;
 }
 
 /** Sends credentials directly via Telegram Bot API from the Next.js server runtime. */
@@ -67,7 +79,7 @@ export async function sendApprovedCredentialsTelegram(input: ApprovedCredentials
     .maybeSingle();
   if (profileError || !profile) return { sent: false, error: "Profile not found for Telegram delivery." };
   if (String(profile.telegram_id ?? "") !== input.telegramId) return { sent: false, error: "Telegram ID is not linked to this profile." };
-  if (profile.status !== "approved" || Number(profile.kyc_level ?? 0) < 1) return { sent: false, error: "Profile is not approved for access delivery." };
+  if (profile.status !== "approved") return { sent: false, error: "Profile is not approved for access delivery." };
   if (activeBan(profile)) return { sent: false, error: "Credentials cannot be delivered to a banned profile." };
   if (profile.credential_issue_id !== input.deliveryId) return { sent: false, error: "Credential delivery is no longer current." };
 
@@ -90,6 +102,7 @@ export async function sendApprovedCredentialsTelegram(input: ApprovedCredentials
       fullName: profile.full_name ?? input.fullName,
     });
     await new Api(token).sendMessage(Number(input.telegramId), message, {
+      parse_mode: "HTML",
       link_preview_options: { is_disabled: true },
     });
 

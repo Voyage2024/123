@@ -123,7 +123,7 @@ export async function beginRegistration(ctx: Context, lang: TelegramLang): Promi
   const t = copy(lang);
   if (linked) {
     if (isBanned(linked)) await ctx.reply(t.alreadyBanned, { reply_markup: mainMenu(lang) });
-    else if (linked.status === "approved" && Number(linked.kyc_level ?? 0) >= 1) await ctx.reply(t.alreadyApproved, { reply_markup: mainMenu(lang) });
+    else if (linked.status === "approved") await ctx.reply(t.alreadyApproved, { reply_markup: mainMenu(lang) });
     else if (linked.status === "rejected") await ctx.reply(t.alreadyRejected, { reply_markup: mainMenu(lang) });
     else await ctx.reply(t.alreadyPending, { reply_markup: mainMenu(lang) });
     return;

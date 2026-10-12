@@ -6,6 +6,8 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/app/context/AuthContext";
 import FaceControlList, { type Application } from "./FaceControlList";
+import { approveProfile } from "@/app/actions/approve-profile";
+import { declineApplication } from "./actions";
 
 const cormorant = Cormorant_Garamond({
   subsets: ["latin", "cyrillic"],
@@ -24,7 +26,7 @@ const cormorant = Cormorant_Garamond({
  * ──────────────────────────────────────────────────────────────────── */
 
 const SELECT_COLS =
-  "id, email, telegram_id, full_name, location, citizenship, status, kyc_level, photo_urls, " +
+  "id, full_name, email, location, citizenship, status, kyc_level, photo_urls, " +
   "temp_password, " +
   "birth_date, height, weight, measurements, smoking, alcohol, about";
 
@@ -79,6 +81,7 @@ export default function FaceControlPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,45 +114,27 @@ export default function FaceControlPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    // Async data synchronization after the auth context has initialized.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [authLoading, load]);
 
-  // Модерация идёт через серверный роут: он проверяет права админа и
-  // выполняет действие (approve: kyc_level = 1 + status = 'approved';
-  // decline: удаление заявки). Клиент лишь передаёт свой токен.
+  // Одобрение выполняется единственным серверным путём: проверка ролей,
+  // KYC0, ротация временного пароля и отправка через встроенный Telegram webhook.
   const moderate = useCallback(
     async (app: Application, action: "approve" | "decline") => {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess.session?.access_token;
-      if (!token) throw new Error("Нет активной сессии — войдите заново.");
-
-      const res = await fetch("/api/face-control", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ id: app.id, action }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(json?.error || `Ошибка сервера (${res.status})`);
+      setNotice(null);
+      if (action === "approve") {
+        const result = await approveProfile(app.id);
+        if (!result.success) throw new Error(result.error);
+        if (result.warning) setNotice(result.warning);
+        setApplications((prev) => prev.filter((item) => item.id !== app.id));
+        return { ok: true, warning: result.warning };
       }
 
-      // If Telegram is unavailable, show one-time fallback credentials to the
-      // DB-authorized administrator. The API does not log or store the password.
-      if (json?.credentials?.email && json?.credentials?.password) {
-        window.alert(
-          `Анкета одобрена, но Telegram не доставил доступы. Передайте их вручную:\n\nEmail: ${json.credentials.email}\nВременный пароль: ${json.credentials.password}\n\nПароль не будет показан повторно.`,
-        );
-      } else if (json?.warning) {
-        window.alert(json.warning);
-      }
-
-      setApplications((prev) => prev.filter((a) => a.id !== app.id));
-      return json as { ok: true; warning?: string };
+      const result = await declineApplication(app.id);
+      if (result.error) throw new Error(result.error);
+      setApplications((prev) => prev.filter((item) => item.id !== app.id));
+      return { ok: true };
     },
     [],
   );
@@ -174,6 +159,12 @@ export default function FaceControlPage() {
           </span>
         )}
       </header>
+
+      {notice && (
+        <div role="status" className="mb-5 rounded-xl border border-amber-200/20 bg-amber-200/[0.05] px-4 py-3 text-sm text-amber-100/90">
+          {notice}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center gap-2.5 py-24 text-sm text-zinc-500">

@@ -41,6 +41,7 @@ import {
 } from "@/app/components/profile/ClubCardholder";
 import { AchievementShelf, type AchievementKey } from "@/app/components/profile/AchievementShelf";
 import { KycSection } from "@/app/components/profile/KycSection";
+import ProfileIdentityQuickEdit from "@/app/components/profile/ProfileIdentityQuickEdit";
 
 /* ──────────────────────────────────────────────────────────────────────
  * ПРИМЕЧАНИЯ ПО АРХИТЕКТУРЕ
@@ -95,7 +96,7 @@ const en = {
   identity: "Identity",
   fullName: "Full Name",
   nameNotSet: "Set your name in settings",
-  avatarHint: "Avatar can be changed in settings",
+  avatarHint: "Name and photo can be changed in settings",
   currentLocation: "Current Location",
   locationPlaceholder: "City",
   citizenship: "Citizenship",
@@ -165,7 +166,7 @@ const T: Record<Lang, Dict> = {
     identity: "Личность",
     fullName: "Полное имя",
     nameNotSet: "Укажите имя в настройках",
-    avatarHint: "Аватар меняется в настройках",
+    avatarHint: "Имя и фото можно изменить в настройках",
     currentLocation: "Текущее местоположение",
     locationPlaceholder: "Город",
     citizenship: "Гражданство",
@@ -229,7 +230,7 @@ const T: Record<Lang, Dict> = {
     identity: "Identidad",
     fullName: "Nombre completo",
     nameNotSet: "Indica tu nombre en ajustes",
-    avatarHint: "El avatar se cambia en ajustes",
+    avatarHint: "El nombre y la foto se pueden cambiar en ajustes",
     currentLocation: "Ubicación actual",
     locationPlaceholder: "Ciudad",
     citizenship: "Ciudadanía",
@@ -293,7 +294,7 @@ const T: Record<Lang, Dict> = {
     identity: "Identidade",
     fullName: "Nome completo",
     nameNotSet: "Defina seu nome nas configurações",
-    avatarHint: "O avatar é alterado nas configurações",
+    avatarHint: "O nome e a foto podem ser alterados nas configurações",
     currentLocation: "Localização atual",
     locationPlaceholder: "Cidade",
     citizenship: "Cidadania",
@@ -361,6 +362,8 @@ interface Profile {
   usdt_wallet?: string | null;
   member_no?: string | number | null;
   created_at?: string | null;
+  avatar_url?: string | null;
+  first_step_earned_at?: string | null;
 }
 
 function emptyProfile(id: string): Profile {
@@ -382,6 +385,8 @@ function emptyProfile(id: string): Profile {
     achievements: [],
     photo_urls: [],
     usdt_wallet: null,
+    avatar_url: null,
+    first_step_earned_at: null,
   };
 }
 
@@ -756,7 +761,8 @@ export default function ResidentProfilePage() {
   const canEditOwn = !!user; // владелец редактирует свою базовую анкету
 
   // Имя и аватар — единый источник правды: AuthContext (меняются в настройках)
-  const displayName = user?.fullName ?? null;
+  // Prefer the database profile name over an Auth/email-derived fallback.
+  const displayName = profile?.full_name?.trim() || user?.fullName || null;
   const avatarUrl = user?.avatarUrl ?? null;
 
   // Circle резидента из базы — цвет кардхолдера меняется сам при повышении
@@ -805,12 +811,24 @@ export default function ResidentProfilePage() {
         .eq("id", user.id) // profiles.id = auth user id (user_id в таблице пустой)
         .maybeSingle();
 
+      const { data: achievementRows, error: achievementError } = await supabase
+        .from("resident_achievements")
+        .select("achievement_key,earned_at")
+        .eq("profile_id", user.id);
+
       if (!active) return;
 
       if (error) {
-        console.error("Не удалось загрузить профиль:", error.message);
+        console.error("Could not load resident profile:", error.message);
+      }
+      if (achievementError) {
+        // The profile page remains usable even if the optional ledger table is
+        // unavailable in a partially migrated staging environment.
+        console.error("Could not load resident achievements:", achievementError.code ?? "unknown");
       }
 
+      const ledgerKeys = (achievementRows ?? []).map((row) => String(row.achievement_key));
+      const welcomeAward = (achievementRows ?? []).find((row) => row.achievement_key === "welcome_to_voyage");
       const base: Profile = data
         ? {
             ...emptyProfile(user.id),
@@ -818,7 +836,8 @@ export default function ResidentProfilePage() {
             smoking: !!data.smoking,
             alcohol: !!data.alcohol,
             kyc_level: data.kyc_level ?? 0,
-            achievements: data.achievements ?? [],
+            achievements: Array.from(new Set([...(data.achievements ?? []), ...ledgerKeys])),
+            first_step_earned_at: welcomeAward?.earned_at ?? data.first_step_earned_at ?? null,
             photo_urls: data.photo_urls ?? [],
           }
         : emptyProfile(user.id);
@@ -1060,6 +1079,7 @@ export default function ResidentProfilePage() {
               earned={profile.achievements}
               isAdmin={isAdmin}
               onToggle={toggleAchievement}
+              welcomeEarnedAt={profile.first_step_earned_at}
             />
           </div>
         </header>
@@ -1101,6 +1121,7 @@ export default function ResidentProfilePage() {
                         <User className="w-9 h-9 text-zinc-500" />
                       )}
                     </div>
+                    <p className="mt-2 max-w-[6.5rem] text-center text-[9px] leading-3 text-zinc-500">{t.avatarHint}</p>
                   </div>
                   <div className="grid min-w-0 grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
                     <div className="min-w-0">
@@ -1116,6 +1137,15 @@ export default function ResidentProfilePage() {
                       >
                         {isFilled(displayName) ? displayName : t.nameNotSet}
                       </span>
+                      <ProfileIdentityQuickEdit
+                        currentName={displayName ?? ""}
+                        showHint={false}
+                        onSaved={(fullName, avatarPath) => setProfile((prev) => prev ? {
+                          ...prev,
+                          full_name: fullName,
+                          avatar_url: avatarPath ?? prev.avatar_url ?? null,
+                        } : prev)}
+                      />
                     </div>
                     <div className="min-w-0">
                       <p className="text-[11px] tracking-[0.15em] uppercase text-zinc-500 font-medium mb-1">

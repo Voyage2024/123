@@ -29,10 +29,13 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { Lang } from "@/app/context/LanguageContext";
 import { cormorant } from "./fonts";
+import "./achievement-shelf.css";
 
 export const ACHIEVEMENT_KEYS = [
+  "welcome_to_voyage",
   "first_step",
   "style_ambassador",
   "voyage_wings",
@@ -51,6 +54,7 @@ export const isAchievementKey = (v: unknown): v is AchievementKey =>
   typeof v === "string" && (ACHIEVEMENT_KEYS as readonly string[]).includes(v);
 
 const ICONS: Record<AchievementKey, LucideIcon> = {
+  welcome_to_voyage: Sparkles,
   first_step: KeyRound,
   style_ambassador: UserPlus,
   voyage_wings: Plane,
@@ -80,6 +84,7 @@ const DICT: Record<Lang, ShelfDict> = {
     locked: "Ещё не получено",
     adminHint: "Нажмите, чтобы вручить или отозвать",
     items: {
+      welcome_to_voyage: ["Добро пожаловать в Voyage", "Вы стали частью VOYAGE"],
       first_step: ["Первый шаг", "Регистрация в клубе"],
       style_ambassador: ["Посол стиля", "Первая приглашённая подруга"],
       voyage_wings: ["Крылья Voyage", "Первый перелёт или тур"],
@@ -99,6 +104,7 @@ const DICT: Record<Lang, ShelfDict> = {
     locked: "Not yet earned",
     adminHint: "Click to award or revoke",
     items: {
+      welcome_to_voyage: ["Welcome to Voyage", "You are now part of VOYAGE"],
       first_step: ["First Step", "Joined the club"],
       style_ambassador: ["Style Ambassador", "Invited a first friend"],
       voyage_wings: ["Voyage Wings", "First flight or tour"],
@@ -118,6 +124,7 @@ const DICT: Record<Lang, ShelfDict> = {
     locked: "Aún no obtenido",
     adminHint: "Haz clic para otorgar o revocar",
     items: {
+      welcome_to_voyage: ["Bienvenida a Voyage", "Ahora formas parte de VOYAGE"],
       first_step: ["Primer paso", "Ingreso al club"],
       style_ambassador: ["Embajadora de estilo", "Primera amiga invitada"],
       voyage_wings: ["Alas de Voyage", "Primer vuelo o tour"],
@@ -137,6 +144,7 @@ const DICT: Record<Lang, ShelfDict> = {
     locked: "Ainda não conquistado",
     adminHint: "Clique para conceder ou revogar",
     items: {
+      welcome_to_voyage: ["Boas-vindas à Voyage", "Agora você faz parte da VOYAGE"],
       first_step: ["Primeiro passo", "Entrada no clube"],
       style_ambassador: ["Embaixadora de estilo", "Primeira amiga convidada"],
       voyage_wings: ["Asas Voyage", "Primeiro voo ou tour"],
@@ -159,10 +167,12 @@ function AchievementTile({
   isAdmin,
   d,
   onToggle,
+  glowing = false,
 }: {
   achievementKey: AchievementKey;
   on: boolean;
   isAdmin: boolean;
+  glowing?: boolean;
   d: ShelfDict;
   onToggle: (key: AchievementKey) => void;
 }) {
@@ -174,7 +184,9 @@ function AchievementTile({
     on
       ? "border-[#d4a853]/30 bg-[linear-gradient(160deg,rgba(212,168,83,0.1)_0%,rgba(212,168,83,0.02)_65%)] shadow-[0_0_30px_-14px_rgba(212,168,83,0.5)]"
       : "border-zinc-800/60 bg-zinc-900/35",
-  ].join(" ");
+  ];
+  if (glowing && on) shell.push("voyage-welcome-glow");
+  const shellClass = shell.join(" ");
 
   const body = (
     <>
@@ -213,7 +225,7 @@ function AchievementTile({
     </>
   );
 
-  if (!isAdmin) return <div className={shell}>{body}</div>;
+  if (!isAdmin) return <div className={shellClass}>{body}</div>;
 
   return (
     <button
@@ -221,7 +233,7 @@ function AchievementTile({
       aria-pressed={on}
       title={d.adminHint}
       onClick={() => onToggle(achievementKey)}
-      className={`${shell} cursor-pointer hover:border-[#d4a853]/50 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#d4a853]/60`}
+      className={`${shellClass} cursor-pointer hover:border-[#d4a853]/50 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#d4a853]/60`}
     >
       {body}
     </button>
@@ -235,14 +247,31 @@ export function AchievementShelf({
   earned,
   isAdmin,
   onToggle,
+  welcomeEarnedAt,
 }: {
   lang: Lang;
   earned: readonly string[] | null | undefined;
   isAdmin: boolean;
+  welcomeEarnedAt?: string | null;
   onToggle: (key: AchievementKey) => void;
 }) {
   const d = DICT[lang] ?? DICT.EN;
   const have = new Set((earned ?? []).filter(isAchievementKey));
+  const earnedAtMs = welcomeEarnedAt ? Date.parse(welcomeEarnedAt) : NaN;
+  const [glowState, setGlowState] = useState<{ earnedAtMs: number; active: boolean } | null>(null);
+  useEffect(() => {
+    if (!Number.isFinite(earnedAtMs)) return;
+    const deadline = earnedAtMs + 24 * 60 * 60 * 1000;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return;
+    const activate = window.setTimeout(() => setGlowState({ earnedAtMs, active: true }), 0);
+    const deactivate = window.setTimeout(() => setGlowState({ earnedAtMs, active: false }), remaining);
+    return () => {
+      window.clearTimeout(activate);
+      window.clearTimeout(deactivate);
+    };
+  }, [earnedAtMs]);
+  const welcomeGlowActive = glowState?.earnedAtMs === earnedAtMs && glowState.active;
 
   return (
     <section aria-labelledby="achievements-title">
@@ -270,9 +299,10 @@ export function AchievementShelf({
             <AchievementTile
               achievementKey={key}
               on={have.has(key)}
-              isAdmin={isAdmin}
+              isAdmin={isAdmin && key !== "welcome_to_voyage"}
               d={d}
               onToggle={onToggle}
+              glowing={key === "welcome_to_voyage" && welcomeGlowActive}
             />
           </li>
         ))}

@@ -38,8 +38,9 @@ type GlobalEvent = {
   description: string | null;
   conditions: string | null;
   is_active: boolean;
-  audience_segment: 'all' | 'working' | 'elite';
-  country_code: string | null;
+  minimum_kyc_level?: number | null;
+  capacity?: number | null;
+  application_closes_at?: string | null;
   created_at: string;
 };
 
@@ -49,8 +50,9 @@ type FormState = {
   description: string;
   conditions: string;
   is_active: boolean;
-  audience_segment: 'all' | 'working' | 'elite';
-  country_code: string;
+  minimum_kyc_level: number;
+  capacity: string;
+  application_closes_at: string;
 };
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
@@ -63,8 +65,9 @@ const EMPTY_FORM: FormState = {
   description: '',
   conditions: '',
   is_active: true,
-  audience_segment: 'all',
-  country_code: '',
+  minimum_kyc_level: 2,
+  capacity: '',
+  application_closes_at: '',
 };
 
 /* ------------------------------------------------------------------ */
@@ -101,17 +104,17 @@ const T = {
     fieldDescription: 'Description',
     fieldConditions: 'Conditions / details',
     fieldActive: 'Visible to residents',
-    fieldAudience: 'Resident segment',
-    audienceAll: 'All residents',
-    audienceWorking: 'Working',
-    audienceElite: 'Elite',
-    fieldCountryCode: 'Passport country code (ISO alpha-2)',
-    countryCodeHint: 'Optional, two letters (e.g. VN). Used as the default passport stamp when completing this event.',
-    invalidCountryCode: 'Use exactly two ISO letters.',
     phTitle: 'e.g. Yacht party in Sanya',
     phRegion: 'e.g. Asia',
     phDescription: 'Short description of the party…',
     phConditions: 'Dates, fees, accommodation, requirements, contract terms…',
+    fieldMinimumKyc: 'Minimum KYC level',
+    fieldCapacity: 'Capacity (optional)',
+    capacityUnlimited: 'Unlimited if empty',
+    fieldClosesAt: 'Application deadline (optional)',
+    invalidCapacity: 'Capacity must be a positive whole number.',
+    invalidDeadline: 'Choose a valid application deadline.',
+    kycHint: 'New events default to KYC2. Legacy events remain at KYC0; new events default to KYC2.',
     required: 'Required field',
     cancel: 'Cancel',
     save: 'Save',
@@ -159,17 +162,17 @@ const T = {
     fieldDescription: 'Описание',
     fieldConditions: 'Условия / детали',
     fieldActive: 'Видна резидентам',
-    fieldAudience: 'Сегмент резидентов',
-    audienceAll: 'Все резиденты',
-    audienceWorking: 'Working',
-    audienceElite: 'Elite',
-    fieldCountryCode: 'Код страны для паспорта (ISO alpha-2)',
-    countryCodeHint: 'Необязательно, две буквы (например VN). Используется для штампа по умолчанию при завершении ивента.',
-    invalidCountryCode: 'Укажите ровно две латинские буквы ISO.',
     phTitle: 'Например: Яхты в Санье',
     phRegion: 'Например: Азия',
     phDescription: 'Краткое описание тусовки…',
     phConditions: 'Даты, оплата, проживание, требования, условия контракта…',
+    fieldMinimumKyc: 'Минимальный уровень KYC',
+    fieldCapacity: 'Вместимость (необязательно)',
+    capacityUnlimited: 'Пусто - без ограничения',
+    fieldClosesAt: 'Дедлайн заявок (необязательно)',
+    invalidCapacity: 'Вместимость должна быть положительным целым числом.',
+    invalidDeadline: 'Укажите корректное время закрытия заявок.',
+    kycHint: 'Для новых мероприятий по умолчанию установлен KYC2. Старые мероприятия остаются на KYC0; новые по умолчанию требуют KYC2.',
     required: 'Обязательное поле',
     cancel: 'Отмена',
     save: 'Сохранить',
@@ -217,17 +220,17 @@ const T = {
     fieldDescription: 'Descripción',
     fieldConditions: 'Condiciones / detalles',
     fieldActive: 'Visible para residentes',
-    fieldAudience: 'Segmento de residentes',
-    audienceAll: 'Todos',
-    audienceWorking: 'Working',
-    audienceElite: 'Elite',
-    fieldCountryCode: 'Código de país del pasaporte (ISO alpha-2)',
-    countryCodeHint: 'Opcional, dos letras (p. ej. VN). Se usa como sello predeterminado al completar el evento.',
-    invalidCountryCode: 'Introduce exactamente dos letras ISO.',
     phTitle: 'p. ej. Yates en Sanya',
     phRegion: 'p. ej. Asia',
     phDescription: 'Breve descripción de la fiesta…',
     phConditions: 'Fechas, pagos, alojamiento, requisitos, condiciones del contrato…',
+    fieldMinimumKyc: 'Nivel mínimo de KYC',
+    fieldCapacity: 'Capacidad (opcional)',
+    capacityUnlimited: 'Sin límite si está vacío',
+    fieldClosesAt: 'Fecha límite de solicitudes (opcional)',
+    invalidCapacity: 'La capacidad debe ser un número entero positivo.',
+    invalidDeadline: 'Elige una fecha límite válida.',
+    kycHint: 'Los eventos nuevos usan KYC2 por defecto. Los eventos anteriores permanecen en KYC0; los nuevos requieren KYC2 por defecto.',
     required: 'Campo obligatorio',
     cancel: 'Cancelar',
     save: 'Guardar',
@@ -275,17 +278,17 @@ const T = {
     fieldDescription: 'Descrição',
     fieldConditions: 'Condições / detalhes',
     fieldActive: 'Visível para residentes',
-    fieldAudience: 'Segmento de residentes',
-    audienceAll: 'Todos',
-    audienceWorking: 'Working',
-    audienceElite: 'Elite',
-    fieldCountryCode: 'Código do país no passaporte (ISO alpha-2)',
-    countryCodeHint: 'Opcional, duas letras (ex.: VN). Será usado como carimbo padrão ao concluir o evento.',
-    invalidCountryCode: 'Informe exatamente duas letras ISO.',
     phTitle: 'ex.: Iates em Sanya',
     phRegion: 'ex.: Ásia',
     phDescription: 'Breve descrição da festa…',
     phConditions: 'Datas, pagamentos, hospedagem, requisitos, termos do contrato…',
+    fieldMinimumKyc: 'Nível mínimo de KYC',
+    fieldCapacity: 'Capacidade (opcional)',
+    capacityUnlimited: 'Sem limite se ficar vazio',
+    fieldClosesAt: 'Prazo para inscrições (opcional)',
+    invalidCapacity: 'A capacidade deve ser um número inteiro positivo.',
+    invalidDeadline: 'Escolha um prazo válido.',
+    kycHint: 'Novos eventos usam KYC2 por padrão. Eventos antigos ficam em KYC0; novos eventos exigem KYC2 por padrão.',
     required: 'Campo obrigatório',
     cancel: 'Cancelar',
     save: 'Salvar',
@@ -313,6 +316,14 @@ const LOCALES: Record<Lang, string> = {
   pt: 'pt-BR',
 };
 
+function toDatetimeLocal(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 function normalizeLang(value: unknown): Lang {
   const v = String(value ?? '')
     .trim()
@@ -339,7 +350,7 @@ export default function PartiesAdminPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [errors, setErrors] = useState<{ title?: boolean; region?: boolean; country_code?: boolean }>({});
+  const [errors, setErrors] = useState<{ title?: boolean; region?: boolean; capacity?: boolean; deadline?: boolean }>({});
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -394,9 +405,8 @@ export default function PartiesAdminPage() {
   }, [showToast, t]);
 
   useEffect(() => {
-    // Sync the list from Supabase when the page mounts or locale changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadEvents();
+    const timer = window.setTimeout(() => { void loadEvents(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadEvents]);
 
   /* ---------- filtering ---------- */
@@ -428,8 +438,9 @@ export default function PartiesAdminPage() {
       description: ev.description ?? '',
       conditions: ev.conditions ?? '',
       is_active: ev.is_active,
-      audience_segment: ev.audience_segment ?? 'all',
-      country_code: ev.country_code ?? '',
+      minimum_kyc_level: Number.isInteger(ev.minimum_kyc_level) ? Number(ev.minimum_kyc_level) : 0,
+      capacity: ev.capacity == null ? '' : String(ev.capacity),
+      application_closes_at: toDatetimeLocal(ev.application_closes_at),
     });
     setErrors({});
     setModalOpen(true);
@@ -457,10 +468,19 @@ export default function PartiesAdminPage() {
 
     const title = form.title.trim();
     const region = form.region.trim();
-    const countryCode = form.country_code.trim().toUpperCase();
-    const nextErrors = { title: !title, region: !region, country_code: Boolean(countryCode && !/^[A-Z]{2}$/.test(countryCode)) };
+    const capacityRaw = form.capacity.trim();
+    const capacityValue = capacityRaw === '' ? null : Number(capacityRaw);
+    const deadlineDate = form.application_closes_at.trim() === '' ? null : new Date(form.application_closes_at);
+    const deadlineInvalid = deadlineDate !== null && !Number.isFinite(deadlineDate.getTime());
+    const deadlineValue = deadlineDate && !deadlineInvalid ? deadlineDate.toISOString() : null;
+    const nextErrors = {
+      title: !title,
+      region: !region,
+      capacity: capacityValue !== null && (!Number.isInteger(capacityValue) || capacityValue < 1),
+      deadline: deadlineInvalid,
+    };
     setErrors(nextErrors);
-    if (nextErrors.title || nextErrors.region || nextErrors.country_code) return;
+    if (nextErrors.title || nextErrors.region || nextErrors.capacity || nextErrors.deadline) return;
 
     setSaving(true);
     const payload = {
@@ -469,8 +489,9 @@ export default function PartiesAdminPage() {
       description: form.description.trim() || null,
       conditions: form.conditions.trim() || null,
       is_active: form.is_active,
-      audience_segment: form.audience_segment,
-      country_code: countryCode || null,
+      minimum_kyc_level: form.minimum_kyc_level,
+      capacity: capacityValue,
+      application_closes_at: deadlineValue,
     };
 
     if (editingId) {
@@ -659,11 +680,9 @@ export default function PartiesAdminPage() {
                     <h3 className={`${cormorant.className} truncate text-2xl font-semibold text-neutral-100`}>
                       {ev.title}
                     </h3>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.15em] text-amber-200/80">
-                      <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{ev.region}</span>
-                      <span className={`rounded-full border px-2 py-0.5 text-[9px] tracking-wider ${ev.audience_segment === 'elite' ? 'border-amber-200/35 bg-amber-200/10 text-amber-100' : ev.audience_segment === 'working' ? 'border-white/10 bg-white/[0.04] text-neutral-400' : 'border-neutral-700 bg-neutral-900 text-neutral-500'}`}>
-                        {ev.audience_segment === 'elite' ? 'ELITE' : ev.audience_segment === 'working' ? 'WORKING' : 'ALL'}
-                      </span>
+                    <div className="mt-1 flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-amber-200/80">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {ev.region}
                     </div>
                   </div>
                   <span
@@ -827,30 +846,40 @@ export default function PartiesAdminPage() {
                 />
               </div>
 
-              <div className="grid gap-5 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">{t.fieldAudience}</label>
-                  <select
-                    value={form.audience_segment}
-                    onChange={(e) => setForm((f) => ({ ...f, audience_segment: e.target.value as FormState['audience_segment'] }))}
-                    className={`${inputBase} border-neutral-800`}
-                  >
-                    <option value="all">{t.audienceAll}</option>
-                    <option value="working">{t.audienceWorking}</option>
-                    <option value="elite">{t.audienceElite}</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">{t.fieldCountryCode}</label>
-                  <input
-                    value={form.country_code}
-                    onChange={(e) => setForm((f) => ({ ...f, country_code: e.target.value.toUpperCase().slice(0, 2) }))}
-                    placeholder="VN"
-                    maxLength={2}
-                    className={`${inputBase} ${errors.country_code ? 'border-red-500/60' : 'border-neutral-800'}`}
-                  />
-                  <p className="mt-1 text-[11px] leading-relaxed text-neutral-500">{t.countryCodeHint}</p>
-                  {errors.country_code && <p className="mt-1 text-xs text-red-400">{t.invalidCountryCode}</p>}
+              <div className="rounded-2xl border border-amber-200/10 bg-amber-200/[0.025] p-4">
+                <div className="mb-3 text-xs leading-5 text-neutral-500">{t.kycHint}</div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">{t.fieldMinimumKyc}</label>
+                    <select
+                      value={form.minimum_kyc_level}
+                      onChange={(e) => setForm((f) => ({ ...f, minimum_kyc_level: Number(e.target.value) }))}
+                      className={`${inputBase} border-neutral-800`}
+                    >
+                      {[0, 1, 2, 3].map((level) => <option key={level} value={level}>KYC{level}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">{t.fieldCapacity}</label>
+                    <input
+                      type="number" min={1} step={1} inputMode="numeric"
+                      value={form.capacity}
+                      onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value }))}
+                      placeholder={t.capacityUnlimited}
+                      className={`${inputBase} ${errors.capacity ? 'border-red-500/60' : 'border-neutral-800'}`}
+                    />
+                    {errors.capacity && <p className="mt-1 text-xs text-red-400">{t.invalidCapacity}</p>}
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">{t.fieldClosesAt}</label>
+                    <input
+                      type="datetime-local"
+                      value={form.application_closes_at}
+                      onChange={(e) => setForm((f) => ({ ...f, application_closes_at: e.target.value }))}
+                      className={`${inputBase} ${errors.deadline ? 'border-red-500/60' : 'border-neutral-800'}`}
+                    />
+                    {errors.deadline && <p className="mt-1 text-xs text-red-400">{t.invalidDeadline}</p>}
+                  </div>
                 </div>
               </div>
 

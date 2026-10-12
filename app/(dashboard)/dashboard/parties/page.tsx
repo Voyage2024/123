@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { submitEventApplication } from "@/app/actions/event-applications";
 import { motion } from "framer-motion";
 import { Check, Clock, GlassWater, Loader2, MapPin } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
@@ -76,6 +78,15 @@ const T = {
     applying: "Sending...",
     applicationError: "Unable to submit the application.",
     applicationSent: "Application sent.",
+    mapLocation: "Open regional map",
+    errors: {
+      unauthenticated: "Please sign in to apply.", profile_missing: "Your profile could not be found. Contact support.",
+      resident_only: "Applications are available to resident accounts only.", profile_not_approved: "Your profile has not passed Face Control yet.",
+      banned: "Applications are unavailable while the account is restricted.", event_not_found: "This event is no longer available.",
+      event_closed: "This event is closed.", application_closed: "The application period has ended.", kyc_required: "Insufficient KYC level. This event requires KYC{{level}}.",
+      segment_not_eligible: "This event is reserved for another resident segment.", already_applied: "You already have an active application for this event.",
+      rejection_cooldown: "A new application is available after the rejection cooldown.", event_full: "There are no places left for this event.", server_error: "A technical error occurred. Please try again later.",
+    },
   },
   RU: {
     title: "Закрытые мероприятия",
@@ -97,6 +108,15 @@ const T = {
     applying: "Отправка...",
     applicationError: "Не удалось отправить заявку.",
     applicationSent: "Заявка отправлена.",
+    mapLocation: "Открыть карту региона",
+    errors: {
+      unauthenticated: "Войдите в аккаунт, чтобы подать заявку.", profile_missing: "Профиль не найден. Обратитесь в поддержку.",
+      resident_only: "Подавать заявки могут только резиденты.", profile_not_approved: "Ваш профиль ещё не прошёл Face Control.",
+      banned: "Во время ограничения аккаунта подавать заявки нельзя.", event_not_found: "Мероприятие больше недоступно.",
+      event_closed: "Мероприятие закрыто.", application_closed: "Приём заявок завершён.", kyc_required: "Недостаточный уровень KYC. Для мероприятия нужен KYC{{level}}.",
+      segment_not_eligible: "Мероприятие доступно для другого сегмента резидентов.", already_applied: "У вас уже есть активная заявка на это мероприятие.",
+      rejection_cooldown: "Повторная заявка будет доступна после окончания периода ожидания.", event_full: "Свободных мест на мероприятие не осталось.", server_error: "Произошла техническая ошибка. Попробуйте позже.",
+    },
   },
   ES: {
     title: "Eventos privados",
@@ -118,6 +138,15 @@ const T = {
     applying: "Enviando...",
     applicationError: "No se pudo enviar la solicitud.",
     applicationSent: "Solicitud enviada.",
+    mapLocation: "Abrir mapa regional",
+    errors: {
+      unauthenticated: "Inicia sesión para solicitar acceso.", profile_missing: "No se encontró tu perfil. Contacta con soporte.",
+      resident_only: "Solo las cuentas de residentes pueden solicitar acceso.", profile_not_approved: "Tu perfil aún no ha superado Face Control.",
+      banned: "No puedes enviar solicitudes mientras la cuenta esté restringida.", event_not_found: "El evento ya no está disponible.",
+      event_closed: "El evento está cerrado.", application_closed: "El plazo de solicitudes ha terminado.", kyc_required: "Nivel KYC insuficiente. Este evento requiere KYC{{level}}.",
+      segment_not_eligible: "Este evento está reservado para otro segmento de residentes.", already_applied: "Ya tienes una solicitud activa para este evento.",
+      rejection_cooldown: "Podrás volver a solicitar acceso cuando termine el periodo de espera.", event_full: "No quedan plazas para este evento.", server_error: "Ocurrió un error técnico. Inténtalo más tarde.",
+    },
   },
   PT: {
     title: "Eventos privados",
@@ -139,8 +168,17 @@ const T = {
     applying: "Enviando...",
     applicationError: "Não foi possível enviar a solicitação.",
     applicationSent: "Solicitação enviada.",
+    mapLocation: "Abrir mapa regional",
+    errors: {
+      unauthenticated: "Entre na conta para solicitar acesso.", profile_missing: "Seu perfil não foi encontrado. Fale com o suporte.",
+      resident_only: "Somente contas de residentes podem solicitar acesso.", profile_not_approved: "Seu perfil ainda não passou pelo Face Control.",
+      banned: "Não é possível enviar solicitações enquanto a conta estiver restrita.", event_not_found: "Este evento não está mais disponível.",
+      event_closed: "Este evento está fechado.", application_closed: "O prazo de inscrição terminou.", kyc_required: "Nível KYC insuficiente. Este evento exige KYC{{level}}.",
+      segment_not_eligible: "Este evento é reservado para outro segmento de residentes.", already_applied: "Você já tem uma solicitação ativa para este evento.",
+      rejection_cooldown: "Uma nova solicitação ficará disponível após o período de espera.", event_full: "Não há mais vagas para este evento.", server_error: "Ocorreu um erro técnico. Tente novamente mais tarde.",
+    },
   },
-} satisfies Record<Lang, Record<string, string>>;
+} satisfies Record<Lang, Record<string, unknown>>;
 
 // -----------------------------------------------------
 // Helpers
@@ -149,6 +187,15 @@ const T = {
 function normalizeLang(value: unknown): Lang {
   const v = String(value || "").toUpperCase();
   return SUPPORTED_LANGS.includes(v as Lang) ? (v as Lang) : "EN";
+}
+
+function mapHrefForRegion(region: string): string {
+  const value = region.toLowerCase();
+  if (/america|united states|usa|canada|mexico|сша|америк|канада|мексик/.test(value)) return "/destinations/americas";
+  if (/asia|pacific|vietnam|thailand|indonesia|bali|cambodia|singapore|asia-pacific|азия|вьетнам|таиланд|индонез|камбодж|сингапур/.test(value)) return "/destinations/asia-pacific";
+  if (/middle east|mena|dubai|uae|emirates|saudi|qatar|oman|ближн|оаэ|дубай|сауд|катар|оман/.test(value)) return "/destinations/middle-east";
+  if (/europe|france|paris|spain|italy|germany|uk|london|европ|франц|париж|испан|итал|герман|лондон/.test(value)) return "/destinations/europe";
+  return "/dashboard/map";
 }
 
 function getLocale(lang: Lang) {
@@ -343,33 +390,27 @@ function PartyCard({ event, userId, lang, t }: PartyCardProps) {
     setError("");
     setSuccess(false);
 
-    const { data, error: insertError } = await supabase
-      .from("event_applications")
-      .insert({
-        user_id: userId,
-        event_id: event.id,
-        status: "pending",
-      })
-      .select(APPLICATION_FIELDS)
-      .single();
+    const result = await submitEventApplication(event.id);
 
-    if (insertError) {
-      console.error("Event application insert error:", insertError);
-
-      // 23505 — уже есть активная заявка (уникальный индекс),
-      // 42501 — RLS отклонил (кулдаун / мероприятие неактивно).
-      // В обоих случаях подтягиваем актуальное состояние с сервера.
-      if (insertError.code === "23505" || insertError.code === "42501") {
+    if (!result.ok) {
+      const reasonKey = result.reason as keyof typeof t.errors;
+      let message = t.errors[reasonKey] ?? t.applicationError;
+      if (result.reason === "kyc_required") {
+        message = message.replace("{{level}}", String(result.requiredLevel ?? 2));
+      }
+      if (result.reason === "rejection_cooldown" && result.availableAt) {
+        message = `${message} ${formatDate(new Date(result.availableAt), lang)}`;
+      }
+      if (["already_applied", "rejection_cooldown"].includes(result.reason)) {
         const { data: fresh } = await fetchApplication();
         if (fresh) setApplication(fresh);
       }
-
-      setError(t.applicationError);
+      setError(message);
       setSubmitting(false);
       return;
     }
 
-    setApplication(data as EventApplication);
+    setApplication(result.application as EventApplication);
     setSuccess(true);
     setSubmitting(false);
   };
@@ -407,9 +448,11 @@ function PartyCard({ event, userId, lang, t }: PartyCardProps) {
             {event.title}
           </h2>
 
-          <div className="flex items-center gap-2 text-sm text-zinc-400">
-            <MapPin className="h-4 w-4 shrink-0 text-amber-200/70" />
-            <span>{event.region}</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-zinc-400">
+            <span className="inline-flex items-center gap-2"><MapPin className="h-4 w-4 shrink-0 text-amber-200/70" />{event.region}</span>
+            <Link href={mapHrefForRegion(event.region)} className="inline-flex items-center gap-1.5 text-xs text-amber-200/75 underline decoration-amber-200/20 underline-offset-4 transition hover:text-amber-100 hover:decoration-amber-200/60">
+              <MapPin className="h-3.5 w-3.5" />{t.mapLocation}
+            </Link>
           </div>
         </div>
 

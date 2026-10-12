@@ -1,58 +1,37 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import type { Role } from "@/lib/rbac";
-
-const VALID_ROLES = new Set<Role>(["owner", "admin", "manager", "resident"]);
+import type { Role } from "@/app/context/AuthContext";
 
 export class AuthorizationError extends Error {
-  readonly status: 401 | 403 | 500;
-
-  constructor(message: string, status: 401 | 403 | 500) {
+  constructor(message = "You are not authorized to perform this action.") {
     super(message);
     this.name = "AuthorizationError";
-    this.status = status;
   }
 }
 
-/**
- * Server-side authorization. The role is always read from public.profiles
- * using the authenticated user's Supabase session; never trust client role,
- * user_metadata, app_metadata or an email allow-list for authorization.
- */
-export async function requireRole(allowedRoles: readonly Role[]) {
-  const supabase = await createClient();
-  const { data: authData, error: authError } = await supabase.auth.getUser();
+function isBanActive(profile: { banned_until?: string | null; ban_permanent?: boolean | null }): boolean {
+  if (profile.ban_permanent === true || profile.banned_until === "infinity") return true;
+  if (!profile.banned_until) return false;
+  const parsed = Date.parse(profile.banned_until);
+  return Number.isFinite(parsed) && parsed > Date.now();
+}
 
-  if (authError || !authData.user) {
-    throw new AuthorizationError("Необходима авторизация.", 401);
-  }
+export async function requireRole(allowed: readonly Role[]): Promise<{ userId: string; role: Role }> {
+  const supabase = await createClient();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user) throw new AuthorizationError("Please sign in.");
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role")
-    .eq("id", authData.user.id)
+    .select("id,role,banned_until,ban_permanent")
+    .eq("id", auth.user.id)
     .maybeSingle();
 
-  if (profileError) {
-    console.error("[authorization] profile role lookup failed:", profileError.message);
-    throw new AuthorizationError("Не удалось проверить права доступа.", 500);
+  if (profileError || !profile || !allowed.includes(profile.role as Role)) {
+    throw new AuthorizationError("You do not have permission to perform this action.");
   }
+  if (isBanActive(profile)) throw new AuthorizationError("Access is restricted for this account.");
 
-  const role = profile?.role;
-  if (typeof role !== "string" || !VALID_ROLES.has(role as Role)) {
-    throw new AuthorizationError("Профиль пользователя не найден или роль недействительна.", 403);
-  }
-  if (!allowedRoles.includes(role as Role)) {
-    throw new AuthorizationError("Недостаточно прав.", 403);
-  }
-
-  return { user: authData.user, role: role as Role, supabase };
-}
-
-export function toAuthorizationResponse(error: unknown) {
-  if (error instanceof AuthorizationError) {
-    return { error: error.message, status: error.status } as const;
-  }
-  return { error: "Внутренняя ошибка сервера.", status: 500 } as const;
+  return { userId: auth.user.id, role: profile.role as Role };
 }
