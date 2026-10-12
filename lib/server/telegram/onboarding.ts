@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import type { Context } from "grammy";
 import { copy, mainMenu } from "./copy";
 import { getTelegramServiceClient } from "./service-client";
+import { notifyAdminsOfNewRegistration } from "./admin-notifications";
 import { uploadTelegramPhoto } from "./storage";
 import type { RegistrationAnswers, TelegramConversationState, TelegramLang } from "./types";
 import { getPreferredTelegramLanguage, savePreferredTelegramLanguage } from "./preferences";
@@ -123,7 +124,7 @@ export async function beginRegistration(ctx: Context, lang: TelegramLang): Promi
   const t = copy(lang);
   if (linked) {
     if (isBanned(linked)) await ctx.reply(t.alreadyBanned, { reply_markup: mainMenu(lang) });
-    else if (linked.status === "approved") await ctx.reply(t.alreadyApproved, { reply_markup: mainMenu(lang) });
+    else if (linked.status === "approved" && Number(linked.kyc_level ?? 0) >= 1) await ctx.reply(t.alreadyApproved, { reply_markup: mainMenu(lang) });
     else if (linked.status === "rejected") await ctx.reply(t.alreadyRejected, { reply_markup: mainMenu(lang) });
     else await ctx.reply(t.alreadyPending, { reply_markup: mainMenu(lang) });
     return;
@@ -211,6 +212,8 @@ async function finalizeRegistration(ctx: Context, state: TelegramConversationSta
     influence_index: 0,
     circle: "voyager",
     usdt_wallet: null,
+    registration_source: "telegram_bot",
+    source_metadata: { telegram_id: telegramId, telegram_username: state.telegram_username },
     temp_password: null,
     is_npc: false,
   };
@@ -225,6 +228,14 @@ async function finalizeRegistration(ctx: Context, state: TelegramConversationSta
   }
 
   await deleteConversationState(telegramId);
+  await notifyAdminsOfNewRegistration({
+    eventKey: `telegram_registration:${authResult.user.id}`,
+    source: "telegram_bot",
+    profileId: authResult.user.id,
+    fullName,
+    email,
+    telegramId,
+  });
   await ctx.reply(t.onboarding.done, { reply_markup: mainMenu(state.telegram_language) });
 }
 
