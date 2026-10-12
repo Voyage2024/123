@@ -12,12 +12,22 @@ type Application = {
   created_at: string;
 };
 
+type EventApplication = {
+  id: string;
+  event_id: string;
+  event_title: string | null;
+  region: string | null;
+  status: ApplicationStatus;
+  created_at: string;
+};
+
 type Locale = 'ru' | 'en' | 'es' | 'pt';
 
 const T: Record<Locale, Record<string, string>> = {
   ru: {
     title: 'Мои заявки',
     subtitle: 'Направления, в которые вы отправили запрос',
+    tabTours: 'Туры', tabEvents: 'Мероприятия', eventEmpty: 'У вас пока нет заявок на мероприятия', eventEmptyHint: 'Посмотрите доступные тусовки в разделе мероприятий', eventError: 'Не удалось загрузить заявки на мероприятия', eventFallback: 'Мероприятие',
     empty: 'У вас пока нет активных заявок',
     emptyHint: 'Выберите направление на карте',
     submitted: 'Подана',
@@ -35,6 +45,7 @@ const T: Record<Locale, Record<string, string>> = {
   en: {
     title: 'My applications',
     subtitle: 'Destinations you have applied to',
+    tabTours: 'Tours', tabEvents: 'Events', eventEmpty: 'You have no event applications yet', eventEmptyHint: 'Browse available events in the events section', eventError: 'Could not load event applications', eventFallback: 'Event',
     empty: 'You have no active applications yet',
     emptyHint: 'Choose a destination on the map',
     submitted: 'Submitted',
@@ -52,6 +63,7 @@ const T: Record<Locale, Record<string, string>> = {
   es: {
     title: 'Mis solicitudes',
     subtitle: 'Destinos a los que has enviado solicitud',
+    tabTours: 'Tours', tabEvents: 'Eventos', eventEmpty: 'Aún no tienes solicitudes para eventos', eventEmptyHint: 'Consulta los eventos disponibles', eventError: 'No se pudieron cargar las solicitudes para eventos', eventFallback: 'Evento',
     empty: 'Aún no tienes solicitudes activas',
     emptyHint: 'Elige un destino en el mapa',
     submitted: 'Enviada',
@@ -69,6 +81,7 @@ const T: Record<Locale, Record<string, string>> = {
   pt: {
     title: 'Minhas candidaturas',
     subtitle: 'Destinos para os quais você se candidatou',
+    tabTours: 'Tours', tabEvents: 'Eventos', eventEmpty: 'Você ainda não tem solicitações para eventos', eventEmptyHint: 'Veja os eventos disponíveis', eventError: 'Não foi possível carregar as solicitações para eventos', eventFallback: 'Evento',
     empty: 'Você ainda não tem candidaturas ativas',
     emptyHint: 'Escolha um destino no mapa',
     submitted: 'Enviada',
@@ -140,6 +153,8 @@ export default function MyApplications({ locale = 'ru' }: { locale?: Locale }) {
   const t = T[locale] ?? T.ru;
 
   const [apps, setApps] = useState<Application[]>([]);
+  const [eventApps, setEventApps] = useState<EventApplication[]>([]);
+  const [tab, setTab] = useState<'tours' | 'events'>('tours');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -155,26 +170,38 @@ export default function MyApplications({ locale = 'ru' }: { locale?: Locale }) {
 
     if (!user) {
       setApps([]);
+      setEventApps([]);
       setLoading(false);
       return;
     }
 
-    const { data, error } = await supabase
-      .from('applications')
-      .select('id, hub_id, status, created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error(error);
-      setError(t.error);
+    if (tab === 'tours') {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('id, hub_id, status, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.error('[my-applications] tours query failed', { code: error.code, message: error.message });
+        setError(t.error);
+      } else {
+        setApps((data ?? []) as Application[]);
+      }
     } else {
-      setApps((data ?? []) as Application[]);
+      const { data, error } = await supabase.rpc('get_my_event_applications');
+      if (error) {
+        console.error('[my-applications] event applications RPC failed', { code: error.code, message: error.message });
+        setError(t.eventError);
+      } else {
+        setEventApps((data ?? []) as EventApplication[]);
+      }
     }
     setLoading(false);
-  }, [t.error]);
+  }, [t.error, t.eventError, tab]);
 
   useEffect(() => {
+    // Initial data loading is intentionally kicked off after mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
@@ -225,6 +252,11 @@ export default function MyApplications({ locale = 'ru' }: { locale?: Locale }) {
         <div className="mt-4 h-px w-full bg-gradient-to-r from-amber-200/40 via-amber-200/10 to-transparent" />
       </header>
 
+      <div role="tablist" aria-label={t.title} className="relative mb-5 grid grid-cols-2 rounded-xl border border-zinc-800 bg-zinc-950/80 p-1">
+        <button type="button" role="tab" aria-selected={tab === 'tours'} onClick={() => setTab('tours')} className={`min-h-10 rounded-lg px-4 py-2 text-sm font-medium transition ${tab === 'tours' ? 'border border-amber-200/25 bg-amber-200/[0.08] text-amber-100 shadow-[0_0_18px_rgba(251,191,36,.05)]' : 'text-zinc-500 hover:text-zinc-200'}`}>{t.tabTours}</button>
+        <button type="button" role="tab" aria-selected={tab === 'events'} onClick={() => setTab('events')} className={`min-h-10 rounded-lg px-4 py-2 text-sm font-medium transition ${tab === 'events' ? 'border border-amber-200/25 bg-amber-200/[0.08] text-amber-100 shadow-[0_0_18px_rgba(251,191,36,.05)]' : 'text-zinc-500 hover:text-zinc-200'}`}>{t.tabEvents}</button>
+      </div>
+
       {error && (
         <div className="relative mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-400/20 bg-red-400/5 px-4 py-3 text-sm text-red-300">
           <span>{error}</span>
@@ -240,16 +272,30 @@ export default function MyApplications({ locale = 'ru' }: { locale?: Locale }) {
             <li key={i} className="h-[76px] animate-pulse rounded-2xl border border-white/5 bg-white/[0.03]" />
           ))}
         </ul>
-      ) : apps.length === 0 ? (
+      ) : (tab === 'tours' ? apps.length === 0 : eventApps.length === 0) ? (
         <div className="relative flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-200/20 bg-white/[0.02] px-6 py-12 text-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-amber-200/30 bg-amber-200/5">
             <svg className="h-6 w-6 text-amber-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
             </svg>
           </div>
-          <p className="text-sm font-medium text-zinc-200">{t.empty}</p>
-          <p className="mt-1 text-sm text-zinc-500">{t.emptyHint}</p>
+          <p className="text-sm font-medium text-zinc-200">{tab === 'tours' ? t.empty : t.eventEmpty}</p>
+          <p className="mt-1 text-sm text-zinc-500">{tab === 'tours' ? t.emptyHint : t.eventEmptyHint}</p>
         </div>
+      ) : tab === 'events' ? (
+        <ul className="relative space-y-3">
+          {eventApps.map((app) => (
+            <li key={app.id} className="group rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md transition hover:border-amber-200/25 hover:bg-white/[0.05]">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-base font-medium text-zinc-100">{app.event_title?.trim() || t.eventFallback}</p>
+                  <p className="mt-0.5 truncate text-xs text-zinc-500">{app.region || ''}{app.region ? ' · ' : ''}{t.submitted} · {dateFmt.format(new Date(app.created_at))}</p>
+                </div>
+                <StatusBadge status={app.status} label={t[app.status]} />
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : (
         <ul className="relative space-y-3">
           {apps.map((app) => {

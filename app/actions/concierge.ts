@@ -53,12 +53,26 @@ export async function createConciergeRequest(input: CreateConciergeInput) {
       return { ok: false as const, reason: "validation" };
     }
 
-    const { data: profile, error: profileError } = await supabase
+    // Some legacy profiles use a separate profiles.user_id; resolve that link
+    // before inserting a concierge request so resident_id always references profiles.id.
+    let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id,role,status,banned_until,ban_permanent")
       .eq("id", auth.user.id)
       .maybeSingle();
-    if (profileError || !profile) return { ok: false as const, reason: "profile_missing" };
+    if (!profile && !profileError) {
+      const fallback = await supabase
+        .from("profiles")
+        .select("id,role,status,banned_until,ban_permanent")
+        .eq("user_id", auth.user.id)
+        .maybeSingle();
+      profile = fallback.data;
+      profileError = fallback.error;
+    }
+    if (profileError || !profile) {
+      console.error("[concierge] profile resolution failed", { code: profileError?.code, message: profileError?.message, authUserId: auth.user.id });
+      return { ok: false as const, reason: "profile_missing" };
+    }
     if (profile.role !== "resident") return { ok: false as const, reason: "resident_only" };
     if (profile.status !== "approved") return { ok: false as const, reason: "not_approved" };
     const banUntil = profile.banned_until === "infinity" ? Number.POSITIVE_INFINITY : profile.banned_until ? Date.parse(profile.banned_until) : 0;
@@ -67,7 +81,7 @@ export async function createConciergeRequest(input: CreateConciergeInput) {
     }
 
     const { data, error } = await supabase.from("partner_concierge_requests").insert({
-      resident_id: auth.user.id,
+      resident_id: profile.id,
       title,
       category: input.category,
       message,
@@ -78,8 +92,8 @@ export async function createConciergeRequest(input: CreateConciergeInput) {
     }).select("id,title,category,message,trip_stage,desired_at,preferred_language,status,admin_feedback,created_at,updated_at").single();
 
     if (error) {
-      console.error("[concierge] create request failed", { code: error.code, message: error.message, details: error.details, userId: auth.user.id });
-      return { ok: false as const, reason: error.code === "42501" ? "restricted" : "server_error" };
+      console.error("[concierge] create request failed", { code: error.code, message: error.message, details: error.details, authUserId: auth.user.id, profileId: profile.id });
+      return { ok: false as const, reason: error.code === "42501" ? "restricted" : error.code === "23503" ? "profile_missing" : error.code === "23514" ? "invalid_state" : "server_error" };
     }
     revalidatePath("/dashboard/concierge");
     revalidatePath("/admin/concierge");
@@ -94,9 +108,19 @@ export async function listMyConciergeRequests() {
   const supabase = await createClient();
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError || !auth.user) return { ok: false as const, reason: "unauthenticated" };
+  let { data: profile, error: profileError } = await supabase.from("profiles").select("id").eq("id", auth.user.id).maybeSingle();
+  if (!profile && !profileError) {
+    const fallback = await supabase.from("profiles").select("id").eq("user_id", auth.user.id).maybeSingle();
+    profile = fallback.data;
+    profileError = fallback.error;
+  }
+  if (profileError || !profile) {
+    console.error("[concierge] list profile resolution failed", { code: profileError?.code, message: profileError?.message });
+    return { ok: false as const, reason: "profile_missing" };
+  }
   const { data, error } = await supabase.from("partner_concierge_requests")
     .select("id,title,category,message,trip_stage,desired_at,preferred_language,status,admin_feedback,created_at,updated_at")
-    .eq("resident_id", auth.user.id)
+    .eq("resident_id", profile.id)
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) {

@@ -20,6 +20,7 @@
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Cormorant_Garamond } from "next/font/google";
 import {
@@ -39,6 +40,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { notifyCurrentReferralRegistration } from "@/app/actions/referral-notifications";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { LANGS, normalizeCircleKey, normalizeLang, type CircleKey, type Lang } from "@/lib/gamification";
 import { KEY_TTL_DAYS, inviteErrorCode, normalizeInviteCode, type InvitePreviewRow } from "@/lib/patronage";
@@ -583,6 +585,8 @@ type LangCtx = { lang?: unknown; language?: unknown; setLang?: (l: string) => vo
 function useJoinLang() {
   let ctx: LangCtx | null = null;
   try {
+    // This optional provider fallback is retained for the public invite flow.
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     ctx = useLanguage() as unknown as LangCtx;
   } catch {
     ctx = null; // провайдер языка подключён только внутри дашборда
@@ -1271,6 +1275,8 @@ export default function JoinClient() {
   // ключ из ссылки; если ссылки нет — тот, что гостья начала принимать
   useEffect(() => {
     if (urlCode) {
+      // Hydrate local invite state from the URL after mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCode(urlCode);
       return;
     }
@@ -1303,6 +1309,8 @@ export default function JoinClient() {
           return;
         }
         clearPending();
+        // Notification is best-effort and cannot block invitation redemption UX.
+        void notifyCurrentReferralRegistration();
         setView({ kind: "done" });
       } finally {
         redeeming.current = false;
@@ -1466,9 +1474,9 @@ export default function JoinClient() {
               {t.retry}
             </button>
           )}
-          <a href="/" className={`${LINK_QUIET} justify-center`}>
+          <Link href="/" className={`${LINK_QUIET} justify-center`}>
             {t.home}
-          </a>
+          </Link>
         </Notice>
       );
       break;
@@ -1632,7 +1640,7 @@ export default function JoinClient() {
       </div>
 
       <header className="relative z-10 flex items-center justify-between gap-4 px-5 py-6 sm:px-10">
-        <a href="/" className={`flex items-center gap-3 rounded-lg ${FOCUS}`}>
+        <Link href="/" className={`flex items-center gap-3 rounded-lg ${FOCUS}`}>
           <span className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/30">
             <span className={`${cormorant.className} text-lg font-medium text-amber-200/90`}>V</span>
           </span>
@@ -1640,7 +1648,7 @@ export default function JoinClient() {
             <span className={`${cormorant.className} text-xl font-medium tracking-[0.2em] text-zinc-50`}>VOYAGE</span>
             <span className="text-[9px] uppercase tracking-[0.3em] text-zinc-500">{t.tagline}</span>
           </span>
-        </a>
+        </Link>
         <div
           role="group"
           aria-label={t.language}

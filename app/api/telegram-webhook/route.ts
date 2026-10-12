@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { webhookCallback } from "grammy";
-import { createVoyageTelegramBot } from "@/lib/server/telegram/bot";
+import { getVoyageTelegramBot } from "@/lib/server/telegram/runtime";
 import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
 
 export const runtime = "nodejs";
@@ -53,7 +53,7 @@ export async function POST(request: Request): Promise<Response> {
   if (claim !== "claimed") return jsonError(503, "update_claim_unavailable");
 
   try {
-    const bot = createVoyageTelegramBot(token);
+    const bot = getVoyageTelegramBot();
     const handler = webhookCallback(bot, "std/http", {
       secretToken: webhookSecret,
       timeoutMilliseconds: 50_000,

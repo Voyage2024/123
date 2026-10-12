@@ -149,16 +149,17 @@ export default function ProfileIdentityQuickEdit({
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="profile-identity-title" className="w-full max-w-md rounded-2xl border border-zinc-700/50 bg-zinc-950/95 p-5 shadow-2xl shadow-black/50 sm:p-6">
-            <div className="mb-5 flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto bg-black/80 p-0 backdrop-blur-md sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="profile-identity-title" className="relative z-[101] flex max-h-[calc(100dvh-0.5rem)] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-zinc-700/70 bg-zinc-950 text-zinc-100 shadow-[0_-24px_80px_rgba(0,0,0,.65)] sm:max-h-[min(90dvh,48rem)] sm:rounded-2xl sm:shadow-2xl">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-800/80 px-5 py-4 sm:px-6 sm:py-5">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.24em] text-amber-200/60">VOYAGE</p>
                 <h2 id="profile-identity-title" className="mt-1 text-xl text-zinc-100">{t.title}</h2>
               </div>
               <button type="button" onClick={close} aria-label={t.cancel} className="rounded-full p-2 text-zinc-500 hover:bg-white/5 hover:text-zinc-200"><X size={16} /></button>
             </div>
-            <label className="mb-2 block text-xs text-zinc-400" htmlFor="identity-full-name">{t.name}</label>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 sm:px-6">
+            <label className="mb-2 block text-xs text-zinc-300" htmlFor="identity-full-name">{t.name}</label>
             <input id="identity-full-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} autoComplete="name" className="mb-5 w-full rounded-xl border border-zinc-700/50 bg-zinc-900/60 px-3.5 py-3 text-sm text-zinc-100 outline-none focus:border-amber-200/40" />
             <p className="mb-2 text-xs text-zinc-400">{t.photo}</p>
             <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
@@ -168,12 +169,13 @@ export default function ProfileIdentityQuickEdit({
             </button>
             {error && <p role="alert" className="mb-3 rounded-lg border border-red-900/40 bg-red-950/20 px-3 py-2 text-xs text-red-200/90">{error}</p>}
             {success && <p role="status" className="mb-3 flex items-center gap-2 text-xs text-emerald-200"><Check size={14} />{t.saved}</p>}
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={close} disabled={busy} className="rounded-xl border border-zinc-700/60 px-4 py-2.5 text-xs text-zinc-300 hover:bg-white/5 disabled:opacity-50">{t.cancel}</button>
-              <button type="button" onClick={save} disabled={busy || !user} className="inline-flex items-center gap-2 rounded-xl border border-amber-200/30 bg-amber-200/[0.08] px-4 py-2.5 text-xs text-amber-100 transition hover:bg-amber-200/[0.13] disabled:opacity-50">
-                {busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} {t.save}
-              </button>
             </div>
+            <footer className="relative z-[102] flex shrink-0 flex-col-reverse gap-2 border-t border-zinc-800 bg-zinc-950 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end sm:px-6 sm:py-4">
+              <button type="button" onClick={close} disabled={busy} className="min-h-11 rounded-xl border border-zinc-600 bg-zinc-900 px-5 py-3 text-sm font-medium text-zinc-100 transition hover:border-zinc-500 hover:bg-zinc-800 disabled:opacity-50 sm:min-h-10 sm:py-2.5">{t.cancel}</button>
+              <button type="button" onClick={save} disabled={busy || !user} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200/50 bg-amber-200 px-5 py-3 text-sm font-semibold text-zinc-950 shadow-lg shadow-amber-950/20 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-10 sm:py-2.5">
+                {busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} {t.save}
+              </button>
+            </footer>
           </section>
         </div>
       )}

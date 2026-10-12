@@ -679,7 +679,8 @@ export default function LeaderboardClient({
     if (!scrollTo) return;
     const el = document.getElementById(`lb-row-${scrollTo}`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    setScrollTo(null);
+    const frame = window.requestAnimationFrame(() => setScrollTo(null));
+    return () => window.cancelAnimationFrame(frame);
   }, [scrollTo, shown]);
 
   const findMe = () => {
@@ -699,7 +700,7 @@ export default function LeaderboardClient({
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-200">
       <style>{STYLES}</style>
-      <div className="lb-root mx-auto w-full max-w-5xl px-4 pb-20 pt-10 sm:px-8 sm:pt-14">
+      <div className="lb-root mx-auto w-full max-w-5xl px-4 pb-20 pt-2 sm:px-8 sm:pt-4">
         {/* ── Заголовок ── */}
         <header>
           <p className="flex items-center gap-3 text-[10px] uppercase tracking-[0.32em] text-amber-200/70">

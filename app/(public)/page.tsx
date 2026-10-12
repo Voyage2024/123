@@ -16,7 +16,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext"; // <-- ДОБАВИЛИ ИМПОРТ ГЛОБАЛЬНОГО ЯЗЫКА
-import { supabase } from "@/lib/supabase";
+import { submitGuestApplication } from "@/app/actions/guest-applications";
 
 // next/font переименовывает шрифт, поэтому берём его через CSS-переменную
 const SERIF = "var(--font-cormorant), Georgia, serif";
@@ -108,6 +108,8 @@ export default function HomePage() {
       return;
     }
 
+    // Reset particle state when the easter-egg animation starts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTrailParticles([]);
     particleIdRef.current = 0;
 
@@ -488,22 +490,25 @@ export default function HomePage() {
 
     setSubmitState("sending");
     try {
-      const { error } = await supabase.from("guest_applications").insert({
-        full_name: apply.fullName.trim().replace(/\s+/g, " "),
-        contact: apply.contact.trim(),
+      const params = new URLSearchParams(window.location.search);
+      const result = await submitGuestApplication({
+        fullName: apply.fullName,
+        contact: apply.contact,
         instagram: `@${instagramHandle(apply.instagram)}`,
-        portfolio_url: portfolioUrl(apply.portfolio) || null,
-        about: apply.about.trim() || null,
+        portfolioUrl: portfolioUrl(apply.portfolio),
+        about: apply.about,
         consent: true,
         lang: String(lang).toLowerCase(),
+        utmSource: params.get("utm_source"),
+        utmMedium: params.get("utm_medium"),
+        utmCampaign: params.get("utm_campaign"),
       });
-      // 23505 — анкета с этим Instagram уже ждёт решения комитета
-      if (error && error.code !== "23505") {
-        console.error("[Apply] Insert error:", error);
+      if (!result.ok) {
+        console.error("[Apply] server action rejected submission", result.reason);
         setSubmitState("error");
         return;
       }
-      showSuccess(error?.code === "23505");
+      showSuccess(result.duplicate);
     } catch (err) {
       console.error("[Apply] Insert exception:", err);
       setSubmitState("error");

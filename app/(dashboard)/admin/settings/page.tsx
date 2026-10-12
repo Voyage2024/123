@@ -2,6 +2,7 @@
 
 import RoleGuard from "@/app/components/RoleGuard";
 import AccountSettings, { AccountSettingsHeader } from "@/app/components/AccountSettings";
+import AdminTelegramNotificationSettings from "@/app/components/admin/AdminTelegramNotificationSettings";
 
 export default function AdminSettingsPage() {
   return (
@@ -10,6 +11,7 @@ export default function AdminSettingsPage() {
         <div className="mx-auto max-w-2xl">
           <AccountSettingsHeader eyebrow="Admin" />
           <AccountSettings />
+          <AdminTelegramNotificationSettings />
         </div>
       </main>
     </RoleGuard>

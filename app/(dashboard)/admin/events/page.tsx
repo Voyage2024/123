@@ -52,7 +52,7 @@ type Toast = { kind: 'ok' | 'err'; text: string } | null;
 const T = {
   en: {
     eyebrow: 'Admin',
-    title: 'Tours & Leaderboard Management',
+    title: 'Tour Rating Management',
     subtitle: 'Manage resident points and NPC competitors.',
     total: 'Residents',
     real: 'Real',
@@ -90,7 +90,7 @@ const T = {
   },
   ru: {
     eyebrow: 'Админ',
-    title: 'Управление турами и рейтингом',
+    title: 'Управление рейтингом туров',
     subtitle: 'Управление баллами участниц и NPC-конкурентками',
     total: 'Резидентов',
     real: 'Реальных',
@@ -128,7 +128,7 @@ const T = {
   },
   es: {
     eyebrow: 'Admin',
-    title: 'Gestión de tours y clasificación',
+    title: 'Gestión del ranking de tours',
     subtitle: 'Gestión de puntos de las residentes y competidoras NPC',
     total: 'Residentes',
     real: 'Reales',
@@ -166,7 +166,7 @@ const T = {
   },
   pt: {
     eyebrow: 'Admin',
-    title: 'Gestão de tours e classificação',
+    title: 'Gestão do ranking de tours',
     subtitle: 'Gestão de pontos das residentes e competidoras NPC',
     total: 'Residentes',
     real: 'Reais',
@@ -218,8 +218,8 @@ function initials(name: string | null): string {
 }
 
 function Avatar({ src, name, size = 40 }: { src: string | null; name: string | null; size?: number }) {
-  const [broken, setBroken] = useState(false);
-  useEffect(() => setBroken(false), [src]);
+  const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
+  const broken = brokenSrc === src;
   const style = { width: size, height: size };
 
   if (src && !broken) {
@@ -229,7 +229,7 @@ function Avatar({ src, name, size = 40 }: { src: string | null; name: string | n
         src={src}
         alt=""
         style={style}
-        onError={() => setBroken(true)}
+        onError={() => setBrokenSrc(src)}
         className="shrink-0 rounded-full object-cover ring-1 ring-zinc-700"
         draggable={false}
       />
@@ -323,6 +323,8 @@ export default function AdminEventsPage() {
   }, []);
 
   useEffect(() => {
+    // Load server data after mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     return () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -372,7 +374,7 @@ export default function AdminEventsPage() {
   const commitDraft = (id: string) => {
     const raw = drafts[id];
     if (raw === undefined) return;
-    setDrafts(({ [id]: _, ...rest }) => rest);
+    setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)));
     const n = Number(raw.replace(/\s/g, ''));
     if (raw.trim() === '' || !Number.isFinite(n)) return;
     updatePoints(id, { points: n });
@@ -561,7 +563,7 @@ export default function AdminEventsPage() {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                         if (e.key === 'Escape') {
-                          setDrafts(({ [r.id]: _, ...rest }) => rest);
+                          setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== r.id)));
                           (e.target as HTMLInputElement).blur();
                         }
                       }}

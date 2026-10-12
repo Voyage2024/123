@@ -26,6 +26,9 @@ export type ResidentRecord = {
   id: string;
   full_name: string | null;
   name: string | null;
+  avatar_url: string | null;
+  photo_urls: string[] | null;
+  resolved_avatar_url?: string | null;
   email: string | null;
   telegram_id: string | null;
   usdt_wallet: string | null;
@@ -121,7 +124,7 @@ export async function getResidentRegistry(
   let query = actor.supabase
     .from("profiles")
     .select(
-      "id, full_name, name, email, telegram_id, usdt_wallet, tour_points, influence_index, reliability, segment, role, circle, kyc_level, status, location, citizenship, banned_until, ban_reason, ban_permanent, ban_set_at, created_at",
+      "id, full_name, name, avatar_url, photo_urls, email, telegram_id, usdt_wallet, tour_points, influence_index, reliability, segment, role, circle, kyc_level, status, location, citizenship, banned_until, ban_reason, ban_permanent, ban_set_at, created_at",
       { count: "exact" },
     )
     .eq("role", "resident")
@@ -136,9 +139,22 @@ export async function getResidentRegistry(
 
   const { data, error, count } = await query;
   if (error) return { ok: false, error: error.message };
+  const rows = (data ?? []) as ResidentRecord[];
+  const candidates = rows.map((row) => row.avatar_url?.trim() || row.photo_urls?.find((value) => Boolean(value?.trim())) || null);
+  const paths = Array.from(new Set(candidates.filter((value): value is string => typeof value === "string" && value.length > 0 && !/^https?:\/\//i.test(value))));
+  const signed = new Map<string, string>();
+  if (paths.length) {
+    const { data: signedRows, error: signedError } = await actor.supabase.storage.from("user-uploads").createSignedUrls(paths, 3600);
+    if (signedError) console.error("[resident-registry] avatar signing failed", { code: signedError.name });
+    signedRows?.forEach((entry, index) => { if (entry.signedUrl) signed.set(paths[index], entry.signedUrl); });
+  }
+  const resolvedRows = rows.map((row, index) => {
+    const value = candidates[index];
+    return { ...row, resolved_avatar_url: !value ? null : /^https?:\/\//i.test(value) ? value : signed.get(value) ?? null };
+  });
   return {
     ok: true,
-    rows: (data ?? []) as ResidentRecord[],
+    rows: resolvedRows,
     count: count ?? 0,
     page: safePage,
   };

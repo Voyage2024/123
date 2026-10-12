@@ -46,6 +46,7 @@ export async function POST(request: Request): Promise<Response> {
       { command: "start", description: "Open VOYAGE Concierge" },
       { command: "faq", description: "Frequently asked questions" },
       { command: "support", description: "Contact support" },
+      { command: "myid", description: "Show your Telegram ID" },
       { command: "cancel", description: "Cancel the current application" },
     ]);
     return Response.json({ ok: true, webhook: `${parsed.origin}/api/telegram-webhook` }, { headers: { "Cache-Control": "no-store" } });
