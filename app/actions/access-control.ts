@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createHash, randomBytes } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
 
 export type BanDuration = "24_hours" | "1_week" | "1_month" | "forever";
 export type StaffRole = "admin" | "manager" | "resident";
@@ -20,6 +22,7 @@ export type StaffRecord = {
   ban_reason: string | null;
   ban_permanent: boolean;
   ban_set_at: string | null;
+  last_seen_at: string | null;
 };
 
 export type ResidentRecord = {
@@ -47,6 +50,7 @@ export type ResidentRecord = {
   ban_permanent: boolean;
   ban_set_at: string | null;
   created_at: string | null;
+  last_seen_at: string | null;
 };
 
 async function getActor(allowedRoles: readonly string[]) {
@@ -95,7 +99,7 @@ export async function getStaffUsers(): Promise<
 
   const { data, error } = await actor.supabase
     .from("profiles")
-    .select("id, full_name, email, role, status, banned_until, ban_reason, ban_permanent, ban_set_at")
+    .select("id, full_name, email, role, status, banned_until, ban_reason, ban_permanent, ban_set_at, last_seen_at")
     .in("role", ["admin", "manager"])
     .order("role", { ascending: true })
     .order("full_name", { ascending: true });
@@ -124,7 +128,7 @@ export async function getResidentRegistry(
   let query = actor.supabase
     .from("profiles")
     .select(
-      "id, full_name, name, avatar_url, photo_urls, email, telegram_id, usdt_wallet, tour_points, influence_index, reliability, segment, role, circle, kyc_level, status, location, citizenship, banned_until, ban_reason, ban_permanent, ban_set_at, created_at",
+      "id, full_name, name, avatar_url, photo_urls, email, telegram_id, usdt_wallet, tour_points, influence_index, reliability, segment, role, circle, kyc_level, status, location, citizenship, banned_until, ban_reason, ban_permanent, ban_set_at, created_at, last_seen_at",
       { count: "exact" },
     )
     .eq("role", "resident")
@@ -225,4 +229,84 @@ export async function changeStaffRole(
   revalidatePath("/admin");
   revalidatePath("/admin/roles");
   return { ok: true, message: "Роль обновлена." };
+}
+
+
+export type TelegramRecoveryLinkResult =
+  | { ok: true; link: string; expiresAt: string; profileName: string }
+  | { ok: false; error: string };
+
+/** Issue a short-lived one-time Telegram identity rebind link. Raw tokens are never stored. */
+export async function createTelegramRecoveryLink(targetId: string): Promise<TelegramRecoveryLinkResult> {
+  const actor = await getActor(["owner", "admin"]);
+  if (!actor.ok) return actor;
+  if (!targetId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetId)) {
+    return { ok: false, error: "Некорректный ID профиля." };
+  }
+
+  const { data: profile, error: profileError } = await actor.supabase
+    .from("profiles")
+    .select("id,full_name,email,role,status,banned_until,ban_permanent")
+    .eq("id", targetId)
+    .maybeSingle();
+  if (profileError || !profile) return { ok: false, error: "Профиль не найден." };
+
+  const targetRole = String(profile.role ?? "");
+  if (!["resident", "admin", "manager"].includes(targetRole)) {
+    return { ok: false, error: "Перепривязка для этой роли запрещена." };
+  }
+  if (actor.role === "admin" && targetRole !== "resident") {
+    return { ok: false, error: "Администратор может выпускать ссылки только для резидентов." };
+  }
+  if (targetRole === "resident" && profile.status !== "approved") {
+    return { ok: false, error: "Сначала профиль должен пройти Face Control." };
+  }
+  const bannedUntil = typeof profile.banned_until === "string" ? Date.parse(profile.banned_until) : NaN;
+  if (profile.ban_permanent === true || profile.banned_until === "infinity" || (Number.isFinite(bannedUntil) && bannedUntil > Date.now())) {
+    return { ok: false, error: "Нельзя перепривязать заблокированный профиль. Сначала снимите блокировку." };
+  }
+
+  const botUsername = (process.env.NEXT_PUBLIC_BOT_USERNAME ?? "").trim().replace(/^@/, "");
+  if (!/^[a-zA-Z0-9_]{5,32}$/.test(botUsername)) {
+    return { ok: false, error: "Не задан корректный NEXT_PUBLIC_BOT_USERNAME." };
+  }
+
+  const rawToken = randomBytes(32).toString("base64url");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  const createdAt = new Date();
+  const expiresAt = new Date(createdAt.getTime() + 15 * 60 * 1000);
+  const service = getTelegramServiceClient();
+
+  // Older links stop working as soon as a new one is issued for the same profile.
+  const { error: revokeError } = await service
+    .from("telegram_identity_recovery_tokens")
+    .update({ revoked_at: createdAt.toISOString() })
+    .eq("profile_id", targetId)
+    .is("used_at", null)
+    .is("revoked_at", null);
+  if (revokeError) {
+    console.error("[identity-recovery] token revocation failed", revokeError.code ?? "unknown");
+    return { ok: false, error: "Не удалось подготовить ссылку восстановления. Повторите попытку." };
+  }
+
+  const { error: insertError } = await service.from("telegram_identity_recovery_tokens").insert({
+    token_hash: tokenHash,
+    profile_id: targetId,
+    created_by: actor.userId,
+    created_at: createdAt.toISOString(),
+    expires_at: expiresAt.toISOString(),
+  });
+  if (insertError) {
+    console.error("[identity-recovery] token insert failed", insertError.code ?? "unknown");
+    return { ok: false, error: "Не удалось сохранить ссылку восстановления. Повторите попытку." };
+  }
+
+  revalidatePath("/admin/database");
+  revalidatePath("/admin/roles");
+  return {
+    ok: true,
+    link: `https://t.me/${botUsername}?start=recover_${rawToken}`,
+    expiresAt: expiresAt.toISOString(),
+    profileName: profile.full_name?.trim() || profile.email || targetId,
+  };
 }

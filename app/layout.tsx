@@ -3,6 +3,7 @@ import { Cormorant_Garamond } from "next/font/google";
 import { AuthProvider } from "./context/AuthContext"; // "Мозг" авторизации
 import { LanguageProvider } from "./context/LanguageContext"; // Глобальный язык
 import Navbar from "./components/Navbar";
+import PresenceHeartbeat from "./components/PresenceHeartbeat";
 import "./globals.css";
 import "./mobile.css";
 import type { Viewport } from "next";
@@ -36,6 +37,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
         {/* Порядок: сначала авторизация, внутри — язык */}
         <AuthProvider>
+          <PresenceHeartbeat />
           <LanguageProvider>
             <Navbar />
             <main className="pt-24">{children}</main>

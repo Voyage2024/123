@@ -11,6 +11,7 @@ import {
   Clock3,
   Database,
   LoaderCircle,
+  KeyRound,
   Search,
   ShieldCheck,
   UnlockKeyhole,
@@ -18,11 +19,13 @@ import {
 } from "lucide-react";
 import {
   clearAccountBan,
+  createTelegramRecoveryLink,
   getResidentRegistry,
   setAccountBan,
   type BanDuration,
   type ResidentRecord,
 } from "@/app/actions/access-control";
+import TelegramRecoveryLinkModal from "@/app/components/admin/TelegramRecoveryLinkModal";
 
 const PAGE_SIZE = 50;
 const DURATION_OPTIONS: { value: BanDuration; label: string }[] = [
@@ -37,6 +40,13 @@ function banActive(row: ResidentRecord) {
   if (!row.banned_until) return false;
   const until = Date.parse(row.banned_until);
   return Number.isFinite(until) && until > Date.now();
+}
+
+function isOnline(lastSeenAt: string | null) {
+  if (!lastSeenAt) return false;
+  const timestamp = Date.parse(lastSeenAt);
+  const age = Date.now() - timestamp;
+  return Number.isFinite(timestamp) && age >= -60_000 && age < 5 * 60 * 1000;
 }
 
 function dateLabel(value: string | null) {
@@ -59,9 +69,10 @@ export default function FullDatabasePage() {
   const [banTarget, setBanTarget] = useState<ResidentRecord | null>(null);
   const [duration, setDuration] = useState<BanDuration>("24_hours");
   const [reason, setReason] = useState("");
+  const [recovery, setRecovery] = useState<{ link: string; expiresAt: string; profileName: string } | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     const result = await getResidentRegistry(page, search);
     if (!result.ok) {
@@ -79,6 +90,14 @@ export default function FullDatabasePage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
+  }, [load]);
+
+  // Refresh presence data while the admin leaves the registry open, without flashing the table.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load(true);
+    }, 60_000);
+    return () => window.clearInterval(timer);
   }, [load]);
 
   const submitBan = async () => {
@@ -107,6 +126,19 @@ export default function FullDatabasePage() {
     else {
       setNotice(result.message ?? "Блокировка снята.");
       await load();
+    }
+    setWorking(false);
+  };
+
+  const recoverAccess = async (row: ResidentRecord) => {
+    setWorking(true);
+    setError(null);
+    const result = await createTelegramRecoveryLink(row.id);
+    if (!result.ok) {
+      setError(result.error);
+    } else {
+      setRecovery({ link: result.link, expiresAt: result.expiresAt, profileName: result.profileName });
+      setNotice("Одноразовая ссылка восстановления создана; она действует 15 минут.");
     }
     setWorking(false);
   };
@@ -149,7 +181,7 @@ export default function FullDatabasePage() {
 
       <section className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/30">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1250px] border-collapse text-left">
+          <table className="w-full min-w-[1420px] border-collapse text-left">
             <thead className="bg-black/20">
               <tr className="border-b border-zinc-800/80 text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
                 <th className="px-4 py-4">Резидентка</th>
@@ -158,22 +190,23 @@ export default function FullDatabasePage() {
                 <th className="px-4 py-4">Сегмент</th>
                 <th className="px-4 py-4">Рейтинг / Надёжность</th>
                 <th className="px-4 py-4">KYC</th>
+                <th className="px-4 py-4">Присутствие</th>
                 <th className="px-4 py-4">Доступ</th>
                 <th className="px-4 py-4">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60">
               {loading ? (
-                <tr><td colSpan={8} className="px-4 py-16 text-center text-sm text-zinc-500"><LoaderCircle size={18} className="mr-2 inline animate-spin text-amber-100/70" />Загрузка реестра...</td></tr>
+                <tr><td colSpan={9} className="px-4 py-16 text-center text-sm text-zinc-500"><LoaderCircle size={18} className="mr-2 inline animate-spin text-amber-100/70" />Загрузка реестра...</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={8} className="px-4 py-16 text-center text-sm text-zinc-500">Резиденты не найдены.</td></tr>
+                <tr><td colSpan={9} className="px-4 py-16 text-center text-sm text-zinc-500">Резиденты не найдены.</td></tr>
               ) : rows.map((row) => {
                 const active = banActive(row);
                 return (
                   <tr key={row.id} className="align-top transition-colors hover:bg-white/[0.015]">
                     <td className="max-w-[270px] px-4 py-4">
                       <div className="flex min-w-0 items-center gap-3">
-                        {row.resolved_avatar_url ? <img src={row.resolved_avatar_url} alt="" className="h-10 w-10 shrink-0 rounded-full border border-amber-200/20 object-cover" /> : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xs font-medium text-amber-100/75">{(row.full_name?.trim() || row.name?.trim() || "?").slice(0, 1).toUpperCase()}</span>}
+                        {row.resolved_avatar_url ? <Link href={`/admin/database/${row.id}`} aria-label={`Открыть профиль ${row.full_name || row.name || row.id}`} className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-amber-200/50"><img src={row.resolved_avatar_url} alt="" className="h-10 w-10 rounded-full border border-amber-200/20 object-cover transition-opacity hover:opacity-80" /></Link> : <Link href={`/admin/database/${row.id}`} aria-label={`Открыть профиль ${row.full_name || row.name || row.id}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xs font-medium text-amber-100/75 transition-colors hover:border-amber-200/35">{(row.full_name?.trim() || row.name?.trim() || "?").slice(0, 1).toUpperCase()}</Link>}
                         <div className="min-w-0">
                           <Link href={`/admin/database/${row.id}`} className="block truncate text-sm font-medium text-zinc-200 transition-colors hover:text-amber-100">{row.full_name?.trim() || row.name?.trim() || "Без ФИО"}</Link>
                           <p className="mt-1 font-mono text-[10px] text-zinc-700" title={row.id}>{row.id.slice(0, 8)}…</p>
@@ -195,11 +228,15 @@ export default function FullDatabasePage() {
                       <p className="mt-1 text-[11px] tabular-nums text-zinc-500">Надёжность {Number(row.reliability ?? 100).toFixed(1)}%</p>
                     </td>
                     <td className="px-4 py-4"><span className="text-xs tabular-nums text-zinc-300">{row.kyc_level ?? 0}/3</span><p className="mt-1 text-[10px] text-zinc-600">{row.status || "—"}</p></td>
+                    <td className="px-4 py-4">{isOnline(row.last_seen_at) ? <span className="inline-flex items-center gap-2 whitespace-nowrap text-[11px] font-medium text-emerald-200"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.45)]" />Онлайн</span> : <p className="min-w-[145px] text-[11px] leading-5 text-zinc-500">{row.last_seen_at ? `Был(а) в сети: ${dateLabel(row.last_seen_at)}` : "Ещё не заходил(а)"}</p>}</td>
                     <td className="max-w-[200px] px-4 py-4">
                       {active ? <><span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-950/30 px-2.5 py-1 text-[9px] uppercase tracking-[0.1em] text-rose-200"><Ban size={11} /> Заблокирован</span><p className="mt-2 text-[10px] text-zinc-500">{row.ban_permanent ? "Навсегда" : dateLabel(row.banned_until)}</p><p className="mt-1 line-clamp-2 text-[10px] text-zinc-600" title={row.ban_reason ?? undefined}>{row.ban_reason || "Без причины"}</p></> : <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-900/60 bg-emerald-950/20 px-2.5 py-1 text-[9px] uppercase tracking-[0.1em] text-emerald-200/80"><Check size={11} /> Активен</span>}
                     </td>
                     <td className="px-4 py-4">
-                      {active ? <button disabled={working} onClick={() => void unban(row)} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/80 px-3 py-2 text-[10px] text-zinc-300 transition-all hover:border-emerald-500/30 hover:text-emerald-200 disabled:opacity-50"><UnlockKeyhole size={12} /> Снять бан</button> : <button disabled={working} onClick={() => { setBanTarget(row); setDuration("24_hours"); setReason(""); setError(null); }} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-950/15 px-3 py-2 text-[10px] text-rose-200/85 transition-all hover:border-rose-400/40 hover:bg-rose-950/30 disabled:opacity-50"><Ban size={12} /> Бан</button>}
+                      <div className="flex flex-wrap gap-2">
+                        {active ? <button disabled={working} onClick={() => void unban(row)} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/80 px-3 py-2 text-[10px] text-zinc-300 transition-all hover:border-emerald-500/30 hover:text-emerald-200 disabled:opacity-50"><UnlockKeyhole size={12} /> Снять бан</button> : <button disabled={working} onClick={() => { setBanTarget(row); setDuration("24_hours"); setReason(""); setError(null); }} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-950/15 px-3 py-2 text-[10px] text-rose-200/85 transition-all hover:border-rose-400/40 hover:bg-rose-950/30 disabled:opacity-50"><Ban size={12} /> Бан</button>}
+                        <button type="button" disabled={working} onClick={() => void recoverAccess(row)} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200/20 bg-amber-200/[0.04] px-3 py-2 text-[10px] text-amber-100/85 transition-colors hover:border-amber-200/40 hover:bg-amber-200/[0.08] disabled:opacity-40"><KeyRound size={12} /> Восстановить доступ</button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -215,6 +252,8 @@ export default function FullDatabasePage() {
           </div>
         </footer>
       </section>
+
+      {recovery && <TelegramRecoveryLinkModal link={recovery.link} expiresAt={recovery.expiresAt} profileName={recovery.profileName} onClose={() => setRecovery(null)} />}
 
       {banTarget && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !working) setBanTarget(null); }}>

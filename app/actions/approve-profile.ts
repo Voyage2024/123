@@ -75,7 +75,7 @@ export async function approveProfile(profileId: string): Promise<ApproveProfileR
       .from("profiles")
       .update({
         status: "approved",
-        kyc_level: 1,
+        kyc_level: 0,
         user_id: profile.id,
         email,
         temp_password: null,
