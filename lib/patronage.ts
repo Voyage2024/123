@@ -246,9 +246,12 @@ export function buildChains(invites: ClubInvite[]) {
 
 /* ── Ссылки и ошибки ─────────────────────────────────────────────── */
 
-export function inviteUrl(code: string, origin?: string) {
-  const base = origin ?? (typeof window !== "undefined" ? window.location.origin : "");
-  return `${base}/join?key=${encodeURIComponent(code)}`;
+export function inviteUrl(code: string) {
+  const botUsername = (process.env.NEXT_PUBLIC_BOT_USERNAME ?? "").trim().replace(/^@/, "");
+  if (!botUsername || !/^[a-zA-Z0-9_]{5,32}$/.test(botUsername)) return "";
+  const normalizedCode = code.trim().toUpperCase();
+  if (!/^VYG-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normalizedCode)) return "";
+  return `https://t.me/${botUsername}?start=ref_${encodeURIComponent(normalizedCode)}`;
 }
 
 /** Ошибка RPC → код из миграции ('quota_exhausted', 'invalid_transition', …) */

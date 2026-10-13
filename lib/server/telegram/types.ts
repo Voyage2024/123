@@ -24,6 +24,7 @@ export interface TelegramConversationState {
   stage: RegistrationStage;
   answers: RegistrationAnswers;
   photo_urls: string[];
+  referral_code?: string | null;
   updated_at?: string;
   expires_at: string;
 }

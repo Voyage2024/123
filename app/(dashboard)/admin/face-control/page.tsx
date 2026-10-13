@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Cormorant_Garamond } from "next/font/google";
-import { AlertTriangle, Loader2, Copy, Check, KeyRound } from "lucide-react";
+import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/app/context/AuthContext";
 import FaceControlList, { type Application } from "./FaceControlList";
@@ -82,8 +82,7 @@ export default function FaceControlPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [manualCredentials, setManualCredentials] = useState<{ login: string; password: string } | null>(null);
-  const [credentialsCopied, setCredentialsCopied] = useState(false);
+  const [manualCredentials, setManualCredentials] = useState<{ login: string; password: string; profileId: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,19 +120,18 @@ export default function FaceControlPage() {
   }, [authLoading, load]);
 
   // Одобрение выполняется единственным серверным путём: проверка ролей,
-  // KYC0, ротация временного пароля и отправка через встроенный Telegram webhook.
+  // KYC level 1, ротация временного пароля и отправка через Telegram Bot API.
   const moderate = useCallback(
     async (app: Application, action: "approve" | "decline") => {
       setNotice(null);
       setManualCredentials(null);
-      setCredentialsCopied(false);
       if (action === "approve") {
         const result = await approveProfile(app.id);
         if (!result.success) throw new Error(result.error);
         if (result.warning) setNotice(result.warning);
-        if (result.manualCredentials) setManualCredentials(result.manualCredentials);
+        if (result.manualCredentials) setManualCredentials({ ...result.manualCredentials, profileId: app.id });
         setApplications((prev) => prev.filter((item) => item.id !== app.id));
-        return { ok: true, warning: result.warning };
+        return { ok: true, warning: result.warning, manualCredentials: result.manualCredentials };
       }
 
       const result = await declineApplication(app.id);
@@ -166,33 +164,35 @@ export default function FaceControlPage() {
       </header>
 
       {notice && (
-        <div role="status" className="mb-5 rounded-xl border border-amber-200/20 bg-amber-200/[0.05] px-4 py-3 text-sm text-amber-100/90">
+        <div role={manualCredentials ? "alert" : "status"} className="mb-5 rounded-xl border border-amber-200/20 bg-amber-200/[0.05] px-4 py-3 text-sm text-amber-100/90">
           {notice}
         </div>
       )}
+
       {manualCredentials && (
-        <section role="alert" className="mb-6 rounded-2xl border border-amber-300/35 bg-amber-950/25 p-5 shadow-[0_0_35px_rgba(251,191,36,0.06)]">
-          <div className="mb-2 flex items-center gap-2 text-amber-100">
-            <KeyRound size={17} />
-            <h2 className="text-sm font-semibold tracking-wide">Telegram-доставка не удалась - передайте доступы вручную</h2>
+        <section role="alert" aria-live="assertive" className="mb-6 rounded-2xl border border-rose-300/25 bg-rose-950/25 p-5 shadow-[0_20px_70px_-45px_rgba(244,63,94,0.25)]">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={19} className="mt-0.5 shrink-0 text-rose-200" />
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold text-rose-100">Telegram delivery failed - send these credentials manually</h2>
+              <p className="mt-1 text-xs leading-5 text-rose-100/70">The password has already been set in Supabase Auth. Share it with the resident through a verified private channel and ask them to change it after sign-in.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/70 p-3">
+                  <p className="mb-1 text-[10px] uppercase tracking-[0.2em] text-zinc-500">Login</p>
+                  <code className="break-all text-sm text-zinc-100">{manualCredentials.login}</code>
+                  <button type="button" onClick={() => void navigator.clipboard.writeText(manualCredentials.login)} className="mt-2 inline-flex items-center gap-1.5 text-xs text-amber-200 hover:text-amber-100"><Copy size={13}/> Copy login</button>
+                </div>
+                <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/70 p-3">
+                  <p className="mb-1 text-[10px] uppercase tracking-[0.2em] text-zinc-500">Temporary password</p>
+                  <code className="break-all text-sm text-zinc-100">{manualCredentials.password}</code>
+                  <button type="button" onClick={() => void navigator.clipboard.writeText(manualCredentials.password)} className="mt-2 inline-flex items-center gap-1.5 text-xs text-amber-200 hover:text-amber-100"><Copy size={13}/> Copy password</button>
+                </div>
+              </div>
+              <button type="button" onClick={() => void navigator.clipboard.writeText(`Login: ${manualCredentials.login}
+Password: ${manualCredentials.password}`)} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-200/20 bg-amber-200/[0.08] px-3 py-2 text-xs font-medium text-amber-100 transition hover:bg-amber-200/[0.13]"><Check size={14}/> Copy both credentials</button>
+              <p className="mt-3 text-[10px] text-zinc-600">Profile ID: <code>{manualCredentials.profileId}</code></p>
+            </div>
           </div>
-          <p className="mb-4 text-xs leading-5 text-amber-100/70">Пароль уже установлен в Supabase Auth. Передайте эти данные пользователю по проверенному каналу, а не публикуйте их в общем чате.</p>
-          <dl className="space-y-2">
-            <div className="flex items-center gap-3 rounded-lg border border-amber-200/15 bg-zinc-950/60 px-3 py-2">
-              <dt className="w-20 shrink-0 text-xs uppercase tracking-wider text-zinc-500">Логин</dt>
-              <dd className="min-w-0 flex-1 break-all font-mono text-sm text-zinc-100">{manualCredentials.login}</dd>
-              <button type="button" onClick={async () => { await navigator.clipboard.writeText(manualCredentials.login); setCredentialsCopied(false); }} className="rounded-md p-2 text-zinc-400 transition-colors hover:text-amber-200" aria-label="Скопировать логин"><Copy size={14} /></button>
-            </div>
-            <div className="flex items-center gap-3 rounded-lg border border-amber-200/15 bg-zinc-950/60 px-3 py-2">
-              <dt className="w-20 shrink-0 text-xs uppercase tracking-wider text-zinc-500">Пароль</dt>
-              <dd className="min-w-0 flex-1 break-all font-mono text-sm text-zinc-100">{manualCredentials.password}</dd>
-              <button type="button" onClick={async () => { await navigator.clipboard.writeText(manualCredentials.password); setCredentialsCopied(false); }} className="rounded-md p-2 text-zinc-400 transition-colors hover:text-amber-200" aria-label="Скопировать пароль"><Copy size={14} /></button>
-            </div>
-          </dl>
-          <button type="button" onClick={async () => { await navigator.clipboard.writeText(`Login: ${manualCredentials.login}\nPassword: ${manualCredentials.password}`); setCredentialsCopied(true); }} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-200/25 px-3 py-2 text-xs text-amber-100 transition-colors hover:bg-amber-200/10">
-            {credentialsCopied ? <Check size={14} /> : <Copy size={14} />}
-            {credentialsCopied ? "Скопировано" : "Скопировать оба поля"}
-          </button>
         </section>
       )}
 

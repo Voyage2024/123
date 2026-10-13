@@ -1,10 +1,12 @@
 import "server-only";
 
 import { Bot, GrammyError, HttpError } from "grammy";
+import { randomInt, randomUUID } from "node:crypto";
 import { copy, faqMenu, languageMenu, mainMenu } from "./copy";
-import { cancelRegistration, beginRegistration, handleRegistrationPhoto, handleRegistrationText, sendWelcome, updateConversationLanguage } from "./onboarding";
+import { cancelRegistration, beginRegistration, getConversationState, saveConversationState, handleRegistrationPhoto, handleRegistrationText, sendWelcome, updateConversationLanguage } from "./onboarding";
 import { getTelegramServiceClient } from "./service-client";
 import { getPreferredTelegramLanguage } from "./preferences";
+import { sendApprovedCredentialsTelegram } from "./credentials";
 import { languageFromTelegram, type TelegramLang } from "./types";
 
 function isBanned(profile: { banned_until?: string | null; ban_permanent?: boolean | null }): boolean {
@@ -31,6 +33,23 @@ async function getLinkedProfile(telegramId: string) {
   return data;
 }
 
+function inviteLinkMessage(lang: TelegramLang, alreadyLinked: boolean): string {
+  if (alreadyLinked) {
+    return {
+      EN: "A different invitation is already attached. Send /cancel, then open the new invitation link.",
+      RU: "К анкете уже привязано другое приглашение. Отправьте /cancel, затем откройте новую ссылку-приглашение.",
+      ES: "Ya hay otra invitación vinculada. Envía /cancel y luego abre el nuevo enlace de invitación.",
+      PT: "Já existe outro convite vinculado. Envie /cancel e abra o novo link de convite.",
+    }[lang];
+  }
+  return {
+    EN: "This invitation link is invalid, expired, or already used. Ask the inviter for a new link.",
+    RU: "Ссылка приглашения недействительна, истекла или уже использована. Попросите новую ссылку.",
+    ES: "El enlace de invitación no es válido, ha caducado o ya se utilizó. Pide un nuevo enlace.",
+    PT: "O link de convite é inválido, expirou ou já foi usado. Peça um novo link.",
+  }[lang];
+}
+
 export function createVoyageTelegramBot(token: string): Bot {
   const bot = new Bot(token);
 
@@ -40,7 +59,8 @@ export function createVoyageTelegramBot(token: string): Bot {
       return;
     }
     const lang = await contextLanguage(ctx);
-    const profile = await getLinkedProfile(String(ctx.from.id));
+    const telegramId = String(ctx.from.id);
+    const profile = await getLinkedProfile(telegramId);
     if (profile) {
       const t = copy(lang);
       if (isBanned(profile)) await ctx.reply(t.alreadyBanned, { reply_markup: mainMenu(lang) });
@@ -49,6 +69,63 @@ export function createVoyageTelegramBot(token: string): Bot {
       else await ctx.reply(t.alreadyPending, { reply_markup: mainMenu(lang) });
       return;
     }
+
+    const payload = typeof ctx.match === "string" ? ctx.match.trim() : "";
+    let referralCode: string | null = null;
+    if (payload.startsWith("ref_")) {
+      const candidate = payload.slice(4).trim().toUpperCase();
+      if (!/^VYG-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(candidate)) {
+        await ctx.reply(inviteLinkMessage(lang, false), { reply_markup: mainMenu(lang) });
+        return;
+      }
+      const { data: invite, error } = await getTelegramServiceClient()
+        .from("club_invites")
+        .select("code,status,expires_at")
+        .eq("code", candidate)
+        .maybeSingle();
+      if (error) {
+        console.error("[telegram-webhook] referral link lookup failed", error.code ?? "unknown");
+        await ctx.reply(inviteLinkMessage(lang, false), { reply_markup: mainMenu(lang) });
+        return;
+      }
+      if (!invite || invite.status !== "sealed" || Date.parse(String(invite.expires_at)) <= Date.now()) {
+        if (invite?.status === "sealed" && Date.parse(String(invite.expires_at)) <= Date.now()) {
+          await getTelegramServiceClient().from("club_invites").update({ status: "expired" }).eq("code", candidate).eq("status", "sealed");
+        }
+        await ctx.reply(inviteLinkMessage(lang, false), { reply_markup: mainMenu(lang) });
+        return;
+      }
+      referralCode = candidate;
+    }
+
+    // The apply deep link starts onboarding immediately. A referral link does the same,
+    // preserving the referral code in the persisted Telegram conversation until submission.
+    if (payload === "apply" || referralCode) {
+      const current = await getConversationState(telegramId);
+      if (current) {
+        if (referralCode && current.referral_code && current.referral_code !== referralCode) {
+          await ctx.reply(inviteLinkMessage(lang, true), { reply_markup: mainMenu(lang) });
+          return;
+        }
+        const updated = {
+          ...current,
+          telegram_username: ctx.from.username ?? current.telegram_username ?? null,
+          referral_code: current.referral_code ?? referralCode,
+        };
+        await saveConversationState(updated);
+        const copyText = copy(lang);
+        const prompt = current.stage === "submitting"
+          ? copyText.onboarding.saving
+          : current.stage === "photos"
+            ? copyText.onboarding.sendPhoto
+            : copyText.prompts[current.stage];
+        await ctx.reply(prompt ?? copyText.welcome, { reply_markup: mainMenu(lang) });
+        return;
+      }
+      await beginRegistration(ctx, lang, referralCode);
+      return;
+    }
+
     await sendWelcome(ctx, lang);
   });
 
@@ -62,6 +139,112 @@ export function createVoyageTelegramBot(token: string): Bot {
       PT: "Seu ID do Telegram",
     } as const;
     await ctx.reply(`${labels[lang]}: <code>${ctx.from.id}</code>`, { parse_mode: "HTML" });
+  });
+
+  bot.command("password", async (ctx) => {
+    if (!ctx.from || !ctx.chat || ctx.chat.type !== "private") return;
+    const lang = await contextLanguage(ctx);
+    const telegramId = String(ctx.from.id);
+    const db = getTelegramServiceClient();
+    const { data: profile, error: profileError } = await db.from("profiles")
+      .select("id,email,full_name,role,status,kyc_level,telegram_id,credential_issue_id,banned_until,ban_permanent")
+      .eq("telegram_id", telegramId)
+      .maybeSingle();
+
+    const messages = {
+      EN: {
+        unavailable: "Password reset is available only for an active, approved resident linked to this Telegram account.",
+        failed: "I could not reset your password. Please contact VOYAGE support.",
+        delivered: "Your new website password has been sent above.",
+        fallback: "Telegram credential delivery had a temporary issue. Your updated website credentials are below. Sign in and change the password immediately.",
+      },
+      RU: {
+        unavailable: "Сброс пароля доступен только активной одобренной резидентке, чей профиль привязан к этому Telegram.",
+        failed: "Не удалось сбросить пароль. Обратитесь в поддержку VOYAGE.",
+        delivered: "Новый пароль от сайта отправлен выше.",
+        fallback: "При отправке доступов возникла ошибка. Ниже ваши обновлённые данные для входа на сайт. После входа сразу смените пароль.",
+      },
+      ES: {
+        unavailable: "El restablecimiento solo está disponible para una residente activa y aprobada vinculada a esta cuenta de Telegram.",
+        failed: "No se pudo restablecer la contraseña. Contacta con el soporte de VOYAGE.",
+        delivered: "Tu nueva contraseña del sitio se ha enviado arriba.",
+        fallback: "Hubo un problema temporal al enviar las credenciales. Aquí están tus datos actualizados. Cambia la contraseña después de iniciar sesión.",
+      },
+      PT: {
+        unavailable: "A redefinição só está disponível para uma residente ativa e aprovada vinculada a esta conta do Telegram.",
+        failed: "Não foi possível redefinir a senha. Entre em contato com o suporte VOYAGE.",
+        delivered: "Sua nova senha do site foi enviada acima.",
+        fallback: "Houve um problema temporário ao enviar as credenciais. Seus dados atualizados estão abaixo. Altere a senha após entrar.",
+      },
+    }[lang];
+
+    const banUntil = profile?.banned_until === "infinity" ? Number.POSITIVE_INFINITY : profile?.banned_until ? Date.parse(String(profile.banned_until)) : NaN;
+    const banned = profile?.ban_permanent === true || profile?.banned_until === "infinity" || (Number.isFinite(banUntil) && banUntil > Date.now());
+    if (profileError || !profile || profile.role !== "resident" || profile.status !== "approved" || Number(profile.kyc_level ?? 0) < 1 || banned) {
+      await ctx.reply(messages.unavailable, { reply_markup: mainMenu(lang) });
+      return;
+    }
+
+    const { data: authResult, error: authLookupError } = await db.auth.admin.getUserById(profile.id);
+    const login = profile.email ?? authResult?.user?.email ?? null;
+    if (authLookupError || !authResult.user || !login) {
+      await ctx.reply(messages.failed, { reply_markup: mainMenu(lang) });
+      return;
+    }
+
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%_-";
+    const password = Array.from({ length: 20 }, () => alphabet[randomInt(0, alphabet.length)]).join("");
+    const deliveryId = randomUUID();
+    // Reserve the credential generation first. If this DB write fails, do not rotate Auth.
+    const { error: issueError } = await db.from("profiles")
+      .update({ credential_issue_id: deliveryId, temp_password: null })
+      .eq("id", profile.id);
+    if (issueError) {
+      console.error("[telegram-password] issue reference update failed", issueError.code ?? "unknown");
+      await ctx.reply(messages.failed, { reply_markup: mainMenu(lang) });
+      return;
+    }
+
+    const { error: passwordError } = await db.auth.admin.updateUserById(profile.id, {
+      email: login,
+      password,
+      email_confirm: true,
+    });
+    if (passwordError) {
+      console.error("[telegram-password] Auth password update failed", passwordError.code ?? "unknown");
+      const { error: rollbackError } = await db.from("profiles")
+        .update({ credential_issue_id: profile.credential_issue_id ?? null })
+        .eq("id", profile.id)
+        .eq("credential_issue_id", deliveryId);
+      if (rollbackError) console.error("[telegram-password] delivery reference rollback failed", rollbackError.code ?? "unknown");
+      await ctx.reply(messages.failed, { reply_markup: mainMenu(lang) });
+      return;
+    }
+
+    try {
+      const delivered = await sendApprovedCredentialsTelegram({
+          deliveryId,
+          profileId: profile.id,
+          telegramId,
+          login,
+          password,
+          fullName: profile.full_name,
+        });
+      if (delivered.sent) return;
+      console.warn("[telegram-password] primary delivery failed; attempting direct reply", delivered.error);
+    } catch (error) {
+      console.error("[telegram-password] primary delivery threw", error instanceof Error ? error.name : "unknown");
+    }
+
+    const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
+    try {
+      await ctx.reply(`${messages.fallback}\n\n<b>Login:</b> <code>${escapeHtml(login)}</code>\n<b>Password:</b> <code>${escapeHtml(password)}</code>`, {
+        parse_mode: "HTML",
+        reply_markup: mainMenu(lang),
+      });
+    } catch (error) {
+      console.error("[telegram-password] fallback delivery failed", error instanceof Error ? error.name : "unknown");
+    }
   });
 
   bot.command("cancel", cancelRegistration);

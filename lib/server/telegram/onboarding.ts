@@ -56,6 +56,15 @@ function stateExpiry(): string {
   return new Date(Date.now() + STATE_TTL_HOURS * 60 * 60 * 1000).toISOString();
 }
 
+function referralFailureMessage(lang: TelegramLang): string {
+  return {
+    EN: "This invitation is no longer available. Ask the inviter for a new key, then open the new Telegram link.",
+    RU: "Это приглашение больше недоступно. Попросите новое приглашение и откройте новую ссылку Telegram.",
+    ES: "Esta invitación ya no está disponible. Pide una nueva clave y abre el nuevo enlace de Telegram.",
+    PT: "Este convite não está mais disponível. Peça uma nova chave e abra o novo link do Telegram.",
+  }[lang];
+}
+
 export async function getConversationState(telegramId: string): Promise<TelegramConversationState | null> {
   const db = getTelegramServiceClient();
   const { data, error } = await db.from("telegram_conversations").select("*").eq("telegram_id", telegramId).maybeSingle();
@@ -79,6 +88,7 @@ export async function saveConversationState(state: TelegramConversationState): P
     stage: state.stage,
     answers: state.answers,
     photo_urls: state.photo_urls,
+    referral_code: state.referral_code ?? null,
     updated_at: new Date().toISOString(),
     expires_at: stateExpiry(),
   }, { onConflict: "telegram_id" });
@@ -113,7 +123,7 @@ export async function sendWelcome(ctx: Context, lang: TelegramLang): Promise<voi
   await ctx.reply(copy(lang).welcome, { reply_markup: mainMenu(lang) });
 }
 
-export async function beginRegistration(ctx: Context, lang: TelegramLang): Promise<void> {
+export async function beginRegistration(ctx: Context, lang: TelegramLang, referralCode: string | null = null): Promise<void> {
   const telegramUser = ctx.from;
   if (!telegramUser || !ctx.chat || ctx.chat.type !== "private") {
     await ctx.reply(copy(lang).onboarding.missingTg);
@@ -137,6 +147,7 @@ export async function beginRegistration(ctx: Context, lang: TelegramLang): Promi
     stage: "email",
     answers: {},
     photo_urls: [],
+    referral_code: referralCode,
     expires_at: stateExpiry(),
   };
   await saveConversationState(state);
@@ -212,8 +223,12 @@ async function finalizeRegistration(ctx: Context, state: TelegramConversationSta
     influence_index: 0,
     circle: "voyager",
     usdt_wallet: null,
-    registration_source: "telegram_bot",
-    source_metadata: { telegram_id: telegramId, telegram_username: state.telegram_username },
+    registration_source: state.referral_code ? "referral" : "telegram_bot",
+    source_metadata: {
+      telegram_id: telegramId,
+      telegram_username: state.telegram_username,
+      ...(state.referral_code ? { referral_code: state.referral_code, referral_channel: "telegram" } : {}),
+    },
     temp_password: null,
     is_npc: false,
   };
@@ -227,10 +242,36 @@ async function finalizeRegistration(ctx: Context, state: TelegramConversationSta
     return;
   }
 
+  if (state.referral_code) {
+    const { error: referralError } = await db.rpc("club_redeem_invite_from_telegram", {
+      p_code: state.referral_code,
+      p_guest_profile_id: authResult.user.id,
+      p_telegram_id: telegramId,
+    });
+    if (referralError) {
+      // Handle an ambiguous network timeout after a committed RPC: verify whether this
+      // exact profile consumed this invite before rolling back Auth/profile creation.
+      const { data: redemption } = await db.from("club_invites")
+        .select("id,guest_id,status")
+        .eq("code", state.referral_code)
+        .maybeSingle();
+      const committedDespiteError = redemption?.guest_id === authResult.user.id && redemption.status === "pending";
+      if (!committedDespiteError) {
+        await db.from("profiles").delete().eq("id", authResult.user.id);
+        await db.auth.admin.deleteUser(authResult.user.id);
+        await saveConversationState({ ...state, stage: "photos" });
+        console.error("[telegram-webhook] referral redemption failed", referralError.code ?? "unknown");
+        await ctx.reply(referralFailureMessage(state.telegram_language), { reply_markup: mainMenu(state.telegram_language) });
+        return;
+      }
+      console.warn("[telegram-webhook] referral RPC returned an error after the invite was redeemed; continuing", { code: referralError.code ?? "unknown" });
+    }
+  }
+
   await deleteConversationState(telegramId);
   await notifyAdminsOfNewRegistration({
     eventKey: `telegram_registration:${authResult.user.id}`,
-    source: "telegram_bot",
+    source: state.referral_code ? "referral" : "telegram_bot",
     profileId: authResult.user.id,
     fullName,
     email,

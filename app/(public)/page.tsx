@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect, useRef, type FormEvent } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -8,168 +7,18 @@ import {
   Shield,
   Lock,
   BadgeDollarSign,
-  Plane,
   Key,
   Sparkles,
   ShieldCheck,
-  Loader2,
-  AlertCircle,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext"; // <-- ДОБАВИЛИ ИМПОРТ ГЛОБАЛЬНОГО ЯЗЫКА
-import { submitGuestApplication } from "@/app/actions/guest-applications";
-import TurnstileWidget from "@/app/components/security/TurnstileWidget";
 
 // next/font переименовывает шрифт, поэтому берём его через CSS-переменную
 const SERIF = "var(--font-cormorant), Georgia, serif";
 
-/* ─── Форма «Запросить приглашение» → public.guest_applications ───
- * Запись проходит только через Server Action: validation + Cloudflare Turnstile + rate limit.
- * Публичный INSERT через браузер закрывается миграцией join_turnstile_and_rate_limit. */
-
-type ApplyFields = { fullName: string; telegram: string; whatsapp: string; instagram: string; about: string };
-type ApplyField = keyof ApplyFields | "consent" | "captcha";
-type SubmitState = "idle" | "sending" | "sent" | "error";
-
-const EMPTY_APPLY: ApplyFields = { fullName: "", telegram: "", whatsapp: "", instagram: "", about: "" };
-const ABOUT_MAX = 1000;
-
-/** «@anna.k», «instagram.com/anna.k/», «https://www.instagram.com/anna.k?igsh=…» → «anna.k» */
-function instagramHandle(raw: string): string | null {
-  const handle = raw
-    .trim()
-    .replace(/^(https?:\/\/)?(www\.)?instagram\.com\//i, "")
-    .replace(/^@+/, "")
-    .split(/[/?#]/)[0]
-    .toLowerCase();
-  return /^[a-z0-9._]{1,30}$/.test(handle) ? handle : null;
-}
-
-/** A reachable Telegram username or t.me profile URL. */
-function normalizeTelegram(raw: string): string | null {
-  const value = raw.trim();
-  const linked = value.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/([a-z][a-z0-9_]{4,31})\/?$/i);
-  const handle = (linked?.[1] ?? value.replace(/^@/, "")).trim();
-  return /^[a-z][a-z0-9_]{4,31}$/i.test(handle) ? `@${handle}` : null;
-}
-
-/** WhatsApp is optional, but if filled must look like a phone number. */
-function normalizeWhatsApp(raw: string): string | null | false {
-  const value = raw.trim();
-  if (!value) return null;
-  const digits = value.replace(/\D/g, "");
-  if (digits.length < 7 || digits.length > 15) return false;
-  return value.startsWith("+") ? `+${digits}` : digits;
-}
-
-
-interface TrailParticle {
-  id: number;
-  x: number;
-  y: number;
-  opacity: number;
-  scale: number;
-}
-
 export default function HomePage() {
   // Подключаем наш новый глобальный язык
   const { lang } = useLanguage();
-
-  // --- Состояния для пасхалки ---
-  const [planeClicks, setPlaneClicks] = useState(0);
-  const [isFlying, setIsFlying] = useState(false);
-  const [trailParticles, setTrailParticles] = useState<TrailParticle[]>([]);
-  const particleIdRef = useRef(0);
-  const trailIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const planeRef = useRef<HTMLDivElement>(null);
-
-  const handlePlaneClick = () => {
-    if (isFlying) return;
-
-    const newCount = planeClicks + 1;
-    if (newCount === 5) {
-      setIsFlying(true);
-      setPlaneClicks(0);
-      setTimeout(() => {
-        setIsFlying(false);
-        setTrailParticles([]);
-      }, 4000); // совпадает с длительностью анимации (4s)
-    } else {
-      setPlaneClicks(newCount);
-    }
-  };
-
-  useEffect(() => {
-    if (!isFlying) {
-      if (trailIntervalRef.current) {
-        clearInterval(trailIntervalRef.current);
-        trailIntervalRef.current = null;
-      }
-      return;
-    }
-
-    // Reset particle state when the easter-egg animation starts.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTrailParticles([]);
-    particleIdRef.current = 0;
-
-    trailIntervalRef.current = setInterval(() => {
-      if (planeRef.current) {
-        const rect = planeRef.current.getBoundingClientRect();
-        const parentRect = planeRef.current.offsetParent?.getBoundingClientRect();
-        if (parentRect) {
-          const x = rect.left - parentRect.left + rect.width / 2;
-          const y = rect.top - parentRect.top + rect.height / 2;
-          const id = particleIdRef.current++;
-
-          setTrailParticles(prev => {
-            const newParticle: TrailParticle = { id, x, y, opacity: 1, scale: 1 };
-            const updated = [...prev, newParticle];
-            if (updated.length > 40) updated.shift();
-            return updated;
-          });
-        }
-      }
-    }, 50);
-
-    return () => {
-      if (trailIntervalRef.current) {
-        clearInterval(trailIntervalRef.current);
-      }
-    };
-  }, [isFlying]);
-
-  const hasParticles = trailParticles.length > 0;
-
-  // --- Форма заявки ---
-  const [apply, setApply] = useState<ApplyFields>(EMPTY_APPLY);
-  const [consent, setConsent] = useState(false);
-  const [honeypot, setHoneypot] = useState(""); // скрытое поле: его заполняют только боты
-  const [captchaToken, setCaptchaToken] = useState("");
-  const [captchaResetVersion, setCaptchaResetVersion] = useState(0);
-  const [applyErrors, setApplyErrors] = useState<Partial<Record<ApplyField, string>>>({});
-  const [submitState, setSubmitState] = useState<SubmitState>("idle");
-  const [alreadyReceived, setAlreadyReceived] = useState(false);
-  const [applicationId, setApplicationId] = useState<string | null>(null);
-  const applySectionRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (!hasParticles) return;
-
-    const fadeInterval = setInterval(() => {
-      setTrailParticles(prev => {
-        const updated = prev
-          .map(p => ({
-            ...p,
-            opacity: p.opacity - 0.04,
-            scale: p.scale - 0.015,
-          }))
-          .filter(p => p.opacity > 0);
-        return updated;
-      });
-    }, 50);
-
-    return () => clearInterval(fadeInterval);
-  }, [hasParticles]);
 
   // --- Словарь переводов на 4 языка ---
   const translations = {
@@ -182,7 +31,7 @@ export default function HomePage() {
       heroLine3: "CLUB",
       heroSubtitle: "Exclusive community. Premium image events and residencies worldwide.",
       ctaExplore: "Explore Destinations",
-      ctaApply: "Resident Access",
+      ctaApply: "Apply via Telegram",
       sectionResidencies: "Residencies",
       sectionDestinations: "Current Destinations",
       macroRegion: "Macro Region",
@@ -210,44 +59,9 @@ export default function HomePage() {
       pillar3Title: "Ultimate Discretion",
       pillar3Desc: "Your privacy is our highest priority. Flawless security, non-disclosure protocols, and a seamless VIP experience across 4 continents.",
       formEyebrow: "Join The Club",
-      formTitle: "Request an Invitation",
-      formDesc: "Membership in VOYAGE PRIVATE CLUB is strictly limited. We review each application individually. Please fill out the form below to initiate the verification process.",
-      formName: "Full Name",
-      formNamePl: "Your name",
-      formTelegram: "Telegram",
-      formTelegramPl: "@username or t.me/username",
-      formTelegramHint: "Use your real Telegram username. After submitting, open our bot to link this application and receive its decision and access details.",
-      formWhatsApp: "WhatsApp (optional)",
-      formWhatsAppPl: "+1 555 123 4567",
-      formInsta: "Instagram Profile",
-      formInstaPl: "@username",
-      formStatement: "Statement",
-      formStatementPl: "Briefly about your experience and why you want to join Voyage...",
-      formConsent1: "I confirm that I am over 18 years old and agree to the ",
-      formPrivacy: "Privacy Policy",
-      formConsent2: " and processing of my personal data.",
-      formSubmit: "Submit Application",
-      formSending: "Sending…",
-      formRequiredHint: "Required",
-      captchaTitle: "Security verification",
-      captchaHint: "Complete the check to send your request.",
-      captchaLoading: "Loading verification…",
-      captchaUnavailable: "Security verification is unavailable. Please try again later.",
-      errCaptcha: "Complete the security check before submitting.",
-      rateLimited: "Too many attempts from this network. Please wait and try again.",
-      errName: "Please enter your full name.",
-      errTelegram: "Enter a valid Telegram username or t.me link.",
-      errWhatsApp: "Enter a valid WhatsApp number or leave this field blank.",
-      errInsta: "Enter your Instagram — @username or a profile link.",
-      errConsent: "Please confirm you are over 18 and accept the Privacy Policy.",
-      formError: "We couldn't send your application. Please check your connection and try again.",
-      successEyebrow: "Application Received",
-      successTitle: "Thank You",
-      successBody: "Your application is under review. You must open our Telegram bot to link this application and receive the decision and account access.",
-      successAlready: "Your application is already under review. Open our Telegram bot to link it and receive the decision and account access.",
-      successContact: "We will reach you at",
-      successTelegramButton: "Open Telegram bot",
-      successBotMissing: "Telegram bot link is not configured. Please contact support."
+      formTitle: "Registration Through Telegram Only",
+      formDesc: "VOYAGE is a private community. New resident applications and verification are handled exclusively through our official Telegram bot.",
+      formSubmit: "Apply via Telegram",
     },
     RU: {
       logo: "VOYAGE",
@@ -258,7 +72,7 @@ export default function HomePage() {
       heroLine3: "CLUB",
       heroSubtitle: "Эксклюзивное комьюнити. Премиальные имиджевые мероприятия и резиденции по всему миру.",
       ctaExplore: "Смотреть направления",
-      ctaApply: "Вход для резидентов",
+      ctaApply: "Подать заявку через Telegram",
       sectionResidencies: "Резиденции",
       sectionDestinations: "Актуальные направления",
       macroRegion: "Макрорегион",
@@ -285,45 +99,10 @@ export default function HomePage() {
       pillar2Desc: "Эстетика — наша валюта. Мы организуем премиальные имидж-вечеринки и элитные собрания, где абсолютная красота встречается с непререкаемым статусом.",
       pillar3Title: "Абсолютная приватность",
       pillar3Desc: "Ваша приватность — наш абсолютный приоритет. Безупречная безопасность, протоколы конфиденциальности и бесшовный VIP-сервис на 4 континентах.",
-      formEyebrow: "Вступить в клуб",
-      formTitle: "Запросить приглашение",
-      formDesc: "Членство в VOYAGE PRIVATE CLUB строго лимитировано. Мы рассматриваем каждую заявку индивидуально. Пожалуйста, заполните форму ниже для инициации процесса верификации.",
-      formName: "Имя и Фамилия",
-      formNamePl: "Ваше имя",
-      formTelegram: "Telegram",
-      formTelegramPl: "@username или t.me/username",
-      formTelegramHint: "Укажите свой реальный Telegram. После отправки заявки откройте нашего бота, чтобы привязать заявку и получать решение и доступы.",
-      formWhatsApp: "WhatsApp (необязательно)",
-      formWhatsAppPl: "+7 999 123-45-67",
-      formInsta: "Профиль Instagram",
-      formInstaPl: "@username",
-      formStatement: "О себе",
-      formStatementPl: "Коротко о вашем опыте и почему вы хотите присоединиться к Voyage...",
-      formConsent1: "Я подтверждаю, что мне больше 18 лет, и согласен(на) с ",
-      formPrivacy: "Политикой конфиденциальности",
-      formConsent2: " и обработкой моих персональных данных.",
-      formSubmit: "Отправить заявку",
-      formSending: "Отправляем…",
-      formRequiredHint: "Обязательное поле",
-      captchaTitle: "Проверка безопасности",
-      captchaHint: "Пройдите проверку, чтобы отправить заявку.",
-      captchaLoading: "Загружаем проверку…",
-      captchaUnavailable: "Проверка безопасности временно недоступна. Попробуйте позже.",
-      errCaptcha: "Перед отправкой пройдите проверку безопасности.",
-      rateLimited: "Слишком много попыток из этой сети. Подождите и попробуйте снова.",
-      errName: "Укажите имя и фамилию.",
-      errTelegram: "Укажите действующий Telegram (@username или ссылку t.me).",
-      errWhatsApp: "Укажите корректный номер WhatsApp или оставьте поле пустым.",
-      errInsta: "Укажите Instagram — @username или ссылку на профиль.",
-      errConsent: "Подтвердите, что вам больше 18 лет и вы согласны с Политикой конфиденциальности.",
-      formError: "Не удалось отправить заявку. Проверьте подключение и попробуйте ещё раз.",
-      successEyebrow: "Заявка получена",
-      successTitle: "Благодарим вас",
-      successBody: "Заявка принята и находится на рассмотрении. Обязательно запустите нашего Telegram-бота, чтобы привязать заявку и получить решение и доступы.",
-      successAlready: "Ваша заявка уже находится на рассмотрении. Запустите нашего Telegram-бота, чтобы привязать её и получить решение и доступы.",
-      successContact: "Мы напишем вам в",
-      successTelegramButton: "Открыть Telegram-бота",
-      successBotMissing: "Ссылка на Telegram-бота не настроена. Обратитесь в поддержку."
+      formEyebrow: "Вступление в клуб",
+      formTitle: "Регистрация только через Telegram",
+      formDesc: "VOYAGE - закрытое сообщество. Регистрация и верификация новых резиденток проходит исключительно через нашего официального Telegram-бота.",
+      formSubmit: "Подать заявку",
     },
     ES: {
       logo: "VOYAGE",
@@ -334,7 +113,7 @@ export default function HomePage() {
       heroLine3: "CLUB",
       heroSubtitle: "Comunidad exclusiva. Eventos de imagen premium y residencias en todo el mundo.",
       ctaExplore: "Explorar Destinos",
-      ctaApply: "Acceso de Residentes",
+      ctaApply: "Solicitar por Telegram",
       sectionResidencies: "Residencias",
       sectionDestinations: "Destinos Actuales",
       macroRegion: "Macro Región",
@@ -361,45 +140,10 @@ export default function HomePage() {
       pillar2Desc: "La estética es nuestra moneda. Organizamos fiestas de imagen de alto nivel y reuniones de élite.",
       pillar3Title: "Discreción Absoluta",
       pillar3Desc: "Tu privacidad es nuestra máxima prioridad. Seguridad impecable, protocolos de confidencialidad y una experiencia VIP.",
-      formEyebrow: "Únete al Club",
-      formTitle: "Solicitar una Invitación",
-      formDesc: "La membresía en VOYAGE PRIVATE CLUB es estrictamente limitada. Revisamos cada solicitud individualmente.",
-      formName: "Nombre Completo",
-      formNamePl: "Tu nombre",
-      formTelegram: "Telegram",
-      formTelegramPl: "@usuario o t.me/usuario",
-      formTelegramHint: "Indica tu usuario real de Telegram. Después de enviar la solicitud, abre nuestro bot para vincularla y recibir la decisión y los accesos.",
-      formWhatsApp: "WhatsApp (opcional)",
-      formWhatsAppPl: "+34 600 123 456",
-      formInsta: "Perfil de Instagram",
-      formInstaPl: "@usuario",
-      formStatement: "Sobre ti",
-      formStatementPl: "Brevemente sobre tu experiencia...",
-      formConsent1: "Confirmo que soy mayor de 18 años y acepto la ",
-      formPrivacy: "Política de Privacidad",
-      formConsent2: " y el procesamiento de mis datos personales.",
-      formSubmit: "Enviar Solicitud",
-      formSending: "Enviando…",
-      formRequiredHint: "Campo obligatorio",
-      captchaTitle: "Verificación de seguridad",
-      captchaHint: "Completa la verificación para enviar la solicitud.",
-      captchaLoading: "Cargando verificación…",
-      captchaUnavailable: "La verificación no está disponible temporalmente. Inténtalo más tarde.",
-      errCaptcha: "Completa la verificación de seguridad antes de enviar.",
-      rateLimited: "Demasiados intentos desde esta red. Espera e inténtalo de nuevo.",
-      errName: "Indica tu nombre completo.",
-      errTelegram: "Indica un usuario de Telegram válido o un enlace t.me.",
-      errWhatsApp: "Indica un número de WhatsApp válido o deja el campo vacío.",
-      errInsta: "Indica tu Instagram: @usuario o el enlace a tu perfil.",
-      errConsent: "Confirma que eres mayor de 18 años y aceptas la Política de Privacidad.",
-      formError: "No pudimos enviar tu solicitud. Revisa tu conexión e inténtalo de nuevo.",
-      successEyebrow: "Solicitud Recibida",
-      successTitle: "Gracias",
-      successBody: "Tu solicitud está en revisión. Abre nuestro bot de Telegram para vincularla y recibir la decisión y los datos de acceso.",
-      successAlready: "Tu solicitud ya está en revisión. Abre nuestro bot de Telegram para vincularla y recibir la decisión y los datos de acceso.",
-      successContact: "Te escribiremos a",
-      successTelegramButton: "Abrir bot de Telegram",
-      successBotMissing: "El enlace del bot de Telegram no está configurado. Contacta con soporte."
+      formEyebrow: "Únete al club",
+      formTitle: "Registro solo a través de Telegram",
+      formDesc: "VOYAGE es una comunidad privada. Las solicitudes y la verificación de nuevas residentes se gestionan exclusivamente a través de nuestro bot oficial de Telegram.",
+      formSubmit: "Solicitar acceso",
     },
     PT: {
       logo: "VOYAGE",
@@ -410,7 +154,7 @@ export default function HomePage() {
       heroLine3: "CLUB",
       heroSubtitle: "Comunidade exclusiva. Eventos de imagem premium e residências em todo o mundo.",
       ctaExplore: "Explorar Destinos",
-      ctaApply: "Acesso de Residentes",
+      ctaApply: "Candidatar-se pelo Telegram",
       sectionResidencies: "Residências",
       sectionDestinations: "Destinos Atuais",
       macroRegion: "Macro Região",
@@ -437,170 +181,21 @@ export default function HomePage() {
       pillar2Desc: "A estética é a nossa moeda. Organizamos festas de imagem de alto nível e encontros de elite.",
       pillar3Title: "Discrição Absoluta",
       pillar3Desc: "A sua privacidade é a nossa prioridade. Segurança impecável, protocolos de confidencialidade e uma experiência VIP.",
-      formEyebrow: "Junte-se ao Clube",
-      formTitle: "Solicitar um Convite",
-      formDesc: "A adesão ao VOYAGE PRIVATE CLUB é estritamente limitada. Analisamos cada candidatura individualmente.",
-      formName: "Nome Completo",
-      formNamePl: "Seu nome",
-      formTelegram: "Telegram",
-      formTelegramPl: "@usuario ou t.me/usuario",
-      formTelegramHint: "Informe seu usuário real do Telegram. Após enviar a inscrição, abra nosso bot para vinculá-la e receber a decisão e os acessos.",
-      formWhatsApp: "WhatsApp (opcional)",
-      formWhatsAppPl: "+55 11 91234-5678",
-      formInsta: "Perfil do Instagram",
-      formInstaPl: "@usuario",
-      formStatement: "Sobre você",
-      formStatementPl: "Brevemente sobre a sua experiência...",
-      formConsent1: "Confirmo que sou maior de 18 anos e concordo com a ",
-      formPrivacy: "Política de Privacidade",
-      formConsent2: " e com o processamento dos meus dados pessoais.",
-      formSubmit: "Enviar Inscrição",
-      formSending: "Enviando…",
-      formRequiredHint: "Campo obrigatório",
-      captchaTitle: "Verificação de segurança",
-      captchaHint: "Conclua a verificação para enviar a solicitação.",
-      captchaLoading: "Carregando verificação…",
-      captchaUnavailable: "A verificação está temporariamente indisponível. Tente novamente mais tarde.",
-      errCaptcha: "Conclua a verificação de segurança antes de enviar.",
-      rateLimited: "Muitas tentativas nesta rede. Aguarde e tente novamente.",
-      errName: "Informe seu nome completo.",
-      errTelegram: "Informe um usuário do Telegram válido ou link t.me.",
-      errWhatsApp: "Informe um número válido do WhatsApp ou deixe o campo vazio.",
-      errInsta: "Informe seu Instagram — @usuario ou o link do perfil.",
-      errConsent: "Confirme que você tem mais de 18 anos e aceita a Política de Privacidade.",
-      formError: "Não foi possível enviar sua inscrição. Verifique sua conexão e tente novamente.",
-      successEyebrow: "Inscrição Recebida",
-      successTitle: "Obrigado",
-      successBody: "Sua inscrição está em análise. Abra nosso bot do Telegram para vinculá-la e receber a decisão e os dados de acesso.",
-      successAlready: "Sua inscrição já está em análise. Abra nosso bot do Telegram para vinculá-la e receber a decisão e os dados de acesso.",
-      successContact: "Vamos falar com você em",
-      successTelegramButton: "Abrir bot do Telegram",
-      successBotMissing: "O link do bot do Telegram não está configurado. Entre em contato com o suporte."
+      formEyebrow: "Entre para o clube",
+      formTitle: "Cadastro somente pelo Telegram",
+      formDesc: "VOYAGE é uma comunidade privada. O cadastro e a verificação de novas residentes acontecem exclusivamente pelo nosso bot oficial do Telegram.",
+      formSubmit: "Candidatar-se",
     }
   };
   // неизвестный язык (или в нижнем регистре) → английский, а не падение страницы
   const t = translations[String(lang).toUpperCase() as keyof typeof translations] ?? translations.EN;
-  const botUsername = (process.env.NEXT_PUBLIC_BOT_USERNAME ?? "").trim().replace(/^@/, "");
-  const telegramStartUrl = applicationId && /^[a-zA-Z][a-zA-Z0-9_]{4,31}$/.test(botUsername)
-    ? `https://t.me/${botUsername}?start=app_${applicationId}`
-    : null;
 
   const scrollToDestinations = () => {
     document.getElementById("destinations")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // --- Форма заявки: поля, проверка, отправка ---
-  const setField = (key: keyof ApplyFields, value: string) => {
-    setApply((prev) => ({ ...prev, [key]: value }));
-    if (applyErrors[key]) setApplyErrors((prev) => ({ ...prev, [key]: undefined }));
-    if (submitState === "error") setSubmitState("idle");
-  };
-
-  const validateApply = () => {
-    const errors: Partial<Record<ApplyField, string>> = {};
-    if (apply.fullName.trim().replace(/\s+/g, " ").length < 2) errors.fullName = t.errName;
-    if (!normalizeTelegram(apply.telegram)) errors.telegram = t.errTelegram;
-    if (apply.whatsapp.trim() && normalizeWhatsApp(apply.whatsapp) === false) errors.whatsapp = t.errWhatsApp;
-    if (!instagramHandle(apply.instagram)) errors.instagram = t.errInsta;
-    if (!consent) errors.consent = t.errConsent;
-    if (!captchaToken) errors.captcha = t.errCaptcha;
-    return errors;
-  };
-
-  const handleApply = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (submitState === "sending") return;
-
-    const errors = validateApply();
-    setApplyErrors(errors);
-    const firstInvalid = (["fullName", "telegram", "whatsapp", "instagram", "consent", "captcha"] as ApplyField[]).find((k) => errors[k]);
-    if (firstInvalid) {
-      document.getElementById(`apply-${firstInvalid}`)?.focus();
-      return;
-    }
-
-    const showSuccess = (already: boolean, nextApplicationId: string | null = null) => {
-      setAlreadyReceived(already);
-      setApplicationId(nextApplicationId);
-      setSubmitState("sent");
-      requestAnimationFrame(() => applySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    };
-
-    // бот заполнил скрытое поле — вежливо «принимаем», ничего не сохраняя
-    if (honeypot) {
-      showSuccess(false, null);
-      return;
-    }
-
-    const normalizedWhatsApp = normalizeWhatsApp(apply.whatsapp);
-    if (normalizedWhatsApp === false) {
-      setApplyErrors((prev) => ({ ...prev, whatsapp: t.errWhatsApp }));
-      document.getElementById("apply-whatsapp")?.focus();
-      return;
-    }
-
-    setSubmitState("sending");
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const result = await submitGuestApplication({
-        fullName: apply.fullName,
-        telegram: normalizeTelegram(apply.telegram) ?? apply.telegram,
-        whatsapp: normalizedWhatsApp,
-        instagram: `@${instagramHandle(apply.instagram)}`,
-        about: apply.about,
-        consent: true,
-        lang: String(lang).toLowerCase(),
-        turnstileToken: captchaToken,
-        utmSource: params.get("utm_source"),
-        utmMedium: params.get("utm_medium"),
-        utmCampaign: params.get("utm_campaign"),
-      });
-      if (!result.ok) {
-        setCaptchaToken("");
-        setCaptchaResetVersion((value) => value + 1);
-        console.error("[Apply] server action rejected submission", result.reason);
-        if (["captcha_required", "captcha_invalid", "captcha_unavailable", "rate_limited", "security_unavailable"].includes(result.reason)) {
-          const message = result.reason === "rate_limited" ? t.rateLimited :
-            result.reason === "captcha_unavailable" || result.reason === "security_unavailable" ? t.captchaUnavailable : t.errCaptcha;
-          setApplyErrors((prev) => ({ ...prev, captcha: message }));
-          setSubmitState("idle");
-        } else {
-          setSubmitState("error");
-        }
-        return;
-      }
-      setCaptchaToken("");
-      setCaptchaResetVersion((value) => value + 1);
-      showSuccess(result.duplicate, result.applicationId);
-    } catch (err) {
-      console.error("[Apply] Insert exception:", err);
-      // A verification token may already have been consumed by Siteverify.
-      setCaptchaToken("");
-      setCaptchaResetVersion((value) => value + 1);
-      setSubmitState("error");
-    }
-  };
-
-  const fieldClass = (key: ApplyField) =>
-    `w-full bg-transparent border-b pb-3 text-zinc-100 focus:outline-none transition-colors placeholder:text-zinc-800 font-light disabled:opacity-60 ${
-      applyErrors[key] ? "border-red-400/60 focus:border-red-300/80" : "border-zinc-800 focus:border-amber-200/50"
-    }`;
-
-  const fieldError = (key: ApplyField) =>
-    applyErrors[key] ? (
-      <p id={`apply-${key}-error`} role="alert" className="flex items-center gap-1.5 text-[11px] text-red-300/80">
-        <AlertCircle size={12} strokeWidth={1.5} className="shrink-0" />
-        {applyErrors[key]}
-      </p>
-    ) : null;
-
-  const requiredMark = (
-    <span className="ml-1 text-amber-200/60" aria-hidden title={t.formRequiredHint}>
-      *
-    </span>
-  );
-
-  const sending = submitState === "sending";
+  const botUsername = (process.env.NEXT_PUBLIC_BOT_USERNAME ?? "").trim().replace(/^@/, "");
+  const applyBotUrl = botUsername ? `https://t.me/${botUsername}?start=apply` : "https://t.me";
 
   // --- Три столпа (Manifesto pillars) ---
   const pillars = [
@@ -646,12 +241,14 @@ export default function HomePage() {
           >
             {t.ctaExplore}
           </button>
-          <Link
-            href="/login"
-            className="px-8 py-3.5 rounded-full border border-zinc-700 text-zinc-300 text-sm tracking-widest uppercase font-medium hover:border-amber-200/40 hover:text-amber-200 transition-all duration-300 min-w-[220px]"
+          <a
+            href={applyBotUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-8 py-3.5 rounded-full border border-amber-200/30 bg-amber-200/[0.06] text-amber-100 text-sm tracking-widest uppercase font-medium hover:border-amber-200/60 hover:bg-amber-200/[0.1] transition-all duration-300 min-w-[220px]"
           >
             {t.ctaApply}
-          </Link>
+          </a>
         </div>
 
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-40">
@@ -948,332 +545,45 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ─── Membership Application Form ─── */}
+      {/* ─── Telegram-only Membership ─── */}
       <section
         id="apply"
-        ref={applySectionRef}
-        className="px-6 py-24 border-t border-white/5 bg-zinc-950 relative overflow-hidden scroll-mt-8"
+        className="relative overflow-hidden border-t border-white/5 bg-zinc-950 px-6 py-24 scroll-mt-8"
       >
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-px bg-gradient-to-r from-transparent via-amber-200/30 to-transparent" />
-
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-xs tracking-[0.5em] uppercase text-amber-200/60 font-medium mb-3">
-              {t.formEyebrow}
-            </p>
-            <h2
-              className="text-4xl md:text-5xl font-light text-zinc-100 mb-6"
-              style={{ fontFamily: SERIF }}
-            >
-              {t.formTitle}
-            </h2>
-            {submitState !== "sent" && (
-              <p className="text-zinc-400 text-sm md:text-base leading-relaxed font-light max-w-xl mx-auto">
-                {t.formDesc}
-              </p>
-            )}
+        <div className="pointer-events-none absolute left-1/2 top-0 h-px w-full max-w-3xl -translate-x-1/2 bg-gradient-to-r from-transparent via-amber-200/30 to-transparent" />
+        <div className="pointer-events-none absolute left-1/2 top-24 h-64 w-96 -translate-x-1/2 rounded-full bg-amber-400/[0.06] blur-3xl" />
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.65, ease: "easeOut" }}
+          className="relative mx-auto max-w-3xl overflow-hidden rounded-3xl border border-amber-200/15 bg-zinc-900/40 px-7 py-12 text-center shadow-[0_24px_100px_-48px_rgba(251,191,36,0.16)] backdrop-blur-xl sm:px-12 sm:py-16"
+        >
+          <div className="pointer-events-none absolute inset-3 rounded-[1.25rem] border border-amber-200/[0.06]" />
+          <div className="relative mx-auto mb-7 flex h-16 w-16 items-center justify-center rounded-full border border-amber-200/25 bg-amber-200/[0.06] text-amber-100">
+            <ShieldCheck size={26} strokeWidth={1.35} />
           </div>
-
-          {submitState === "sent" ? (
-            <motion.div
-              key="apply-success"
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, ease: "easeOut" }}
-              role="status"
-              aria-live="polite"
-              className="relative mx-auto max-w-xl overflow-hidden rounded-3xl border border-amber-200/15 bg-zinc-900/40 px-8 py-14 text-center backdrop-blur-sm md:px-14"
-            >
-              <div className="pointer-events-none absolute -top-24 left-1/2 h-48 w-80 -translate-x-1/2 rounded-full bg-amber-400/10 blur-3xl" />
-              <div className="pointer-events-none absolute inset-3 rounded-[1.25rem] border border-amber-200/[0.07]" />
-
-              <motion.div
-                initial={{ scale: 0.6, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.6, delay: 0.15, ease: [0.3, 1.4, 0.5, 1] }}
-                className="relative mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-full border border-amber-200/40 bg-amber-200/[0.06] text-amber-200 shadow-[0_0_40px_rgba(251,191,36,0.12)]"
-              >
-                <span className="absolute inset-1.5 rounded-full border border-amber-200/15" />
-                <ShieldCheck size={30} strokeWidth={1.25} />
-              </motion.div>
-
-              <p className="mb-3 text-xs font-medium uppercase tracking-[0.5em] text-amber-200/60">{t.successEyebrow}</p>
-              <h3 className="mb-6 text-4xl font-light text-zinc-50 md:text-5xl" style={{ fontFamily: SERIF }}>
-                {t.successTitle}
-              </h3>
-              <div className="mx-auto mb-6 h-px w-16 bg-amber-200/40" />
-              <p className="mx-auto max-w-md text-sm font-light leading-relaxed text-zinc-300 md:text-base">
-                {alreadyReceived ? t.successAlready : t.successBody}
-              </p>
-              {(apply.telegram.trim() || apply.whatsapp.trim()) && (
-                <p className="mt-6 text-[11px] uppercase tracking-[0.2em] text-zinc-600">
-                  {t.successContact} <span className="normal-case tracking-normal text-amber-200/80">{apply.telegram.trim() || apply.whatsapp.trim()}</span>
-                </p>
-              )}
-              {telegramStartUrl ? (
-                <a
-                  href={telegramStartUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-8 inline-flex items-center justify-center gap-2 rounded-full border border-amber-200/30 bg-amber-200/[0.08] px-6 py-3 text-xs font-medium uppercase tracking-[0.18em] text-amber-100 transition-colors hover:border-amber-200/60 hover:bg-amber-200/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/50"
-                >
-                  {t.successTelegramButton} <ArrowRight size={14} />
-                </a>
-              ) : applicationId ? (
-                <p role="alert" className="mt-6 text-xs text-amber-100/80">{t.successBotMissing}</p>
-              ) : null}
-            </motion.div>
-          ) : (
-          <form className="space-y-10" onSubmit={handleApply} noValidate>
-            {/* ловушка для ботов: людям не видна и не доступна с клавиатуры */}
-            <div aria-hidden className="absolute -left-[9999px] h-px w-px overflow-hidden">
-              <label htmlFor="apply-website">Website</label>
-              <input
-                id="apply-website"
-                type="text"
-                tabIndex={-1}
-                autoComplete="off"
-                value={honeypot}
-                onChange={(e) => setHoneypot(e.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              <div className="space-y-3 relative group">
-                <label htmlFor="apply-fullName" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
-                  {t.formName}
-                  {requiredMark}
-                </label>
-                <input
-                  id="apply-fullName"
-                  type="text"
-                  autoComplete="name"
-                  maxLength={120}
-                  value={apply.fullName}
-                  onChange={(e) => setField("fullName", e.target.value)}
-                  disabled={sending}
-                  aria-invalid={!!applyErrors.fullName}
-                  aria-describedby={applyErrors.fullName ? "apply-fullName-error" : undefined}
-                  className={fieldClass("fullName")}
-                  placeholder={t.formNamePl}
-                />
-                {fieldError("fullName")}
-              </div>
-              <div className="space-y-3 relative group">
-                <label htmlFor="apply-telegram" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
-                  {t.formTelegram}
-                  {requiredMark}
-                </label>
-                <input
-                  id="apply-telegram"
-                  type="text"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  autoComplete="off"
-                  maxLength={120}
-                  value={apply.telegram}
-                  onChange={(e) => setField("telegram", e.target.value)}
-                  disabled={sending}
-                  aria-invalid={!!applyErrors.telegram}
-                  aria-describedby={applyErrors.telegram ? "apply-telegram-error" : "apply-telegram-hint"}
-                  className={fieldClass("telegram")}
-                  placeholder={t.formTelegramPl}
-                />
-                <p id="apply-telegram-hint" className="text-[10px] leading-5 text-amber-100/65">{t.formTelegramHint}</p>
-                {fieldError("telegram")}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              <div className="space-y-3 relative group">
-                <label htmlFor="apply-whatsapp" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
-                  {t.formWhatsApp}
-                </label>
-                <input
-                  id="apply-whatsapp"
-                  type="tel"
-                  autoComplete="tel"
-                  maxLength={40}
-                  value={apply.whatsapp}
-                  onChange={(e) => setField("whatsapp", e.target.value)}
-                  disabled={sending}
-                  aria-invalid={!!applyErrors.whatsapp}
-                  aria-describedby={applyErrors.whatsapp ? "apply-whatsapp-error" : undefined}
-                  className={fieldClass("whatsapp")}
-                  placeholder={t.formWhatsAppPl}
-                />
-                {fieldError("whatsapp")}
-              </div>
-
-              <div className="space-y-3 relative group">
-                <label htmlFor="apply-instagram" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
-                  {t.formInsta}
-                  {requiredMark}
-                </label>
-                <input
-                  id="apply-instagram"
-                  type="text"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  maxLength={120}
-                  value={apply.instagram}
-                  onChange={(e) => setField("instagram", e.target.value)}
-                  disabled={sending}
-                  aria-invalid={!!applyErrors.instagram}
-                  aria-describedby={applyErrors.instagram ? "apply-instagram-error" : undefined}
-                  className={fieldClass("instagram")}
-                  placeholder={t.formInstaPl}
-                />
-                {fieldError("instagram")}
-              </div>
-
-            </div>
-
-            <div className="space-y-3 relative group">
-              <label htmlFor="apply-about" className="text-[10px] tracking-[0.2em] uppercase text-zinc-500 transition-colors group-focus-within:text-amber-200/70">
-                {t.formStatement}
-              </label>
-              <textarea
-                id="apply-about"
-                rows={2}
-                maxLength={ABOUT_MAX}
-                value={apply.about}
-                onChange={(e) => setField("about", e.target.value)}
-                disabled={sending}
-                className={`${fieldClass("about")} resize-none`}
-                placeholder={t.formStatementPl}
-              />
-            </div>
-
-            <div id="apply-captcha" tabIndex={-1} className="space-y-2 rounded-2xl border border-zinc-800/70 bg-black/15 p-4 outline-none focus-visible:ring-2 focus-visible:ring-amber-200/35">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">{t.captchaTitle}</p>
-              <p className="mb-3 text-[11px] leading-5 text-zinc-600">{t.captchaHint}</p>
-              <TurnstileWidget
-                lang={String(lang)}
-                resetVersion={captchaResetVersion}
-                onTokenChange={(token) => {
-                  setCaptchaToken(token);
-                  if (token) setApplyErrors((prev) => ({ ...prev, captcha: undefined }));
-                }}
-                labels={{ loading: t.captchaLoading, unavailable: t.captchaUnavailable }}
-              />
-              {fieldError("captcha")}
-            </div>
-
-            {/* ─── Legal Consent ─── */}
-            <div className="space-y-2 pt-2">
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  id="apply-consent"
-                  checked={consent}
-                  onChange={(e) => {
-                    setConsent(e.target.checked);
-                    if (applyErrors.consent) setApplyErrors((prev) => ({ ...prev, consent: undefined }));
-                  }}
-                  disabled={sending}
-                  aria-invalid={!!applyErrors.consent}
-                  aria-describedby={applyErrors.consent ? "apply-consent-error" : undefined}
-                  className={`mt-0.5 appearance-none min-w-[16px] w-4 h-4 rounded-sm border bg-transparent checked:bg-amber-200 checked:border-amber-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/40 transition-colors cursor-pointer relative after:content-['✓'] after:absolute after:text-zinc-900 after:text-[10px] after:font-bold after:left-1/2 after:-translate-x-1/2 after:top-1/2 after:-translate-y-1/2 after:opacity-0 checked:after:opacity-100 ${
-                    applyErrors.consent ? "border-red-400/70" : "border-zinc-700"
-                  }`}
-                />
-                <label htmlFor="apply-consent" className="text-[10px] tracking-wider text-zinc-500 leading-relaxed font-light cursor-pointer select-none">
-                  {t.formConsent1}
-                  <Link href="/privacy" className="text-amber-200/70 hover:text-amber-200 transition-colors">
-                    {t.formPrivacy}
-                  </Link>
-                  {t.formConsent2}
-                </label>
-              </div>
-              {fieldError("consent")}
-            </div>
-
-            {/* Кнопка отправки с пасхалкой */}
-            <div className="pt-8 flex justify-center">
-              <style>{`
-                @keyframes fly-around-btn {
-                  0%   { transform: translate(0px, 0px) rotate(0deg); }
-                  8%   { transform: translate(-60px, -45px) rotate(-30deg); }
-                  16%  { transform: translate(-130px, -55px) rotate(-60deg); }
-                  24%  { transform: translate(-180px, -35px) rotate(-90deg); }
-                  32%  { transform: translate(-200px, 0px) rotate(-120deg); }
-                  40%  { transform: translate(-180px, 35px) rotate(-150deg); }
-                  48%  { transform: translate(-130px, 55px) rotate(-180deg); }
-                  56%  { transform: translate(-60px, 45px) rotate(-210deg); }
-                  64%  { transform: translate(0px, 0px) rotate(-240deg); }
-                  72%  { transform: translate(60px, -45px) rotate(-270deg); }
-                  80%  { transform: translate(130px, -55px) rotate(-300deg); }
-                  88%  { transform: translate(180px, -35px) rotate(-330deg); }
-                  96%  { transform: translate(200px, 0px) rotate(-360deg); }
-                  100% { transform: translate(0px, 0px) rotate(-360deg); }
-                }
-
-                .animate-fly-around {
-                  animation: fly-around-btn 4s linear forwards;
-                }
-              `}</style>
-
-              <div className="relative group/btn inline-flex items-center justify-center">
-                <button
-                  type="submit"
-                  disabled={sending}
-                  aria-busy={sending}
-                  className="inline-flex min-w-[15rem] items-center justify-center gap-2.5 px-12 py-4 rounded-full bg-zinc-100 text-zinc-950 text-[11px] tracking-[0.2em] uppercase font-bold hover:bg-amber-200 transition-all duration-300 shadow-[0_0_20px_rgba(251,191,36,0.1)] hover:shadow-[0_0_30px_rgba(251,191,36,0.2)] disabled:cursor-wait disabled:bg-amber-200/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                >
-                  {sending && <Loader2 size={15} strokeWidth={2} className="animate-spin" />}
-                  {sending ? t.formSending : t.formSubmit}
-                </button>
-
-                <div className="absolute inset-0 pointer-events-none overflow-visible" style={{ width: '500px', height: '200px', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
-                  {trailParticles.map((p) => (
-                    <div
-                      key={p.id}
-                      className="absolute rounded-full"
-                      style={{
-                        left: `${p.x}px`,
-                        top: `${p.y}px`,
-                        width: '6px',
-                        height: '6px',
-                        transform: `translate(-50%, -50%) scale(${p.scale})`,
-                        opacity: p.opacity,
-                        background: 'radial-gradient(circle, rgba(251,191,36,0.9) 0%, rgba(255,255,255,0.6) 40%, rgba(251,191,36,0.2) 70%, transparent 100%)',
-                        boxShadow: '0 0 8px rgba(251,191,36,0.5), 0 0 16px rgba(251,191,36,0.2)',
-                        transition: 'opacity 0.1s ease-out, transform 0.1s ease-out',
-                      }}
-                    />
-                  ))}
-                </div>
-
-                <div
-                  ref={planeRef}
-                  onClick={handlePlaneClick}
-                  className={`absolute p-2 cursor-pointer text-zinc-700 hover:text-amber-200 transition-colors duration-300 z-10 ${isFlying ? 'animate-fly-around text-amber-400' : ''}`}
-                  style={{
-                    left: '50%',
-                    top: '50%',
-                    transform: isFlying ? undefined : 'translate(-50%, -50%)',
-                    marginLeft: isFlying ? undefined : '140px',
-                    marginTop: isFlying ? undefined : '-2px',
-                  }}
-                  title="Secret Voyage"
-                >
-                  <Plane size={20} strokeWidth={1.5} />
-                </div>
-              </div>
-            </div>
-
-            {submitState === "error" && (
-              <p role="alert" className="mx-auto flex max-w-md items-start justify-center gap-2 text-center text-xs leading-relaxed text-red-300/80">
-                <AlertCircle size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" />
-                {t.formError}
-              </p>
-            )}
-          </form>
-          )}
-        </div>
+          <p className="relative mb-4 text-[10px] font-medium uppercase tracking-[0.45em] text-amber-200/60">
+            {t.formEyebrow}
+          </p>
+          <h2 className="relative mx-auto max-w-2xl text-3xl font-light leading-tight text-zinc-50 sm:text-4xl md:text-5xl" style={{ fontFamily: SERIF }}>
+            {t.formTitle}
+          </h2>
+          <div className="relative mx-auto my-7 h-px w-16 bg-amber-200/35" />
+          <p className="relative mx-auto max-w-xl text-sm font-light leading-7 text-zinc-400 sm:text-base">
+            {t.formDesc}
+          </p>
+          <a
+            href={applyBotUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group relative mt-9 inline-flex min-w-56 items-center justify-center gap-2.5 rounded-full bg-amber-200 px-8 py-4 text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-950 shadow-[0_0_24px_rgba(251,191,36,0.1)] transition duration-300 hover:bg-amber-100 hover:shadow-[0_0_34px_rgba(251,191,36,0.18)]"
+          >
+            {t.formSubmit}
+            <ArrowRight size={15} className="transition-transform duration-300 group-hover:translate-x-1" />
+          </a>
+          {!botUsername && <p role="alert" className="relative mt-4 text-xs text-amber-100/70">NEXT_PUBLIC_BOT_USERNAME is not configured.</p>}
+        </motion.div>
       </section>
 
       {/* ─── Footer ─── */}

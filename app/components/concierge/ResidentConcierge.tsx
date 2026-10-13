@@ -11,6 +11,8 @@ import {
   type ConciergeStage,
 } from "@/app/actions/concierge";
 
+type ConciergeMessage = { id: string; request_id: string; sender_profile_id: string | null; sender_role: "resident" | "staff" | "system"; body: string; created_at: string };
+
 type RequestRow = {
   id: string;
   title: string;
@@ -21,6 +23,7 @@ type RequestRow = {
   preferred_language: Lang;
   status: "open" | "in_progress" | "done" | "impossible";
   admin_feedback: string | null;
+  messages?: ConciergeMessage[] | null;
   created_at: string;
   updated_at: string;
 };
@@ -158,7 +161,7 @@ export default function ResidentConcierge() {
               <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-medium text-zinc-100">{request.title}</h3><p className="mt-1 text-xs text-zinc-500">{t.categories[request.category]} · {t.stages[request.trip_stage]}</p></div><span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${isDone ? "border-emerald-500/25 bg-emerald-500/[0.07] text-emerald-200" : isImpossible ? "border-rose-500/25 bg-rose-500/[0.07] text-rose-200" : "border-amber-200/20 bg-amber-200/[0.05] text-amber-100"}`}>{isDone ? <CheckCircle2 size={12}/> : isImpossible ? <XCircle size={12}/> : <Clock3 size={12}/>} {t.statuses[request.status]}</span></div>
               <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-400">{request.message}</p>
               <p className="mt-3 text-[11px] text-zinc-600">{t.created}: {dateTime(request.created_at, lang)}</p>
-              {request.admin_feedback && <div className="mt-4 rounded-lg border border-amber-200/10 bg-amber-200/[0.04] p-3"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/75">{t.feedback}</p><p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{request.admin_feedback}</p></div>}
+              {(request.messages?.length || request.admin_feedback) ? <div className="mt-4 space-y-3">{request.messages?.length ? [...request.messages].sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at)).map((entry)=><div key={entry.id} className="rounded-lg border border-amber-200/10 bg-amber-200/[0.035] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/75">{entry.sender_role === "staff" ? t.feedback : t.message}</p><time className="text-[10px] text-zinc-600">{dateTime(entry.created_at,lang)}</time></div><p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{entry.body}</p></div>) : <div className="rounded-lg border border-amber-200/10 bg-amber-200/[0.04] p-3"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/75">{t.feedback}</p><p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{request.admin_feedback}</p></div>}</div> : null}
             </article>;
           })}</div>}
         </section>
