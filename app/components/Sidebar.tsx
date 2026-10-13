@@ -25,7 +25,9 @@ import {
   ConciergeBell,
   UserPlus,
   Settings,
+  MapPin,
   ClipboardList,
+  Users,
   ShieldAlert,
   Map,
   KeyRound,
@@ -61,6 +63,7 @@ type NavKey =
   | "inviteFriends"
   | "settings"
   | "overview"
+  | "myLocation"
   | "applications"
   | "membershipRequests"
   | "directory"
@@ -103,13 +106,14 @@ const NAV_SECTIONS: NavSection[] = [
   {
     key: "console",
     roles: STAFF,
-    items: [{ key: "overview", href: "/admin", icon: LayoutDashboard }],
+    items: [{ key: "overview", href: "/admin/directory", icon: LayoutDashboard }],
   },
   // ── Manager+ ──────────────────────────────────────────────
   {
     key: "management",
     roles: STAFF,
     items: [
+      { key: "myLocation", href: "/admin/location", icon: MapPin },
       { key: "applications", href: "/admin/applications", icon: ClipboardList },
     ],
   },
@@ -118,10 +122,13 @@ const NAV_SECTIONS: NavSection[] = [
     key: "administration",
     roles: ["admin", "owner"],
     items: [
-      // Закрытые инструменты руководства клуба
-      { key: "database", href: "/admin/database", icon: Database },
+      // Всё ниже — только owner и admin (в БД то же правило: club_is_admin)
+      // Справочник резидентов и KYC живёт в корне админки
+      { key: "directory", href: "/admin", icon: Users },
       // Заявки на вступление с главной (/admin/requests)
       { key: "membershipRequests", href: "/admin/requests", icon: UserPlus },
+      // Консьерж: входящие запросы резидентов (только owner/admin)
+      { key: "concierge", href: "/admin/concierge", icon: ConciergeBell },
       { key: "faceControl", href: "/admin/face-control", icon: ShieldAlert },
       { key: "gamification", href: "/admin/gamification", icon: Trophy },
       { key: "invitations", href: "/admin/invites", icon: Mail },
@@ -137,6 +144,7 @@ const NAV_SECTIONS: NavSection[] = [
     roles: ["owner"],
     items: [
       { key: "roleManagement", href: "/admin/roles", icon: KeyRound },
+      { key: "database", href: "/admin/database", icon: Database },
     ],
   },
   // ── Аккаунт: настройки профиля для всего персонала ─────────
@@ -186,11 +194,12 @@ const translations = {
       inviteFriends: "Invite Friends",
       settings: "Settings",
       overview: "Overview",
+      myLocation: "My Location",
       applications: "Resident Applications",
       membershipRequests: "Membership Requests",
       directory: "Directory",
       faceControl: "Face Control",
-      events: "Tour Rating Management",
+      events: "Tours / Parties",
       gamification: "Gamification",
       invitations: "Invitations",
       profileSettings: "Profile Settings",
@@ -232,11 +241,12 @@ const translations = {
       inviteFriends: "Пригласить друзей",
       settings: "Настройки",
       overview: "Обзор",
+      myLocation: "Моя локация",
       applications: "Заявки резидентов",
       membershipRequests: "Заявки на вступление",
       directory: "Справочник",
       faceControl: "Фейс-контроль",
-      events: "Управление рейтингом туров",
+      events: "Туры / Тусовки",
       gamification: "Геймификация",
       invitations: "Приглашения",
       profileSettings: "Настройки профиля",
@@ -278,11 +288,12 @@ const translations = {
       inviteFriends: "Invitar amigos",
       settings: "Ajustes",
       overview: "Resumen",
+      myLocation: "Mi ubicación",
       applications: "Solicitudes",
       membershipRequests: "Solicitudes de ingreso",
       directory: "Directorio",
       faceControl: "Control de acceso",
-      events: "Gestión del ranking de tours",
+      events: "Tours / Fiestas",
       gamification: "Gamificación",
       invitations: "Invitaciones",
       profileSettings: "Ajustes del perfil",
@@ -324,11 +335,12 @@ const translations = {
       inviteFriends: "Convidar amigos",
       settings: "Configurações",
       overview: "Visão geral",
+      myLocation: "Minha localização",
       applications: "Solicitações",
       membershipRequests: "Pedidos de adesão",
       directory: "Diretório",
       faceControl: "Controle de acesso",
-      events: "Gestão do ranking de tours",
+      events: "Tours / Festas",
       gamification: "Gamificação",
       invitations: "Convites",
       profileSettings: "Config. do perfil",
@@ -354,8 +366,6 @@ function usePendingCount(table: "club_invites" | "guest_applications", enabled: 
   const [count, setCount] = useState(0);
   useEffect(() => {
     if (!enabled) {
-      // Resetting a role-gated counter is intentional when access is removed.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCount(0);
       return;
     }
@@ -527,9 +537,9 @@ export default function Sidebar() {
           <span className={`${cormorant.className} text-lg font-medium text-amber-200/90`}>V</span>
         </div>
         <div className="min-w-0">
-          <Link href="/" aria-label="VOYAGE - Home" className={`${cormorant.className} text-xl font-medium tracking-[0.2em] text-zinc-50 transition-colors hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/70`}>
+          <p className={`${cormorant.className} text-xl font-medium tracking-[0.2em] text-zinc-50`}>
             VOYAGE
-          </Link>
+          </p>
           <p className="truncate text-[10px] uppercase tracking-[0.3em] text-zinc-500">
             {role ? t.subtitle[role] : " "}
           </p>

@@ -54,7 +54,7 @@ export type OverviewData = {
 const TEXT = {
   en: {
     eyebrow: "Voyage · Console",
-    title: "Club overview",
+    title: "Overview",
     asOf: (d: string) => `As of ${d}`,
     refresh: "Refresh",
     residents: "Residents",
@@ -79,14 +79,14 @@ const TEXT = {
   },
   ru: {
     eyebrow: "Voyage · Консоль",
-    title: "Обзор клуба",
+    title: "Обзор",
     asOf: (d: string) => `Сводка на ${d}`,
     refresh: "Обновить",
     residents: "Резиденты",
     residentsHint: "участницы с ролью резидента",
     kyc: "Ждут подтверждения KYC",
-    kycHint: "KYC ниже 3-го уровня или статус pending",
-    kycHintNoLevel: "статус pending",
+    kycHint: "KYC ниже 3-го уровня или статус «на рассмотрении»",
+    kycHintNoLevel: "статус «на рассмотрении»",
     parties: "Предстоящие тусовки",
     partiesHint: "активные и ещё не прошедшие",
     partiesHintNoDate: "активные тусовки",
@@ -104,14 +104,14 @@ const TEXT = {
   },
   es: {
     eyebrow: "Voyage · Consola",
-    title: "Resumen del club",
+    title: "Resumen",
     asOf: (d: string) => `Datos al ${d}`,
     refresh: "Actualizar",
     residents: "Residentes",
     residentsHint: "miembros con rol de residente",
     kyc: "KYC por confirmar",
-    kycHint: "KYC por debajo del nivel 3 o estado pending",
-    kycHintNoLevel: "estado pending",
+    kycHint: "KYC por debajo del nivel 3 o estado pendiente",
+    kycHintNoLevel: "estado pendiente",
     parties: "Próximas fiestas",
     partiesHint: "activas y aún por celebrarse",
     partiesHintNoDate: "fiestas activas",
@@ -129,14 +129,14 @@ const TEXT = {
   },
   pt: {
     eyebrow: "Voyage · Console",
-    title: "Visão geral do clube",
+    title: "Visão geral",
     asOf: (d: string) => `Resumo de ${d}`,
     refresh: "Atualizar",
     residents: "Residentes",
     residentsHint: "membros com papel de residente",
     kyc: "KYC aguardando confirmação",
-    kycHint: "KYC abaixo do nível 3 ou status pending",
-    kycHintNoLevel: "status pending",
+    kycHint: "KYC abaixo do nível 3 ou status pendente",
+    kycHintNoLevel: "status pendente",
     parties: "Próximas festas",
     partiesHint: "ativas e ainda por acontecer",
     partiesHintNoDate: "festas ativas",
@@ -298,7 +298,7 @@ export default function AdminOverviewClient({
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <style>{STYLES}</style>
-      <div className="ov-root relative mx-auto w-full max-w-6xl px-4 pb-20 pt-2 sm:px-8 sm:pt-2">
+      <div className="ov-root relative mx-auto w-full max-w-6xl px-4 pb-20 pt-10 sm:px-8 sm:pt-14">
         <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
             <p className="flex items-center gap-3 text-[10px] uppercase tracking-[0.32em] text-amber-200/70">

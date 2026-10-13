@@ -27,12 +27,102 @@ import {
 
 import { supabase } from '@/lib/supabase';
 import RoleGuard from '@/app/components/RoleGuard';
-import { useAuth } from '@/app/context/AuthContext';
-import EventApplicationsPanel from './EventApplicationsPanel';
+import { useLanguage, type Lang } from '@/app/context/LanguageContext';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Настройки
  * ──────────────────────────────────────────────────────────────────────────── */
+
+type ApplicationTranslations = {
+  eyebrow: string; title: string; subtitle: string; refresh: string;
+  all: string; pending: string; approved: string; rejected: string;
+  searchPlaceholder: string; colResident: string; colTour: string; colDate: string; colStatus: string; colActions: string;
+  model: string; unknownModel: string; profileUnavailable: string; tourShort: string; dossier: string;
+  approveTour: string; approve: string; reject: string;
+  statusPending: string; statusApproved: string; statusRejected: string;
+  kycPassed: string; kycReview: string; kycRejected: string; kycNotPassed: string;
+  unknownError: string; permissionError: string;
+  approvedInTour: (name: string, hub: string) => string; rejectedNotice: (name: string) => string;
+  modalLabel: string; close: string; dossierResident: string; tourHub: string; submitted: string;
+  city: string; height: string; measurements: string; instagram: string; about: string; portfolio: string;
+  photoCount: (count: number) => string; photoAlt: (index: number) => string; noPortfolio: string; noValue: string;
+  previous: string; next: string; loading: string; noResults: string; noApplications: string;
+  changeFilterHint: string; applicationsEmptyHint: string; loadFailed: string; retry: string;
+  loadingAria: string; copyUnavailable: string;
+};
+
+const translations: Record<Lang, ApplicationTranslations> = {
+  EN: {
+    eyebrow: 'Manager Console', title: 'Resident Applications', subtitle: 'Review resident applications for tours and your hubs', refresh: 'Refresh',
+    all: 'All applications', pending: 'Pending', approved: 'Approved', rejected: 'Rejected',
+    searchPlaceholder: 'Search by name, city or tour…', colResident: 'Resident', colTour: 'Tour / hub', colDate: 'Date', colStatus: 'Status', colActions: 'Actions',
+    model: 'Resident', unknownModel: 'Resident', profileUnavailable: 'Profile unavailable', tourShort: 'Tour:', dossier: 'Profile',
+    approveTour: 'Approve for tour', approve: 'Approve', reject: 'Reject',
+    statusPending: 'Pending review', statusApproved: 'Approved', statusRejected: 'Rejected',
+    kycPassed: 'KYC passed', kycReview: 'KYC under review', kycRejected: 'KYC rejected', kycNotPassed: 'KYC not completed',
+    unknownError: 'An unexpected error occurred.', permissionError: 'You do not have permission to update this application.',
+    approvedInTour: (name, hub) => `${name} approved for tour “${hub}”`, rejectedNotice: (name) => `Application for ${name} rejected`,
+    modalLabel: 'Resident profile', close: 'Close', dossierResident: 'Resident profile', tourHub: 'Tour / hub', submitted: 'Submitted',
+    city: 'City', height: 'Height', measurements: 'Measurements (bust / waist / hips)', instagram: 'Instagram', about: 'About', portfolio: 'Portfolio',
+    photoCount: (count) => `${count} photos`, photoAlt: (index) => `Photo ${index}`, noPortfolio: 'No portfolio photos uploaded', noValue: 'Not provided',
+    previous: 'Previous', next: 'Next', loading: 'Loading applications…', noResults: 'No results found', noApplications: 'No applications yet',
+    changeFilterHint: 'Try changing the filter or search query.', applicationsEmptyHint: 'Applications will appear here when residents apply to tours in your hubs.',
+    loadFailed: 'Could not load applications', retry: 'Retry', loadingAria: 'Loading applications', copyUnavailable: 'Profile unavailable',
+  },
+  RU: {
+    eyebrow: 'Панель менеджера', title: 'Заявки резидентов', subtitle: 'Отбор резидентов в туры и резиденции ваших хабов', refresh: 'Обновить',
+    all: 'Все заявки', pending: 'Ожидают', approved: 'Одобрены', rejected: 'Отклонены',
+    searchPlaceholder: 'Поиск по имени, городу или туру…', colResident: 'Резидентка', colTour: 'Тур / хаб', colDate: 'Дата', colStatus: 'Статус', colActions: 'Действия',
+    model: 'Резидентка', unknownModel: 'Модель', profileUnavailable: 'Профиль недоступен', tourShort: 'Тур:', dossier: 'Досье',
+    approveTour: 'Одобрить в тур', approve: 'Одобрить', reject: 'Отклонить',
+    statusPending: 'На рассмотрении', statusApproved: 'Одобрена', statusRejected: 'Отклонена',
+    kycPassed: 'KYC пройден', kycReview: 'KYC на проверке', kycRejected: 'KYC отклонён', kycNotPassed: 'KYC не пройден',
+    unknownError: 'Неизвестная ошибка.', permissionError: 'Нет прав на изменение этой заявки.',
+    approvedInTour: (name, hub) => `${name} одобрена в тур «${hub}»`, rejectedNotice: (name) => `Заявка ${name} отклонена`,
+    modalLabel: 'Досье модели', close: 'Закрыть', dossierResident: 'Досье резидента', tourHub: 'Тур / хаб', submitted: 'Подана',
+    city: 'Город', height: 'Рост', measurements: 'Параметры (грудь / талия / бёдра)', instagram: 'Instagram', about: 'О себе', portfolio: 'Портфолио',
+    photoCount: (count) => `${count} фото`, photoAlt: (index) => `Фото ${index}`, noPortfolio: 'Фотографии портфолио не загружены', noValue: 'Не указано',
+    previous: 'Предыдущее', next: 'Следующее', loading: 'Загрузка заявок…', noResults: 'Ничего не найдено', noApplications: 'Заявок пока нет',
+    changeFilterHint: 'Попробуйте изменить фильтр или поисковый запрос.', applicationsEmptyHint: 'Когда резидентки подадут заявки в туры ваших хабов, они появятся здесь.',
+    loadFailed: 'Не удалось загрузить заявки', retry: 'Повторить', loadingAria: 'Загрузка заявок', copyUnavailable: 'Профиль недоступен',
+  },
+  ES: {
+    eyebrow: 'Panel de gerente', title: 'Solicitudes de residentes', subtitle: 'Revisión de solicitudes para tours y residencias de tus hubs', refresh: 'Actualizar',
+    all: 'Todas las solicitudes', pending: 'Pendientes', approved: 'Aprobadas', rejected: 'Rechazadas',
+    searchPlaceholder: 'Buscar por nombre, ciudad o tour…', colResident: 'Residente', colTour: 'Tour / hub', colDate: 'Fecha', colStatus: 'Estado', colActions: 'Acciones',
+    model: 'Residente', unknownModel: 'Modelo', profileUnavailable: 'Perfil no disponible', tourShort: 'Tour:', dossier: 'Perfil',
+    approveTour: 'Aprobar para el tour', approve: 'Aprobar', reject: 'Rechazar',
+    statusPending: 'Pendiente de revisión', statusApproved: 'Aprobada', statusRejected: 'Rechazada',
+    kycPassed: 'KYC completado', kycReview: 'KYC en revisión', kycRejected: 'KYC rechazado', kycNotPassed: 'KYC no completado',
+    unknownError: 'Se produjo un error inesperado.', permissionError: 'No tienes permiso para modificar esta solicitud.',
+    approvedInTour: (name, hub) => `${name} aprobada para el tour «${hub}»`, rejectedNotice: (name) => `Solicitud de ${name} rechazada`,
+    modalLabel: 'Perfil de residente', close: 'Cerrar', dossierResident: 'Perfil de residente', tourHub: 'Tour / hub', submitted: 'Enviada',
+    city: 'Ciudad', height: 'Altura', measurements: 'Medidas (busto / cintura / caderas)', instagram: 'Instagram', about: 'Sobre mí', portfolio: 'Portafolio',
+    photoCount: (count) => `${count} fotos`, photoAlt: (index) => `Foto ${index}`, noPortfolio: 'No se han subido fotos al portafolio', noValue: 'No indicado',
+    previous: 'Anterior', next: 'Siguiente', loading: 'Cargando solicitudes…', noResults: 'No se encontraron resultados', noApplications: 'Todavía no hay solicitudes',
+    changeFilterHint: 'Prueba con otro filtro o término de búsqueda.', applicationsEmptyHint: 'Las solicitudes aparecerán aquí cuando las residentes se postulen a tours de tus hubs.',
+    loadFailed: 'No se pudieron cargar las solicitudes', retry: 'Reintentar', loadingAria: 'Cargando solicitudes', copyUnavailable: 'Perfil no disponible',
+  },
+  PT: {
+    eyebrow: 'Painel do gerente', title: 'Solicitações de residentes', subtitle: 'Análise de solicitações para tours e residências dos seus hubs', refresh: 'Atualizar',
+    all: 'Todas as solicitações', pending: 'Pendentes', approved: 'Aprovadas', rejected: 'Rejeitadas',
+    searchPlaceholder: 'Buscar por nome, cidade ou tour…', colResident: 'Residente', colTour: 'Tour / hub', colDate: 'Data', colStatus: 'Status', colActions: 'Ações',
+    model: 'Residente', unknownModel: 'Modelo', profileUnavailable: 'Perfil indisponível', tourShort: 'Tour:', dossier: 'Perfil',
+    approveTour: 'Aprovar para o tour', approve: 'Aprovar', reject: 'Rejeitar',
+    statusPending: 'Aguardando análise', statusApproved: 'Aprovada', statusRejected: 'Rejeitada',
+    kycPassed: 'KYC concluído', kycReview: 'KYC em análise', kycRejected: 'KYC rejeitado', kycNotPassed: 'KYC não concluído',
+    unknownError: 'Ocorreu um erro inesperado.', permissionError: 'Você não tem permissão para alterar esta solicitação.',
+    approvedInTour: (name, hub) => `${name} aprovada para o tour “${hub}”`, rejectedNotice: (name) => `Solicitação de ${name} rejeitada`,
+    modalLabel: 'Perfil da residente', close: 'Fechar', dossierResident: 'Perfil da residente', tourHub: 'Tour / hub', submitted: 'Enviada',
+    city: 'Cidade', height: 'Altura', measurements: 'Medidas (busto / cintura / quadris)', instagram: 'Instagram', about: 'Sobre mim', portfolio: 'Portfólio',
+    photoCount: (count) => `${count} fotos`, photoAlt: (index) => `Foto ${index}`, noPortfolio: 'Nenhuma foto de portfólio foi enviada', noValue: 'Não informado',
+    previous: 'Anterior', next: 'Próxima', loading: 'Carregando solicitações…', noResults: 'Nenhum resultado encontrado', noApplications: 'Ainda não há solicitações',
+    changeFilterHint: 'Tente alterar o filtro ou a busca.', applicationsEmptyHint: 'As solicitações aparecerão aqui quando as residentes se candidatarem aos tours dos seus hubs.',
+    loadFailed: 'Não foi possível carregar as solicitações', retry: 'Tentar novamente', loadingAria: 'Carregando solicitações', copyUnavailable: 'Perfil indisponível',
+  },
+};
+
+const LOCALE: Record<Lang, string> = { EN: 'en-GB', RU: 'ru-RU', ES: 'es-ES', PT: 'pt-BR' };
 
 const PORTFOLIO_BUCKET = 'user-uploads';
 
@@ -40,7 +130,7 @@ const PORTFOLIO_BUCKET = 'user-uploads';
  * Типы
  * ──────────────────────────────────────────────────────────────────────────── */
 
-type AppStatus = 'pending' | 'approved' | 'rejected' | 'completed';
+type AppStatus = 'pending' | 'approved' | 'rejected';
 type StatusFilter = 'all' | AppStatus;
 
 interface ApplicationRow {
@@ -65,9 +155,6 @@ interface ModelProfile {
   photos: string[];
   bio: string | null;
   instagram: string | null;
-  segment: 'working' | 'elite';
-  level: number;
-  reliability: number;
 }
 
 interface ApplicationItem extends ApplicationRow {
@@ -113,7 +200,7 @@ function toPhotoList(v: unknown): string[] {
   return [];
 }
 
-function normalizeProfile(raw: RawProfile, resolve: (p: string) => string): ModelProfile {
+function normalizeProfile(raw: RawProfile, resolve: (p: string) => string, t: ApplicationTranslations): ModelProfile {
   const photos = toPhotoList(
     pick(raw, ['photo_urls', 'portfolio_photos', 'portfolio', 'photos', 'gallery', 'images']),
   ).map(resolve);
@@ -121,7 +208,7 @@ function normalizeProfile(raw: RawProfile, resolve: (p: string) => string): Mode
   const avatar = str(pick(raw, ['avatar_url', 'avatarUrl', 'avatar', 'photo_url']));
 
   const heightRaw = str(pick(raw, ['height', 'height_cm']));
-  const height = heightRaw ? (/^\d+$/.test(heightRaw) ? `${heightRaw} см` : heightRaw) : null;
+  const height = heightRaw ? (/^\d+$/.test(heightRaw) ? `${heightRaw} ${t.height.toLowerCase() === 'height' ? 'cm' : t.height.toLowerCase() === 'altura' ? 'cm' : t.height.toLowerCase() === 'рост' ? 'см' : 'cm'}` : heightRaw) : null;
 
   const bust = str(pick(raw, ['bust', 'chest', 'bust_cm']));
   const waist = str(pick(raw, ['waist', 'waist_cm']));
@@ -141,7 +228,7 @@ function normalizeProfile(raw: RawProfile, resolve: (p: string) => string): Mode
 
   return {
     id: String(raw.id),
-    fullName: str(pick(raw, ['full_name', 'fullName', 'name', 'nickname'])) ?? 'Без имени',
+    fullName: str(pick(raw, ['full_name', 'fullName', 'name', 'nickname'])) ?? t.unknownModel,
     avatarUrl: avatar ? resolve(avatar) : photos[0] ?? null,
     city: str(pick(raw, ['city', 'location', 'base_city', 'location'])),
     height,
@@ -150,9 +237,6 @@ function normalizeProfile(raw: RawProfile, resolve: (p: string) => string): Mode
     photos,
     bio: str(pick(raw, ['bio', 'about', 'description'])),
     instagram: str(pick(raw, ['instagram', 'instagram_handle', 'ig'])),
-    segment: String(raw.segment ?? 'working').toLowerCase() === 'elite' ? 'elite' : 'working',
-    level: Math.min(6, Math.max(1, Number(raw.level ?? 1) || 1)),
-    reliability: Math.min(100, Math.max(0, Number(raw.reliability ?? 100) || 0)),
   };
 }
 
@@ -160,12 +244,8 @@ function formatHub(hubId: string): string {
   return hubId.replace(/[-_]/g, ' ').replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 }
 
-const dateFmt = new Intl.DateTimeFormat('ru-RU', {
-  day: '2-digit',
-  month: 'short',
-  year: 'numeric',
-});
-const timeFmt = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
+function formatDate(date: Date, locale: string): string { return new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' }).format(date); }
+function formatTime(date: Date, locale: string): string { return new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(date); }
 
 function initials(name: string): string {
   return name
@@ -176,48 +256,28 @@ function initials(name: string): string {
     .join('');
 }
 
-function errorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  const m = (e as { message?: string } | null)?.message;
-  return m ?? 'Неизвестная ошибка';
-}
-
 /* ────────────────────────────────────────────────────────────────────────────
  * Мета статусов
  * ──────────────────────────────────────────────────────────────────────────── */
 
-const STATUS_META: Record<AppStatus, { label: string; cls: string; dot: string }> = {
-  pending: {
-    label: 'На рассмотрении',
-    cls: 'border-amber-200/30 bg-amber-200/10 text-amber-200',
-    dot: 'bg-amber-200 animate-pulse',
-  },
-  approved: {
-    label: 'Одобрена',
-    cls: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
-    dot: 'bg-emerald-400',
-  },
-  rejected: {
-    label: 'Отклонена',
-    cls: 'border-rose-400/30 bg-rose-400/10 text-rose-300',
-    dot: 'bg-rose-400',
-  },
-  completed: {
-    label: 'Тур завершён',
-    cls: 'border-amber-200/30 bg-amber-200/10 text-amber-100',
-    dot: 'bg-amber-200',
-  },
-};
+function statusMeta(status: AppStatus, t: ApplicationTranslations) {
+  const map: Record<AppStatus, { label: string; cls: string; dot: string }> = {
+    pending: { label: t.statusPending, cls: 'border-amber-200/30 bg-amber-200/10 text-amber-200', dot: 'bg-amber-200 animate-pulse' },
+    approved: { label: t.statusApproved, cls: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300', dot: 'bg-emerald-400' },
+    rejected: { label: t.statusRejected, cls: 'border-rose-400/30 bg-rose-400/10 text-rose-300', dot: 'bg-rose-400' },
+  };
+  return map[status] ?? map.pending;
+}
 
-function kycMeta(status: string | null) {
+function kycMeta(status: string | null, t: ApplicationTranslations) {
   const s = String(status ?? '').toLowerCase();
   if (['3', 'verified', 'approved', 'passed', 'completed'].includes(s))
-    return { label: 'KYC пройден', cls: 'text-emerald-300 border-emerald-400/30 bg-emerald-400/10', Icon: ShieldCheck };
+    return { label: t.kycPassed, cls: 'text-emerald-300 border-emerald-400/30 bg-emerald-400/10', Icon: ShieldCheck };
   if (['2', '1', 'pending', 'in_review', 'review', 'submitted', 'processing'].includes(s))
-    return { label: 'KYC на проверке', cls: 'text-amber-200 border-amber-200/30 bg-amber-200/10', Icon: ShieldAlert };
+    return { label: t.kycReview, cls: 'text-amber-200 border-amber-200/30 bg-amber-200/10', Icon: ShieldAlert };
   if (['rejected', 'failed', 'declined'].includes(s))
-    return { label: 'KYC отклонён', cls: 'text-rose-300 border-rose-400/30 bg-rose-400/10', Icon: ShieldX };
-  return { label: 'KYC не пройден', cls: 'text-zinc-400 border-white/10 bg-white/5', Icon: Shield };
+    return { label: t.kycRejected, cls: 'text-rose-300 border-rose-400/30 bg-rose-400/10', Icon: ShieldX };
+  return { label: t.kycNotPassed, cls: 'text-zinc-400 border-white/10 bg-white/5', Icon: Shield };
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -233,9 +293,9 @@ export default function ApplicationsPage() {
 }
 
 function ApplicationsDashboard() {
-  const { role } = useAuth();
-  const canModerateEvents = role === 'owner' || role === 'admin';
-  const [activeTab, setActiveTab] = useState<'tours' | 'parties'>('tours');
+  const { lang } = useLanguage();
+  const t = translations[lang] ?? translations.EN;
+  const locale = LOCALE[lang] ?? LOCALE.EN;
   const [items, setItems] = useState<ApplicationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -279,24 +339,23 @@ function ApplicationsDashboard() {
           if (profilesError) throw profilesError;
 
           profileMap = new Map(
-            ((profiles ?? []) as RawProfile[]).map((p) => [String(p.id), normalizeProfile(p, resolveUrl)]),
+            ((profiles ?? []) as RawProfile[]).map((p) => [String(p.id), normalizeProfile(p, resolveUrl, t)]),
           );
         }
 
         setItems(rows.map((r) => ({ ...r, profile: profileMap.get(r.user_id) ?? null })));
       } catch (e) {
-        setError(errorMessage(e));
+        console.error("[admin-applications] load failed", e);
+        setError(t.unknownError);
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [resolveUrl],
+    [resolveUrl, t],
   );
 
   useEffect(() => {
-    // Async data synchronization on mount; load manages its loading/error state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load('initial');
   }, [load]);
 
@@ -307,16 +366,12 @@ function ApplicationsDashboard() {
   }, [toast]);
 
   const updateStatus = useCallback(
-    async (id: string, next: AppStatus, completion?: { completion_value: number; complexity_score: number; completion_country_code: string | null }) => {
+    async (id: string, next: AppStatus) => {
       const current = items.find((i) => i.id === id);
       if (!current || current.status === next || busy[id]) return;
-      if (next === 'completed' && current.status !== 'approved') {
-        setToast({ type: 'error', text: 'Завершить можно только одобренную заявку.' });
-        return;
-      }
 
       const prevStatus = current.status;
-      const name = current.profile?.fullName ?? 'Модель';
+      const name = current.profile?.fullName ?? t.unknownModel;
       const hub = formatHub(current.hub_id);
 
       setBusy((b) => ({ ...b, [id]: next }));
@@ -324,7 +379,7 @@ function ApplicationsDashboard() {
 
       const { data, error: updError } = await supabase
         .from('applications')
-        .update({ status: next, ...(next === 'completed' && completion ? completion : {}) })
+        .update({ status: next })
         .eq('id', id)
         .select('id, status');
 
@@ -335,20 +390,21 @@ function ApplicationsDashboard() {
       });
 
       if (updError || !data || data.length === 0) {
+        if (updError) console.error("[admin-applications] status update failed", updError);
         setItems((list) => list.map((i) => (i.id === id ? { ...i, status: prevStatus } : i)));
         setToast({
           type: 'error',
-          text: updError?.message ?? 'Нет прав на изменение этой заявки',
+          text: t.permissionError,
         });
         return;
       }
 
       setToast({
         type: 'success',
-        text: next === 'approved' ? `${name} одобрена в тур «${hub}»` : next === 'completed' ? `Тур «${hub}» завершён. Баллы обработаны сервером.` : `Заявка ${name} отклонена`,
+        text: next === 'approved' ? t.approvedInTour(name, hub) : t.rejectedNotice(name),
       });
     },
-    [items, busy],
+    [items, busy, t],
   );
 
   const counts = useMemo(
@@ -357,7 +413,6 @@ function ApplicationsDashboard() {
       pending: items.filter((i) => i.status === 'pending').length,
       approved: items.filter((i) => i.status === 'approved').length,
       rejected: items.filter((i) => i.status === 'rejected').length,
-      completed: items.filter((i) => i.status === 'completed').length,
     }),
     [items],
   );
@@ -375,31 +430,6 @@ function ApplicationsDashboard() {
 
   const selected = items.find((i) => i.id === selectedId) ?? null;
 
-  function completeActivity(id: string) {
-    const rawValue = window.prompt('Коммерческая ценность поездки в USD (число, например 1200):', '0');
-    if (rawValue === null) return;
-    const value = Number(rawValue);
-    if (!Number.isFinite(value) || value < 0 || value > 100000000) {
-      setToast({ type: 'error', text: 'Укажите корректную коммерческую ценность.' });
-      return;
-    }
-    const rawComplexity = window.prompt('Сложность активности: 1, 2 или 3', '1');
-    if (rawComplexity === null) return;
-    const complexity = Number(rawComplexity);
-    if (![1, 2, 3].includes(complexity)) {
-      setToast({ type: 'error', text: 'Сложность должна быть 1, 2 или 3.' });
-      return;
-    }
-    const rawCountry = window.prompt('ISO-код страны из двух букв для паспорта (например VN). Оставь пустым, если штамп не нужен:', '');
-    if (rawCountry === null) return;
-    const country = rawCountry.trim().toUpperCase();
-    if (country && !/^[A-Z]{2}$/.test(country)) {
-      setToast({ type: 'error', text: 'Код страны должен состоять из двух букв ISO.' });
-      return;
-    }
-    void updateStatus(id, 'completed', { completion_value: value, complexity_score: complexity, completion_country_code: country || null });
-  }
-
   return (
     <div className="relative min-h-screen bg-zinc-950 text-zinc-100">
       <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -407,18 +437,18 @@ function ApplicationsDashboard() {
         <div className="absolute bottom-0 right-0 h-[360px] w-[360px] rounded-full bg-amber-100/[0.03] blur-[100px]" />
       </div>
 
-      <div className="relative mx-auto max-w-6xl px-4 pb-8 pt-2 sm:px-6 lg:pb-12 lg:pt-2">
+      <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:py-12">
         <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.28em] text-amber-200/70">
               <Sparkles className="h-3.5 w-3.5" />
-              Панель менеджера
+              {t.eyebrow}
             </p>
             <h1 className="font-serif text-3xl font-light tracking-tight text-zinc-50 sm:text-4xl">
-              Заявки резидентов
+              {t.title}
             </h1>
             <p className="mt-2 text-sm text-zinc-400">
-              Отбор моделей в туры и резиденции ваших хабов
+              {t.subtitle}
             </p>
           </div>
 
@@ -428,33 +458,17 @@ function ApplicationsDashboard() {
             className="inline-flex items-center gap-2 self-start rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-zinc-300 backdrop-blur-xl transition hover:border-amber-200/40 hover:text-amber-200 disabled:opacity-50 sm:self-auto"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            Обновить
+            {t.refresh}
           </button>
         </header>
 
-        <div className="mb-7 inline-flex rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur-xl" role="tablist" aria-label="Тип заявок">
-          <button type="button" role="tab" aria-selected={activeTab === 'tours'} onClick={() => setActiveTab('tours')} className={`rounded-full px-5 py-2 text-sm transition ${activeTab === 'tours' ? 'bg-amber-200 text-zinc-950 shadow-[0_0_24px_-10px_rgba(253,230,138,0.6)]' : 'text-zinc-400 hover:text-zinc-100'}`}>
-            <span className="inline-flex items-center gap-2"><MapPin size={15} /> Туры</span>
-          </button>
-          {canModerateEvents && (
-            <button type="button" role="tab" aria-selected={activeTab === 'parties'} onClick={() => setActiveTab('parties')} className={`rounded-full px-5 py-2 text-sm transition ${activeTab === 'parties' ? 'bg-amber-200 text-zinc-950 shadow-[0_0_24px_-10px_rgba(253,230,138,0.6)]' : 'text-zinc-400 hover:text-zinc-100'}`}>
-              <span className="inline-flex items-center gap-2"><Calendar size={15} /> Тусовки</span>
-            </button>
-          )}
-        </div>
-
-        {activeTab === 'parties' && canModerateEvents ? (
-          <EventApplicationsPanel />
-        ) : (
-          <>
-        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {(
             [
-              ['all', 'Все заявки'],
-              ['pending', 'Ожидают'],
-              ['approved', 'Одобрены'],
-              ['rejected', 'Отклонены'],
-              ['completed', 'Завершены'],
+              ['all', t.all],
+              ['pending', t.pending],
+              ['approved', t.approved],
+              ['rejected', t.rejected],
             ] as [StatusFilter, string][]
           ).map(([key, label]) => {
             const active = filter === key;
@@ -488,77 +502,79 @@ function ApplicationsDashboard() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Поиск по имени, городу или туру…"
+            placeholder={t.searchPlaceholder}
             className="w-full rounded-2xl border border-white/10 bg-white/[0.03] py-3 pl-11 pr-4 text-sm text-zinc-100 placeholder:text-zinc-500 backdrop-blur-xl outline-none transition focus:border-amber-200/40 focus:ring-2 focus:ring-amber-200/10"
           />
         </div>
 
         <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] backdrop-blur-2xl">
           <div className="hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-4 border-b border-white/10 px-6 py-3 text-[11px] uppercase tracking-[0.2em] text-zinc-500 md:grid">
-            <span>Модель</span>
-            <span>Тур / хаб</span>
-            <span>Дата</span>
-            <span>Статус</span>
-            <span className="w-[248px] text-right">Действия</span>
+            <span>{t.model}</span>
+            <span>{t.colTour}</span>
+            <span>{t.colDate}</span>
+            <span>{t.colStatus}</span>
+            <span className="w-[248px] text-right">{t.colActions}</span>
           </div>
 
           {loading ? (
-            <SkeletonRows />
+            <SkeletonRows t={t} />
           ) : error ? (
-            <ErrorState message={error} onRetry={() => load('initial')} />
+            <ErrorState message={error} onRetry={() => load('initial')} t={t} />
           ) : visible.length === 0 ? (
-            <EmptyState filtered={filter !== 'all' || query.trim() !== ''} hasAny={items.length > 0} />
+            <EmptyState filtered={filter !== 'all' || query.trim() !== ''} hasAny={items.length > 0} t={t} />
           ) : (
             <ul className="divide-y divide-white/[0.06]">
               {visible.map((item) => (
                 <ApplicationRowView
                   key={item.id}
                   item={item}
+                  t={t}
+                  locale={locale}
                   busyStatus={busy[item.id]}
                   onOpen={() => setSelectedId(item.id)}
                   onApprove={() => updateStatus(item.id, 'approved')}
                   onReject={() => updateStatus(item.id, 'rejected')}
-                  onComplete={() => completeActivity(item.id)}
                 />
               ))}
             </ul>
           )}
         </section>
+      </div>
 
       {selected && (
         <DossierDrawer
           key={selected.id}
           item={selected}
+          t={t}
+          locale={locale}
           busyStatus={busy[selected.id]}
           onClose={() => setSelectedId(null)}
           onApprove={() => updateStatus(selected.id, 'approved')}
           onReject={() => updateStatus(selected.id, 'rejected')}
-          onComplete={() => completeActivity(selected.id)}
         />
       )}
 
-      <ToastView toast={toast} onClose={() => setToast(null)} />
-          </>
-        )}
-      </div>
+      <ToastView toast={toast} onClose={() => setToast(null)} t={t} />
     </div>
   );
 }
 
 function ApplicationRowView({
   item,
+  t,
+  locale,
   busyStatus,
   onOpen,
   onApprove,
   onReject,
-  onComplete,
 }: {
   item: ApplicationItem;
+  t: ApplicationTranslations;
+  locale: string;
   busyStatus?: AppStatus;
   onOpen: () => void;
   onApprove: () => void;
   onReject: () => void;
-  onComplete: () => void;
 }) {
   const p = item.profile;
   const date = new Date(item.created_at);
@@ -568,22 +584,15 @@ function ApplicationRowView({
       <button onClick={onOpen} className="flex min-w-0 items-center gap-3 text-left">
         <Avatar src={p?.avatarUrl ?? null} name={p?.fullName ?? '?'} size="md" />
         <div className="min-w-0">
-          <p className="truncate font-medium text-zinc-100">{p?.fullName ?? 'Профиль недоступен'}</p>
+          <p className="truncate font-medium text-zinc-100">{p?.fullName ?? t.profileUnavailable}</p>
           <p className="truncate text-xs text-zinc-500">
             {[p?.city, p?.height, p?.measurements].filter(Boolean).join(' · ') || '—'}
           </p>
-          {p && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold tracking-[0.14em] ${p.segment === 'elite' ? 'border-amber-200/40 bg-amber-200/10 text-amber-100' : 'border-white/10 bg-white/[0.04] text-zinc-400'}`}>{p.segment.toUpperCase()}</span>
-              <span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] text-zinc-400">LVL {p.level}</span>
-              <span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] tabular-nums text-zinc-400">Надёжность {p.reliability}%</span>
-            </div>
-          )}
         </div>
       </button>
 
       <div className="flex items-center gap-2 md:block">
-        <span className="text-[11px] uppercase tracking-widest text-zinc-500 md:hidden">Тур:</span>
+        <span className="text-[11px] uppercase tracking-widest text-zinc-500 md:hidden">{t.tourShort}</span>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/20 bg-amber-200/[0.05] px-3 py-1 text-xs text-amber-100">
           <MapPin className="h-3 w-3 text-amber-200" />
           {formatHub(item.hub_id)}
@@ -591,12 +600,12 @@ function ApplicationRowView({
       </div>
 
       <div className="text-sm">
-        <p className="text-zinc-300">{dateFmt.format(date)}</p>
-        <p className="text-xs text-zinc-500">{timeFmt.format(date)}</p>
+        <p className="text-zinc-300">{formatDate(date, locale)}</p>
+        <p className="text-xs text-zinc-500">{formatTime(date, locale)}</p>
       </div>
 
       <div>
-        <StatusBadge status={item.status} />
+        <StatusBadge status={item.status} t={t} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 md:w-[248px] md:justify-end">
@@ -605,20 +614,15 @@ function ApplicationRowView({
           className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-300 transition hover:border-amber-200/40 hover:text-amber-200"
         >
           <Eye className="h-3.5 w-3.5" />
-          Досье
+          {t.dossier}
         </button>
-        {(item.status === 'approved' || busyStatus === 'completed') && (
-          <button type="button" onClick={onComplete} disabled={Boolean(busyStatus)} className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/30 bg-amber-200/[0.06] px-3 py-1.5 text-xs text-amber-100 transition hover:border-amber-200/60 hover:bg-amber-200/10 disabled:opacity-50">
-            {busyStatus === 'completed' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-            Завершить
-          </button>
-        )}
         <ActionButtons
           status={item.status}
           busyStatus={busyStatus}
           onApprove={onApprove}
           onReject={onReject}
           compact
+          t={t}
         />
       </div>
     </li>
@@ -627,12 +631,14 @@ function ApplicationRowView({
 
 function ActionButtons({
   status,
+  t,
   busyStatus,
   onApprove,
   onReject,
   compact = false,
 }: {
   status: AppStatus;
+  t: ApplicationTranslations;
   busyStatus?: AppStatus;
   onApprove: () => void;
   onReject: () => void;
@@ -643,11 +649,11 @@ function ActionButtons({
 
   return (
     <>
-      {(status !== 'approved' && status !== 'completed') || busyStatus === 'approved' ? (
+      {status !== 'approved' || busyStatus === 'approved' ? (
         <button
           onClick={onApprove}
           disabled={isBusy}
-          title="Одобрить в тур"
+          title={t.approveTour}
           className={`inline-flex items-center gap-1.5 rounded-full bg-gradient-to-b from-amber-100 to-amber-300 font-medium text-zinc-950 shadow-[0_0_24px_-8px_rgba(253,230,138,0.6)] transition hover:from-amber-50 hover:to-amber-200 disabled:cursor-not-allowed disabled:opacity-60 ${size}`}
         >
           {busyStatus === 'approved' ? (
@@ -655,15 +661,15 @@ function ActionButtons({
           ) : (
             <Check className="h-3.5 w-3.5" />
           )}
-          {compact ? 'Одобрить' : 'Одобрить в тур'}
+          {compact ? t.approve : t.approveTour}
         </button>
       ) : null}
 
-      {(status !== 'rejected' && status !== 'completed') || busyStatus === 'rejected' ? (
+      {status !== 'rejected' || busyStatus === 'rejected' ? (
         <button
           onClick={onReject}
           disabled={isBusy}
-          title="Отклонить"
+          title={t.reject}
           className={`inline-flex items-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-400/[0.06] text-rose-300 transition hover:border-rose-400/60 hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-60 ${size}`}
         >
           {busyStatus === 'rejected' ? (
@@ -671,7 +677,7 @@ function ActionButtons({
           ) : (
             <X className="h-3.5 w-3.5" />
           )}
-          Отклонить
+          {t.reject}
         </button>
       ) : null}
     </>
@@ -680,18 +686,20 @@ function ActionButtons({
 
 function DossierDrawer({
   item,
+  t,
+  locale,
   busyStatus,
   onClose,
   onApprove,
   onReject,
-  onComplete,
 }: {
   item: ApplicationItem;
+  t: ApplicationTranslations;
+  locale: string;
   busyStatus?: AppStatus;
   onClose: () => void;
   onApprove: () => void;
   onReject: () => void;
-  onComplete: () => void;
 }) {
   const p = item.profile;
   const [shown, setShown] = useState(false);
@@ -726,11 +734,11 @@ function DossierDrawer({
     return () => window.removeEventListener('keydown', onKey);
   }, [close, lightbox]);
 
-  const kyc = kycMeta(p?.kycStatus ?? null);
+  const kyc = kycMeta(p?.kycStatus ?? null, t);
   const date = new Date(item.created_at);
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Досье модели">
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={t.modalLabel}>
       <div
         onClick={close}
         className={`absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${
@@ -758,19 +766,19 @@ function DossierDrawer({
 
             <button
               onClick={close}
-              aria-label="Закрыть"
+              aria-label={t.close}
               className="absolute right-4 top-4 rounded-full border border-white/15 bg-black/40 p-2 text-zinc-200 backdrop-blur-md transition hover:border-amber-200/40 hover:text-amber-200"
             >
               <X className="h-4 w-4" />
             </button>
 
             <div className="absolute inset-x-0 bottom-0 p-6">
-              <p className="mb-1 text-[11px] uppercase tracking-[0.28em] text-amber-200/80">Досье резидента</p>
+              <p className="mb-1 text-[11px] uppercase tracking-[0.28em] text-amber-200/80">{t.dossierResident}</p>
               <h2 className="font-serif text-3xl font-light text-zinc-50">
-                {p?.fullName ?? 'Профиль недоступен'}
+                {p?.fullName ?? t.profileUnavailable}
               </h2>
               <div className="mt-3 flex flex-wrap gap-2">
-                <StatusBadge status={item.status} />
+                <StatusBadge status={item.status} t={t} />
                 <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${kyc.cls}`}>
                   <kyc.Icon className="h-3.5 w-3.5" />
                   {kyc.label}
@@ -781,24 +789,27 @@ function DossierDrawer({
 
           <div className="space-y-6 p-6">
             <div className="grid grid-cols-2 gap-3">
-              <InfoTile icon={<MapPin className="h-4 w-4" />} label="Тур / хаб" value={formatHub(item.hub_id)} accent />
+              <InfoTile icon={<MapPin className="h-4 w-4" />} label={t.tourHub} value={formatHub(item.hub_id)} t={t} accent />
               <InfoTile
                 icon={<Calendar className="h-4 w-4" />}
-                label="Подана"
-                value={`${dateFmt.format(date)}, ${timeFmt.format(date)}`}
+                label={t.submitted}
+                value={`${formatDate(date, locale)}, ${formatTime(date, locale)}`}
+                t={t}
               />
-              <InfoTile icon={<MapPin className="h-4 w-4" />} label="Город" value={p?.city} />
-              <InfoTile icon={<Ruler className="h-4 w-4" />} label="Рост" value={p?.height} />
+              <InfoTile icon={<MapPin className="h-4 w-4" />} label={t.city} value={p?.city} t={t} />
+              <InfoTile icon={<Ruler className="h-4 w-4" />} label={t.height} value={p?.height} t={t} />
               <InfoTile
                 icon={<Ruler className="h-4 w-4" />}
-                label="Параметры (грудь / талия / бёдра)"
+                label={t.measurements}
                 value={p?.measurements}
+                t={t}
                 wide
               />
               {p?.instagram && (
                 <InfoTile
                   icon={<AtSign className="h-4 w-4" />}
-                  label="Instagram"
+                  label={t.instagram}
+                  t={t}
                   value={p.instagram.startsWith('@') ? p.instagram : `@${p.instagram}`}
                   wide
                 />
@@ -807,15 +818,15 @@ function DossierDrawer({
 
             {p?.bio && (
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="mb-2 text-[11px] uppercase tracking-[0.2em] text-zinc-500">О себе</p>
+                <p className="mb-2 text-[11px] uppercase tracking-[0.2em] text-zinc-500">{t.about}</p>
                 <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-300">{p.bio}</p>
               </div>
             )}
 
             <div>
               <div className="mb-3 flex items-baseline justify-between">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">Портфолио</p>
-                <p className="text-xs text-zinc-500">{gallery.length} фото</p>
+                <p className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">{t.portfolio}</p>
+                <p className="text-xs text-zinc-500">{t.photoCount(gallery.length)}</p>
               </div>
               {gallery.length > 0 ? (
                 <div className="grid grid-cols-3 gap-2">
@@ -827,7 +838,7 @@ function DossierDrawer({
                     >
                       <img
                         src={src}
-                        alt={`Фото ${i + 1}`}
+                        alt={t.photoAlt(i + 1)}
                         loading="lazy"
                         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                       />
@@ -837,25 +848,20 @@ function DossierDrawer({
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-white/10 py-10 text-center text-sm text-zinc-500">
-                  Фотографии портфолио не загружены
+                  {t.noPortfolio}
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 border-t border-white/10 bg-zinc-950/80 p-4 backdrop-blur-xl sm:p-6">
-          {item.status === 'approved' && (
-            <button type="button" onClick={onComplete} disabled={Boolean(busyStatus)} className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-amber-200/30 bg-amber-200/[0.06] px-5 py-3 text-sm text-amber-100 transition hover:bg-amber-200/10 disabled:opacity-50">
-              <Check className="h-4 w-4" /> Завершить активность
-            </button>
-          )}
-          <ActionButtons status={item.status} busyStatus={busyStatus} onApprove={onApprove} onReject={onReject} />
+        <div className="flex gap-3 border-t border-white/10 bg-zinc-950/80 p-4 backdrop-blur-xl sm:p-6">
+          <ActionButtons status={item.status} t={t} busyStatus={busyStatus} onApprove={onApprove} onReject={onReject} />
         </div>
       </aside>
 
       {lightbox !== null && gallery.length > 0 && (
-        <Lightbox images={gallery} index={lightbox} onIndex={setLightbox} onClose={() => setLightbox(null)} />
+        <Lightbox images={gallery} index={lightbox} onIndex={setLightbox} onClose={() => setLightbox(null)} t={t} />
       )}
     </div>
   );
@@ -865,12 +871,14 @@ function InfoTile({
   icon,
   label,
   value,
+  t,
   accent = false,
   wide = false,
 }: {
   icon: ReactNode;
   label: string;
   value: string | null | undefined;
+  t: ApplicationTranslations;
   accent?: boolean;
   wide?: boolean;
 }) {
@@ -885,7 +893,7 @@ function InfoTile({
         {label}
       </p>
       <p className={`text-sm ${value ? (accent ? 'text-amber-100' : 'text-zinc-100') : 'text-zinc-600'}`}>
-        {value || 'Не указано'}
+        {value || t.noValue}
       </p>
     </div>
   );
@@ -896,11 +904,13 @@ function Lightbox({
   index,
   onIndex,
   onClose,
+  t,
 }: {
   images: string[];
   index: number;
   onIndex: (i: number) => void;
   onClose: () => void;
+  t: ApplicationTranslations;
 }) {
   const prev = useCallback(() => onIndex((index - 1 + images.length) % images.length), [index, images.length, onIndex]);
   const next = useCallback(() => onIndex((index + 1) % images.length), [index, images.length, onIndex]);
@@ -925,7 +935,7 @@ function Lightbox({
       />
       <button
         onClick={onClose}
-        aria-label="Закрыть"
+        aria-label={t.close}
         className="absolute right-4 top-4 rounded-full border border-white/15 bg-white/5 p-2 text-zinc-200 hover:text-amber-200"
       >
         <X className="h-5 w-5" />
@@ -937,7 +947,7 @@ function Lightbox({
               e.stopPropagation();
               prev();
             }}
-            aria-label="Предыдущее"
+            aria-label={t.previous}
             className="absolute left-3 rounded-full border border-white/15 bg-white/5 p-2.5 text-zinc-200 hover:text-amber-200 sm:left-6"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -947,7 +957,7 @@ function Lightbox({
               e.stopPropagation();
               next();
             }}
-            aria-label="Следующее"
+            aria-label={t.next}
             className="absolute right-3 rounded-full border border-white/15 bg-white/5 p-2.5 text-zinc-200 hover:text-amber-200 sm:right-6"
           >
             <ChevronRight className="h-5 w-5" />
@@ -961,8 +971,8 @@ function Lightbox({
   );
 }
 
-function StatusBadge({ status }: { status: AppStatus }) {
-  const m = STATUS_META[status] ?? STATUS_META.pending;
+function StatusBadge({ status, t }: { status: AppStatus; t: ApplicationTranslations }) {
+  const m = statusMeta(status, t);
   return (
     <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium ${m.cls}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${m.dot}`} />
@@ -988,9 +998,9 @@ function Avatar({ src, name, size = 'md' }: { src: string | null; name: string; 
   );
 }
 
-function SkeletonRows() {
+function SkeletonRows({ t }: { t: ApplicationTranslations }) {
   return (
-    <ul className="divide-y divide-white/[0.06]" aria-busy="true" aria-label="Загрузка заявок">
+    <ul className="divide-y divide-white/[0.06]" aria-busy="true" aria-label={t.loadingAria}>
       {Array.from({ length: 5 }).map((_, i) => (
         <li
           key={i}
@@ -1016,7 +1026,7 @@ function SkeletonRows() {
   );
 }
 
-function EmptyState({ filtered, hasAny }: { filtered: boolean; hasAny: boolean }) {
+function EmptyState({ filtered, hasAny, t }: { filtered: boolean; hasAny: boolean; t: ApplicationTranslations }) {
   return (
     <div className="flex flex-col items-center px-6 py-20 text-center">
       <div className="relative mb-6">
@@ -1026,37 +1036,37 @@ function EmptyState({ filtered, hasAny }: { filtered: boolean; hasAny: boolean }
         </div>
       </div>
       <h3 className="font-serif text-xl font-light text-zinc-100">
-        {filtered && hasAny ? 'Ничего не найдено' : 'Заявок пока нет'}
+        {filtered && hasAny ? t.noResults : t.noApplications}
       </h3>
       <p className="mt-2 max-w-sm text-sm text-zinc-500">
         {filtered && hasAny
-          ? 'Попробуйте изменить фильтр или поисковый запрос.'
-          : 'Как только модели подадут заявки в туры ваших хабов, они появятся здесь.'}
+          ? t.changeFilterHint
+          : t.applicationsEmptyHint}
       </p>
     </div>
   );
 }
 
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+function ErrorState({ message, onRetry, t }: { message: string; onRetry: () => void; t: ApplicationTranslations }) {
   return (
     <div className="flex flex-col items-center px-6 py-16 text-center">
       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-rose-400/30 bg-rose-400/10">
         <AlertTriangle className="h-6 w-6 text-rose-300" />
       </div>
-      <h3 className="text-lg text-zinc-100">Не удалось загрузить заявки</h3>
+      <h3 className="text-lg text-zinc-100">{t.loadFailed}</h3>
       <p className="mt-1 max-w-md text-sm text-zinc-500">{message}</p>
       <button
         onClick={onRetry}
         className="mt-5 inline-flex items-center gap-2 rounded-full border border-amber-200/30 bg-amber-200/[0.06] px-4 py-2 text-sm text-amber-200 transition hover:bg-amber-200/10"
       >
         <RefreshCw className="h-4 w-4" />
-        Повторить
+        {t.retry}
       </button>
     </div>
   );
 }
 
-function ToastView({ toast, onClose }: { toast: Toast; onClose: () => void }) {
+function ToastView({ toast, onClose, t }: { toast: Toast; onClose: () => void; t: ApplicationTranslations }) {
   if (!toast) return null;
   const ok = toast.type === 'success';
   return (
@@ -1069,7 +1079,7 @@ function ToastView({ toast, onClose }: { toast: Toast; onClose: () => void }) {
       >
         {ok ? <Check className="h-4 w-4 text-amber-200" /> : <AlertTriangle className="h-4 w-4 text-rose-300" />}
         <span>{toast.text}</span>
-        <button onClick={onClose} aria-label="Закрыть" className="ml-1 text-zinc-500 hover:text-zinc-200">
+        <button onClick={onClose} aria-label={t.close} className="ml-1 text-zinc-500 hover:text-zinc-200">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>

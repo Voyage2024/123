@@ -155,6 +155,7 @@ const TEXT = {
     colActions: "Actions",
     unnamed: "No name",
     statusNone: "not assigned",
+    statusLabels: { pending: "Pending", approved: "Approved", rejected: "Rejected", submitted: "Submitted", under_review: "Under review", in_review: "In review", active: "Active", inactive: "Inactive", banned: "Blocked", blocked: "Blocked", draft: "Draft", verified: "Verified", passed: "Passed", completed: "Completed", declined: "Declined" } as Record<string, string>,
     verified: "Verified",
     approve: "Approve KYC",
     approveShort: "Approve",
@@ -211,6 +212,11 @@ const TEXT = {
     approved: "KYC confirmed — level 3",
     migration: "Migration 20261016 isn't applied yet: the list is read straight from profiles, edits may be blocked by RLS.",
     vaultMissing: "The KYC vault isn't connected yet — apply migration 20261009_profile_kyc_vault so uploads appear here.",
+    forbiddenError: "Only the owner and administrators can perform this action.",
+    permissionError: "You do not have permission to update this profile.",
+    genericError: "The operation failed. Please try again.",
+    rowsNotUpdated: "No changes were saved. Check access permissions.",
+    networkError: "Network error. Check your connection and try again.",
     failed: "Couldn't load the directory",
     retry: "Retry",
     roles: { owner: "Owner", admin: "Admin", manager: "Manager", resident: "Resident", guest: "Guest" } as Record<string, string>,
@@ -242,7 +248,8 @@ const TEXT = {
     colActions: "Действия",
     unnamed: "Без имени",
     statusNone: "не назначен",
-    verified: "Verified",
+    statusLabels: { pending: "На рассмотрении", approved: "Одобрен", rejected: "Отклонён", submitted: "Отправлен", under_review: "На проверке", in_review: "На проверке", active: "Активен", inactive: "Неактивен", banned: "Заблокирован", blocked: "Заблокирован", draft: "Черновик", verified: "Подтверждён", passed: "Пройден", completed: "Завершён", declined: "Отклонён" } as Record<string, string>,
+    verified: "Подтверждено",
     approve: "Подтвердить KYC",
     approveShort: "Подтвердить",
     approveLevel: (n: number) => `Подтвердить KYC · уровень ${n}`,
@@ -298,6 +305,11 @@ const TEXT = {
     approved: "KYC подтверждён — уровень 3",
     migration: "Миграция 20261016 ещё не применена: список читается напрямую из profiles, правки может заблокировать RLS.",
     vaultMissing: "Хранилище KYC ещё не подключено — примените миграцию 20261009_profile_kyc_vault, и загрузки появятся здесь.",
+    forbiddenError: "Это действие доступно только владельцу и администраторам.",
+    permissionError: "Недостаточно прав для изменения профиля.",
+    genericError: "Не удалось выполнить операцию. Повторите попытку.",
+    rowsNotUpdated: "Изменения не сохранены. Проверьте права доступа.",
+    networkError: "Ошибка сети. Проверьте подключение и повторите попытку.",
     failed: "Не удалось загрузить справочник",
     retry: "Повторить",
     roles: { owner: "Владелец", admin: "Админ", manager: "Менеджер", resident: "Резидент", guest: "Гостья" } as Record<string, string>,
@@ -329,7 +341,8 @@ const TEXT = {
     colActions: "Acciones",
     unnamed: "Sin nombre",
     statusNone: "sin asignar",
-    verified: "Verified",
+    statusLabels: { pending: "Pendiente", approved: "Aprobado", rejected: "Rechazado", submitted: "Enviado", under_review: "En revisión", in_review: "En revisión", active: "Activo", inactive: "Inactivo", banned: "Bloqueado", blocked: "Bloqueado", draft: "Borrador", verified: "Verificado", passed: "Superado", completed: "Completado", declined: "Rechazado" } as Record<string, string>,
+    verified: "Verificado",
     approve: "Confirmar KYC",
     approveShort: "Aprobar",
     approveLevel: (n: number) => `Confirmar KYC · nivel ${n}`,
@@ -385,6 +398,11 @@ const TEXT = {
     approved: "KYC confirmado — nivel 3",
     migration: "La migración 20261016 aún no está aplicada: la lista se lee de profiles y RLS puede bloquear los cambios.",
     vaultMissing: "La bóveda KYC aún no está conectada: aplique la migración 20261009_profile_kyc_vault para ver los archivos aquí.",
+    forbiddenError: "Esta acción solo está disponible para la propietaria y los administradores.",
+    permissionError: "No tienes permisos para modificar este perfil.",
+    genericError: "No se pudo completar la operación. Inténtalo de nuevo.",
+    rowsNotUpdated: "No se guardaron los cambios. Comprueba los permisos.",
+    networkError: "Error de red. Comprueba tu conexión e inténtalo de nuevo.",
     failed: "No se pudo cargar el directorio",
     retry: "Reintentar",
     roles: { owner: "Propietario", admin: "Admin", manager: "Gerente", resident: "Residente", guest: "Invitada" } as Record<string, string>,
@@ -416,7 +434,8 @@ const TEXT = {
     colActions: "Ações",
     unnamed: "Sem nome",
     statusNone: "não definido",
-    verified: "Verified",
+    statusLabels: { pending: "Pendente", approved: "Aprovado", rejected: "Rejeitado", submitted: "Enviado", under_review: "Em análise", in_review: "Em análise", active: "Ativo", inactive: "Inativo", banned: "Bloqueado", blocked: "Bloqueado", draft: "Rascunho", verified: "Verificado", passed: "Concluído", completed: "Concluído", declined: "Rejeitado" } as Record<string, string>,
+    verified: "Verificado",
     approve: "Confirmar KYC",
     approveShort: "Aprovar",
     approveLevel: (n: number) => `Confirmar KYC · nível ${n}`,
@@ -472,6 +491,11 @@ const TEXT = {
     approved: "KYC confirmado — nível 3",
     migration: "A migração 20261016 ainda não foi aplicada: a lista vem direto de profiles e o RLS pode bloquear edições.",
     vaultMissing: "O cofre KYC ainda não está conectado — aplique a migração 20261009_profile_kyc_vault para ver os envios aqui.",
+    forbiddenError: "Esta ação está disponível apenas para a proprietária e os administradores.",
+    permissionError: "Você não tem permissão para alterar este perfil.",
+    genericError: "Não foi possível concluir a operação. Tente novamente.",
+    rowsNotUpdated: "As alterações não foram salvas. Verifique as permissões.",
+    networkError: "Erro de rede. Verifique sua conexão e tente novamente.",
     failed: "Não foi possível carregar o diretório",
     retry: "Tentar de novo",
     roles: { owner: "Proprietário", admin: "Admin", manager: "Gerente", resident: "Residente", guest: "Convidada" } as Record<string, string>,
@@ -1089,7 +1113,7 @@ function ResidentModal({
                 <option value="">{t.noStatus}</option>
                 {known.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {t.statusLabels[s.toLowerCase().replaceAll(" ", "_")] ?? s}
                   </option>
                 ))}
                 <option value={CUSTOM}>{t.statusCustom}</option>
@@ -1318,7 +1342,7 @@ export default function DirectoryClient({
         <div className="absolute -left-[10%] -top-[20%] h-[50%] w-[50%] rounded-full bg-[radial-gradient(circle,rgba(212,168,83,0.08)_0%,transparent_70%)]" />
       </div>
 
-      <div className="dir-root relative mx-auto w-full max-w-6xl px-4 pb-20 pt-2 sm:px-8 sm:pt-2">
+      <div className="dir-root relative mx-auto w-full max-w-6xl px-4 pb-20 pt-8 sm:px-8 sm:pt-14">
         {/* ── Заголовок ── */}
         <header className="mb-7 sm:mb-8">
           <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -1381,7 +1405,7 @@ export default function DirectoryClient({
               <option value="__none__">{t.noStatus}</option>
               {statusOptions.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {t.statusLabels[s.toLowerCase().replaceAll(" ", "_")] ?? s}
                 </option>
               ))}
             </select>
@@ -1513,7 +1537,7 @@ export default function DirectoryClient({
 
                     <div className="dir-status">
                       {r.status ? (
-                        <span className={`${cormorant.className} block truncate text-base tracking-wide text-amber-200/90`}>{r.status}</span>
+                        <span className={`${cormorant.className} block truncate text-base tracking-wide text-amber-200/90`}>{t.statusLabels[r.status.toLowerCase().replaceAll(" ", "_")] ?? r.status}</span>
                       ) : (
                         <span className="text-[11px] tracking-wide text-zinc-600">{t.statusNone}</span>
                       )}

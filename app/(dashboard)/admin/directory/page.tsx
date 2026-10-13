@@ -98,7 +98,6 @@ export default function AdminOverviewPage() {
 
   useEffect(() => {
     if (authLoading || !staff) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial async data load after role resolution.
     void load();
     const onVisible = () => {
       if (document.visibilityState === "visible") void load();
@@ -131,13 +130,13 @@ export default function AdminOverviewPage() {
 
   if (error && !data) {
     return (
-      <div className="flex min-h-screen items-start justify-center bg-zinc-950 px-4 pt-2 pb-8">
+      <div className="flex min-h-screen items-start justify-center bg-zinc-950 px-4 py-24">
         <div role="alert" className="w-full max-w-lg rounded-2xl border border-red-500/25 bg-red-950/20 px-6 py-5">
           <p className="flex items-center gap-2.5 text-sm font-medium text-red-200">
             <AlertTriangle size={17} strokeWidth={1.5} aria-hidden />
             {text.failed}
           </p>
-          <p className="mt-2 break-words font-mono text-xs text-red-300/70">{error.message}</p>
+          <p className="mt-2 text-xs leading-5 text-red-300/70">{text.failed}</p>
           {error.migration && <p className="mt-2 text-xs text-amber-200/80">{text.migration}</p>}
           <button type="button" onClick={() => void load()} className="mt-4 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-100 transition-colors hover:bg-red-500/10">
             {text.retry}
@@ -149,7 +148,7 @@ export default function AdminOverviewPage() {
 
   if (!data) {
     return (
-      <div className="flex min-h-screen items-start justify-center bg-zinc-950 px-4 pt-2 pb-8 text-sm text-zinc-500">
+      <div className="flex min-h-screen items-start justify-center bg-zinc-950 px-4 py-32 text-sm text-zinc-500">
         <span className="inline-flex items-center gap-2.5">
           <Loader2 size={17} strokeWidth={1.5} className="animate-spin" aria-hidden />
           {text.loading}
