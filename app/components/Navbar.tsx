@@ -40,6 +40,8 @@ type Labels = {
   login: string;
   loginShort: string;
   dashboard: string;
+  command: string;
+  adminConsole: string;
   logout: string;
   member: string;
   openMenu: string;
@@ -54,6 +56,8 @@ const t: Record<Lang, Labels> = {
     login: "Member Login",
     loginShort: "Sign in",
     dashboard: "Dashboard",
+    command: "Command",
+    adminConsole: "Admin Console",
     logout: "Logout",
     member: "Member",
     openMenu: "Open menu",
@@ -66,6 +70,8 @@ const t: Record<Lang, Labels> = {
     login: "Вход для резидентов",
     loginShort: "Войти",
     dashboard: "Кабинет",
+    command: "Штаб",
+    adminConsole: "Админ-панель",
     logout: "Выйти",
     member: "Резидент",
     openMenu: "Открыть меню",
@@ -78,6 +84,8 @@ const t: Record<Lang, Labels> = {
     login: "Acceso de miembros",
     loginShort: "Entrar",
     dashboard: "Panel",
+    command: "Mando",
+    adminConsole: "Consola admin",
     logout: "Cerrar sesión",
     member: "Miembro",
     openMenu: "Abrir menú",
@@ -90,6 +98,8 @@ const t: Record<Lang, Labels> = {
     login: "Área do membro",
     loginShort: "Entrar",
     dashboard: "Painel",
+    command: "Comando",
+    adminConsole: "Painel admin",
     logout: "Sair",
     member: "Membro",
     openMenu: "Abrir menu",
@@ -281,11 +291,15 @@ function ProfileSheet({
   onClose,
   onLogout,
   view,
+  workspaceHref,
+  workspaceLabel,
 }: {
   open: boolean;
   onClose: () => void;
   onLogout: () => void;
   view: ProfileView;
+  workspaceHref: string;
+  workspaceLabel: string;
 }) {
   const isClient = useIsClient();
   const titleId = useId();
@@ -366,12 +380,12 @@ function ProfileSheet({
         <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03]">
           <Link
             ref={firstRef}
-            href="/dashboard"
+            href={workspaceHref}
             onClick={onClose}
             className="flex min-h-[52px] items-center gap-3.5 px-4 text-[15px] text-zinc-100 transition-colors active:bg-white/5"
           >
             <LayoutDashboard className="h-[18px] w-[18px] text-amber-200/80" strokeWidth={1.6} aria-hidden />
-            {labels.dashboard}
+            {workspaceLabel}
           </Link>
           <div className="mx-4 h-px bg-white/[0.06]" />
           <button
@@ -433,6 +447,8 @@ export default function Navbar() {
   const roleLabel = role ? (labels.roles[role] ?? role) : null;
   const roleTone = ROLE_TONE[role ?? ""] ?? "text-zinc-500";
   const isLeadership = role === "owner" || role === "admin";
+  const workspaceHref = role === "manager" ? "/partner" : role === "owner" || role === "admin" ? "/admin" : "/dashboard";
+  const workspaceLabel = role === "manager" ? labels.command : role === "owner" || role === "admin" ? labels.adminConsole : labels.dashboard;
 
   // Без имени AuthContext подставляет «Резидент» — для любой роли это
   // выглядело бы как понижение, поэтому берём часть почты до @
@@ -549,14 +565,14 @@ export default function Navbar() {
                   </div>
                 </div>
                 <Link
-                  href="/dashboard"
+                  href={workspaceHref}
                   role="menuitem"
                   tabIndex={menuOpen ? 0 : -1}
                   onClick={() => setMenuOpen(false)}
                   className="flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-white/5 hover:text-amber-200"
                 >
                   <LayoutDashboard className="h-4 w-4" />
-                  {labels.dashboard}
+                  {workspaceLabel}
                 </Link>
                 <button
                   type="button"
@@ -579,6 +595,8 @@ export default function Navbar() {
                 onClose={closeSheet}
                 onLogout={() => void logout()}
                 view={view}
+                workspaceHref={workspaceHref}
+                workspaceLabel={workspaceLabel}
               />
             </div>
           ) : (

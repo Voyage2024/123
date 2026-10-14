@@ -16,6 +16,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
+  Activity,
   CreditCard,
   GlassWater,
   Plane,
@@ -25,7 +26,6 @@ import {
   ConciergeBell,
   UserPlus,
   Settings,
-  MapPin,
   ClipboardList,
   Users,
   ShieldAlert,
@@ -75,79 +75,82 @@ type NavKey =
   | "roleManagement"
   | "adminParties"
   | "mapLocations"
-  | "database";
+  | "database"
+  | "command"
+  | "castings"
+  | "manifest"
+  | "pulse"
+  | "blacklist"
+  | "keys";
 
-type SectionKey = "club" | "console" | "management" | "administration" | "owner" | "account";
+type SectionKey = "club" | "market" | "operations" | "intelligence" | "authority" | "console" | "management" | "administration" | "owner" | "account";
 
 type NavItem = { key: NavKey; href: string; icon: LucideIcon };
 type NavSection = { key: SectionKey; roles: readonly Role[]; items: NavItem[] };
 
 const STAFF: readonly Role[] = ["manager", "admin", "owner"];
 
+const ADMIN: readonly Role[] = ["admin", "owner"];
+
 const NAV_SECTIONS: NavSection[] = [
-  // ── Резидент ──────────────────────────────────────────────
+  // ── Partner workspace: manager, admin and owner ─────────────────────
   {
-    key: "club",
-    roles: ["resident"],
+    key: "market",
+    roles: STAFF,
     items: [
-      { key: "myVoyage", href: "/dashboard", icon: CreditCard },
-      { key: "myApplications", href: "/dashboard/applications", icon: Inbox },
-      { key: "parties", href: "/dashboard/parties", icon: GlassWater },
-      { key: "tours", href: "/dashboard/tours", icon: Plane },
-      { key: "passport", href: "/dashboard/gamification", icon: Trophy },
-      // Глобальный рейтинг клуба (Influence Index). Туры — локальные соревнования внутри тура
-      { key: "leaderboard", href: "/dashboard/leaderboard", icon: Crown },
-      { key: "concierge", href: "/dashboard/concierge", icon: ConciergeBell },
-      { key: "inviteFriends", href: "/dashboard/invite", icon: UserPlus },
-      { key: "settings", href: "/dashboard/settings", icon: Settings },
+      { key: "command", href: "/partner", icon: LayoutDashboard },
+      { key: "castings", href: "/partner/castings", icon: ClipboardList },
     ],
   },
-  // ── Общая главная для персонала: сводка клуба (Overview) ───
+  {
+    key: "operations",
+    roles: STAFF,
+    items: [{ key: "manifest", href: "/partner/manifest", icon: Plane }],
+  },
+  {
+    key: "intelligence",
+    roles: STAFF,
+    items: [
+      { key: "pulse", href: "/partner/pulse", icon: Activity },
+      { key: "blacklist", href: "/partner/blacklist", icon: ShieldAlert },
+    ],
+  },
+  {
+    key: "authority",
+    roles: STAFF,
+    items: [{ key: "keys", href: "/partner/keys", icon: KeyRound }],
+  },
+
+  // ── Administrative workspace: owner and admin only ──────────────────
   {
     key: "console",
-    roles: STAFF,
+    roles: ADMIN,
     items: [{ key: "overview", href: "/admin/directory", icon: LayoutDashboard }],
   },
-  // ── Manager+ ──────────────────────────────────────────────
-  {
-    key: "management",
-    roles: STAFF,
-    items: [
-      { key: "myLocation", href: "/admin/location", icon: MapPin },
-      { key: "applications", href: "/admin/applications", icon: ClipboardList },
-    ],
-  },
-  // ── Admin+ ────────────────────────────────────────────────
   {
     key: "administration",
-    roles: ["admin", "owner"],
+    roles: ADMIN,
     items: [
-      // Всё ниже — только owner и admin (в БД то же правило: club_is_admin)
-      // Справочник резидентов и KYC живёт в корне админки
       { key: "directory", href: "/admin", icon: Users },
-      // Заявки на вступление с главной (/admin/requests)
+      { key: "database", href: "/admin/database", icon: Database },
+      { key: "applications", href: "/admin/applications", icon: ClipboardList },
       { key: "membershipRequests", href: "/admin/requests", icon: UserPlus },
-      // Консьерж: входящие запросы резидентов (только owner/admin)
-      { key: "concierge", href: "/admin/concierge", icon: ConciergeBell },
       { key: "faceControl", href: "/admin/face-control", icon: ShieldAlert },
+      { key: "concierge", href: "/admin/concierge", icon: ConciergeBell },
+      { key: "events", href: "/admin/events", icon: Map },
       { key: "gamification", href: "/admin/gamification", icon: Trophy },
       { key: "invitations", href: "/admin/invites", icon: Mail },
-      { key: "events", href: "/admin/events", icon: Map },
-      // Тусовки создают и правят owner и admin (бывший global-tours)
       { key: "adminParties", href: "/admin/parties", icon: GlassWater },
       { key: "mapLocations", href: "/admin/map-locations", icon: Globe },
     ],
   },
-  // ── Owner ─────────────────────────────────────────────────
+  // Role management remains owner-only, matching the existing RBAC contract.
   {
     key: "owner",
     roles: ["owner"],
-    items: [
-      { key: "roleManagement", href: "/admin/roles", icon: KeyRound },
-      { key: "database", href: "/admin/database", icon: Database },
-    ],
+    items: [{ key: "roleManagement", href: "/admin/roles", icon: KeyRound }],
   },
-  // ── Аккаунт: настройки профиля для всего персонала ─────────
+  // Personal settings are the one /admin route that remains available to staff.
   {
     key: "account",
     roles: STAFF,
@@ -157,7 +160,7 @@ const NAV_SECTIONS: NavSection[] = [
 
 // Корневые адреса подсвечиваются только при точном совпадении
 // (иначе «Справочник» /admin горел бы на каждой странице админки)
-const INDEX_ROUTES = new Set(["/admin", "/dashboard"]);
+const INDEX_ROUTES = new Set(["/admin", "/dashboard", "/partner"]);
 
 function isActive(href: string, pathname: string) {
   if (pathname === href) return true;
@@ -171,12 +174,16 @@ const translations = {
   EN: {
     subtitle: {
       resident: "Private Club",
-      manager: "Manager Console",
+      manager: "Partner Command",
       admin: "Admin Console",
       owner: "Owner Console",
     },
     sections: {
       club: "Club",
+      market: "Market",
+      operations: "Operations",
+      intelligence: "Intelligence",
+      authority: "Authority",
       console: "Console",
       management: "Management",
       administration: "Administration",
@@ -207,6 +214,12 @@ const translations = {
       adminParties: "Manage Parties",
       mapLocations: "Map Locations",
       database: "Full Database",
+      command: "Command",
+      castings: "Castings",
+      manifest: "Manifest",
+      pulse: "Pulse",
+      blacklist: "Blacklist",
+      keys: "Keys",
     },
     roles: { owner: "Owner", admin: "Administrator", manager: "Manager", resident: "Resident" },
     logout: "Sign out",
@@ -218,12 +231,16 @@ const translations = {
   RU: {
     subtitle: {
       resident: "Закрытый клуб",
-      manager: "Панель менеджера",
+      manager: "Штаб партнёра",
       admin: "Панель админа",
       owner: "Панель владельца",
     },
     sections: {
       club: "Клуб",
+      market: "Рынок",
+      operations: "Операции",
+      intelligence: "Разведка",
+      authority: "Власть",
       console: "Консоль",
       management: "Управление",
       administration: "Администрирование",
@@ -254,6 +271,12 @@ const translations = {
       adminParties: "Управление тусовками",
       mapLocations: "Локации карты",
       database: "Полная база",
+      command: "Штаб",
+      castings: "Кастинги",
+      manifest: "Манифест",
+      pulse: "Пульс",
+      blacklist: "Чёрный список",
+      keys: "Ключи",
     },
     roles: { owner: "Владелец", admin: "Администратор", manager: "Менеджер", resident: "Резидент" },
     logout: "Выйти",
@@ -265,12 +288,16 @@ const translations = {
   ES: {
     subtitle: {
       resident: "Club Privado",
-      manager: "Panel de gerente",
+      manager: "Centro del partner",
       admin: "Panel de admin",
       owner: "Panel del propietario",
     },
     sections: {
       club: "Club",
+      market: "Mercado",
+      operations: "Operaciones",
+      intelligence: "Inteligencia",
+      authority: "Autoridad",
       console: "Consola",
       management: "Gestión",
       administration: "Administración",
@@ -301,6 +328,12 @@ const translations = {
       adminParties: "Gestionar fiestas",
       mapLocations: "Ubicaciones del mapa",
       database: "Base de datos",
+      command: "Mando",
+      castings: "Castings",
+      manifest: "Manifiesto",
+      pulse: "Pulso",
+      blacklist: "Lista negra",
+      keys: "Llaves",
     },
     roles: { owner: "Propietario", admin: "Administrador", manager: "Gerente", resident: "Residente" },
     logout: "Cerrar sesión",
@@ -312,12 +345,16 @@ const translations = {
   PT: {
     subtitle: {
       resident: "Clube Privado",
-      manager: "Painel do gerente",
+      manager: "Central do parceiro",
       admin: "Painel do admin",
       owner: "Painel do proprietário",
     },
     sections: {
       club: "Clube",
+      market: "Mercado",
+      operations: "Operações",
+      intelligence: "Inteligência",
+      authority: "Autoridade",
       console: "Console",
       management: "Gestão",
       administration: "Administração",
@@ -348,6 +385,12 @@ const translations = {
       adminParties: "Gerenciar festas",
       mapLocations: "Localizações do mapa",
       database: "Banco de dados",
+      command: "Comando",
+      castings: "Castings",
+      manifest: "Manifesto",
+      pulse: "Pulso",
+      blacklist: "Lista negra",
+      keys: "Chaves",
     },
     roles: { owner: "Proprietário", admin: "Administrador", manager: "Gerente", resident: "Residente" },
     logout: "Sair",

@@ -5,13 +5,16 @@ import {
   getAdminAllowedRoles,
   isRole,
   matchesPrefix,
+  getRoleHomePath,
+  PARTNER_HOME_PATH,
+  RESIDENT_HOME_PATH,
+  ADMIN_HOME_PATH,
   type Role,
 } from "@/lib/rbac";
 
 const LOGIN_PATH = "/login";
-const RESIDENT_HOME_PATH = "/dashboard";
-const STAFF_HOME_PATH = "/admin";
-const PROTECTED_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, "/profile", "/event", "/events"];
+const STAFF_HOME_PATH = ADMIN_HOME_PATH;
+const PROTECTED_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, PARTNER_HOME_PATH, "/profile", "/event", "/events"];
 const ENTRY_ROUTES = ["/", LOGIN_PATH];
 const LEGACY_COOKIE = "voyage_token";
 
@@ -59,7 +62,8 @@ export async function proxy(request: NextRequest) {
   const shouldResolveRole =
     ENTRY_ROUTES.includes(pathname) ||
     pathname === RESIDENT_HOME_PATH ||
-    matchesPrefix(pathname, STAFF_HOME_PATH);
+    matchesPrefix(pathname, STAFF_HOME_PATH) ||
+    matchesPrefix(pathname, PARTNER_HOME_PATH);
 
   let role: Role | null = null;
   let roleResolved = false;
@@ -86,21 +90,33 @@ export async function proxy(request: NextRequest) {
   // An already-authenticated user should land in the workspace matching profiles.role.
   if (ENTRY_ROUTES.includes(pathname)) {
     if (!roleResolved || !role) return response;
-    return redirectTo(request, response, STAFF_ROLES.includes(role) ? STAFF_HOME_PATH : RESIDENT_HOME_PATH);
+    return redirectTo(request, response, getRoleHomePath(role));
   }
 
   // The resident profile/onboarding screen must never be the landing page for staff.
   if (pathname === RESIDENT_HOME_PATH) {
     if (!roleResolved || !role) return redirectTo(request, response, LOGIN_PATH);
-    if (STAFF_ROLES.includes(role)) return redirectTo(request, response, STAFF_HOME_PATH);
+    if (STAFF_ROLES.includes(role)) return redirectTo(request, response, getRoleHomePath(role));
+    return response;
+  }
+
+  if (matchesPrefix(pathname, PARTNER_HOME_PATH)) {
+    if (!roleResolved || !role) return redirectTo(request, response, LOGIN_PATH);
+    if (!STAFF_ROLES.includes(role)) return redirectTo(request, response, RESIDENT_HOME_PATH);
+    // Manager, admin and owner can use /partner. More detailed per-tour ownership
+    // remains enforced by the partner RPCs and RLS.
     return response;
   }
 
   if (matchesPrefix(pathname, STAFF_HOME_PATH)) {
     if (!roleResolved || !role) return redirectTo(request, response, LOGIN_PATH);
     if (!STAFF_ROLES.includes(role)) return redirectTo(request, response, RESIDENT_HOME_PATH);
+    // The manager's only allowed /admin route is their own profile settings.
+    if (role === "manager" && !matchesPrefix(pathname, "/admin/settings")) {
+      return redirectTo(request, response, PARTNER_HOME_PATH);
+    }
     if (!getAdminAllowedRoles(pathname).includes(role)) {
-      return redirectTo(request, response, STAFF_HOME_PATH);
+      return redirectTo(request, response, getRoleHomePath(role));
     }
   }
 
