@@ -17,6 +17,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Activity,
+  Sparkles,
   CreditCard,
   GlassWater,
   Plane,
@@ -100,6 +101,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { key: "myVoyage", href: "/dashboard", icon: CreditCard },
       { key: "myApplications", href: "/dashboard/applications", icon: Inbox },
+      { key: "castings", href: "/dashboard/castings", icon: Sparkles },
       { key: "parties", href: "/dashboard/parties", icon: GlassWater },
       { key: "tours", href: "/dashboard/tours", icon: Plane },
       { key: "passport", href: "/dashboard/gamification", icon: Trophy },
