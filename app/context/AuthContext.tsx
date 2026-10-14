@@ -51,7 +51,7 @@ type AuthContextType = {
   /** Перечитывает роль, имя и аватар из public.profiles */
   refreshRole: () => Promise<void>;
   hasRole: (allowed: readonly Role[]) => boolean;
-  /** true, пока не известны и пользователь, и его роль */
+  /** true, пока проверяются сессия или метаданные текущего профиля */
   loading: boolean;
 };
 
@@ -84,48 +84,80 @@ const mapUser = (u: SupabaseUser): BaseUser => ({
   fullName: readMetaString(u, "full_name") ?? readMetaString(u, "name") ?? FALLBACK_NAME,
 });
 
-type ProfileMeta = { role: Role; segment: ResidentSegment; fullName: string | null; avatarUrl: string | null };
+type ProfileMeta = { role: Role | null; segment: ResidentSegment; fullName: string | null; avatarUrl: string | null };
 
-/**
- * Забирает роль, имя и аватар из public.profiles — источника правды.
- * При любой ошибке возвращает минимальную роль (resident), а не повышенную.
- */
+const EMPTY_PROFILE_META: ProfileMeta = {
+  // Do not synthesize `resident` when profile lookup fails. A missing/invalid role
+  // must fail closed instead of silently changing the user's effective identity.
+  role: null,
+  segment: "working",
+  fullName: null,
+  avatarUrl: null,
+};
+
+/** Reads identity metadata from public.profiles, the source of truth for roles. */
 async function fetchProfileMeta(userId: string): Promise<ProfileMeta> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("role, full_name, avatar_url, segment")
-    .eq("id", userId)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("role, full_name, avatar_url, segment")
+      .eq("id", userId)
+      .maybeSingle();
 
-  if (error) {
-    console.error("Не удалось получить профиль пользователя:", error.message);
-    return { role: DEFAULT_ROLE, segment: "working", fullName: null, avatarUrl: null };
-  }
-
-  const fullName = typeof data?.full_name === "string" ? data.full_name.trim() : "";
-
-  const storedAvatar = (data?.avatar_url as string | null | undefined) ?? null;
-  let avatarUrl = storedAvatar;
-  // avatar_url stores a Storage object path for the private user-uploads bucket.
-  // Resolve it to a short-lived URL for rendering; never persist signed URLs.
-  if (storedAvatar && !/^https?:\/\//i.test(storedAvatar)) {
-    const { data: signedData, error: signedError } = await supabase.storage
-      .from("user-uploads")
-      .createSignedUrl(storedAvatar, 60 * 60);
-    if (signedError) {
-      console.error("Could not resolve private profile avatar:", signedError.name);
-      avatarUrl = null;
-    } else {
-      avatarUrl = signedData?.signedUrl ?? null;
+    if (error) {
+      console.error("Could not resolve user profile metadata:", {
+        code: error.code,
+        message: error.message,
+      });
+      return EMPTY_PROFILE_META;
     }
-  }
 
-  return {
-    role: isRole(data?.role) ? data.role : DEFAULT_ROLE,
-    segment: data?.segment === "elite" ? "elite" : "working",
-    fullName: fullName || null,
-    avatarUrl,
-  };
+    if (!data) {
+      console.error("Could not resolve user profile metadata: profile row is missing");
+      return EMPTY_PROFILE_META;
+    }
+
+    const role = isRole(data.role) ? data.role : null;
+    if (role === null) {
+      console.error("Profile has an invalid role value; access will be denied");
+    }
+
+    const fullName = typeof data.full_name === "string" ? data.full_name.trim() : "";
+    const storedAvatar = (data.avatar_url as string | null | undefined) ?? null;
+    let avatarUrl = storedAvatar;
+
+    // avatar_url may contain a Storage object path in the private user-uploads bucket.
+    // Resolve it to a short-lived URL for rendering; never persist signed URLs.
+    if (storedAvatar && !/^https?:\/\//i.test(storedAvatar)) {
+      try {
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from("user-uploads")
+          .createSignedUrl(storedAvatar, 60 * 60);
+        if (signedError) {
+          console.error("Could not resolve private profile avatar:", signedError.name);
+          avatarUrl = null;
+        } else {
+          avatarUrl = signedData?.signedUrl ?? null;
+        }
+      } catch (error) {
+        // A temporary Storage issue must not erase a successfully read account role.
+        console.error("Could not resolve private profile avatar:",
+          error instanceof Error ? error.message : "unknown error");
+        avatarUrl = null;
+      }
+    }
+
+    return {
+      role,
+      segment: data.segment === "elite" ? "elite" : "working",
+      fullName: fullName || null,
+      avatarUrl,
+    };
+  } catch (error) {
+    console.error("Unexpected error while resolving user profile metadata:",
+      error instanceof Error ? error.message : "unknown error");
+    return EMPTY_PROFILE_META;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -237,11 +269,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const userId = baseUser?.id ?? null;
 
   useEffect(() => {
-    if (!userId) return;
-
     let cancelled = false;
 
-    fetchProfileMeta(userId).then((m) => {
+    if (!userId) {
+      setMeta(null);
+      setMetaLoading(false);
+      return;
+    }
+
+    setMetaLoading(true);
+    void fetchProfileMeta(userId).then((m) => {
       if (cancelled) return;
       setMeta({ userId, ...m });
       setMetaLoading(false);
@@ -255,9 +292,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshRole = useCallback(async () => {
     if (!userId) return;
     setMetaLoading(true);
-    const m = await fetchProfileMeta(userId);
-    setMeta({ userId, ...m });
-    setMetaLoading(false);
+    try {
+      const m = await fetchProfileMeta(userId);
+      setMeta({ userId, ...m });
+    } finally {
+      setMetaLoading(false);
+    }
   }, [userId]);
 
   // --- 3. Мгновенное обновление после сохранения в настройках --------------
@@ -288,7 +328,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [baseUser, fullName, avatarUrl]
   );
 
-  const loading = authLoading || (!!baseUser && (metaLoading || role === null));
+  // role === null can mean a completed lookup failed or the profile is invalid.
+  // Keep loading tied to the lookup lifecycle; RoleGuard can then deny access for null.
+  const loading = authLoading || (!!baseUser && (metaLoading || currentMeta === null));
 
   const hasRole = useCallback(
     (allowed: readonly Role[]) => role !== null && allowed.includes(role),
@@ -303,6 +345,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       clearSessionCookie();
       setMeta(null);
+      setMetaLoading(false);
       setUser(null);
     }
   }, [setUser]);

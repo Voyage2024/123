@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { Cormorant_Garamond } from "next/font/google";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
-import { useAuth } from "@/app/context/AuthContext";
+import { isRole, useAuth } from "@/app/context/AuthContext";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
 
@@ -51,6 +51,7 @@ const translations = {
       invalidCredentials: "Incorrect username or password. Please try again.",
       emailNotConfirmed: "Your email is not confirmed yet. Please check your inbox.",
       tooManyRequests: "Too many attempts. Please wait a moment and try again.",
+      profileCheck: "We could not verify your account role. Please try again or contact support.",
       network: "Connection error. Please check your internet and try again.",
       generic: "Something went wrong. Please try again.",
     },
@@ -77,6 +78,7 @@ const translations = {
       invalidCredentials: "Неверный логин или пароль. Попробуйте ещё раз.",
       emailNotConfirmed: "Email ещё не подтверждён. Проверьте почту.",
       tooManyRequests: "Слишком много попыток. Подождите немного и повторите.",
+      profileCheck: "Не удалось проверить роль аккаунта. Попробуйте ещё раз или обратитесь в поддержку.",
       network: "Ошибка соединения. Проверьте интернет и попробуйте снова.",
       generic: "Что-то пошло не так. Попробуйте ещё раз.",
     },
@@ -103,6 +105,7 @@ const translations = {
       invalidCredentials: "Usuario o contraseña incorrectos. Inténtalo de nuevo.",
       emailNotConfirmed: "Tu correo aún no está confirmado. Revisa tu bandeja de entrada.",
       tooManyRequests: "Demasiados intentos. Espera un momento e inténtalo de nuevo.",
+      profileCheck: "No pudimos verificar el rol de tu cuenta. Inténtalo de nuevo o contacta con soporte.",
       network: "Error de conexión. Revisa tu internet e inténtalo de nuevo.",
       generic: "Algo salió mal. Inténtalo de nuevo.",
     },
@@ -129,6 +132,7 @@ const translations = {
       invalidCredentials: "Usuário ou senha incorretos. Tente novamente.",
       emailNotConfirmed: "Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada.",
       tooManyRequests: "Muitas tentativas. Aguarde um momento e tente novamente.",
+      profileCheck: "Não foi possível verificar a função da sua conta. Tente novamente ou contacte o suporte.",
       network: "Erro de conexão. Verifique sua internet e tente novamente.",
       generic: "Algo deu errado. Tente novamente.",
     },
@@ -202,9 +206,32 @@ export default function LoginPage() {
         return;
       }
 
-      const userName = (data.user.user_metadata?.name as string | undefined) || t.defaultName;
+      // Resolve the real role before choosing a destination. public.profiles is the
+      // source of truth; a missing/invalid row must never be silently treated as resident.
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle();
 
-      // "Билет" для middleware. secure только на https, иначе на localhost кука не ставится
+      if (profileError || !profile || !isRole(profile.role)) {
+        console.error("[login] Could not resolve profile role", {
+          code: profileError?.code ?? (!profile ? "profile_missing" : "invalid_role"),
+        });
+        await supabase.auth.signOut();
+        Cookies.remove("voyage_token");
+        setErrorKey("profileCheck");
+        setPassword("");
+        setIsLoading(false);
+        return;
+      }
+
+      const userName =
+        (data.user.user_metadata?.full_name as string | undefined) ||
+        (data.user.user_metadata?.name as string | undefined) ||
+        t.defaultName;
+
+      // Cookie is only a middleware hint, never the source of the user's role.
       Cookies.set("voyage_token", "true", {
         expires: 7,
         sameSite: "lax",
@@ -217,8 +244,12 @@ export default function LoginPage() {
         fullName: userName,
       });
 
-      // isLoading не сбрасываем — кнопка остаётся заблокированной до перехода
-      router.push("/dashboard");
+      // Staff enters the operational workspace; residents enter the resident dashboard.
+      // `replace` prevents returning to the login form via browser Back.
+      const destination = ["owner", "admin", "manager"].includes(profile.role)
+        ? "/admin"
+        : "/dashboard";
+      router.replace(destination);
     } catch (err) {
       console.error("Login error:", err);
       setErrorKey("network");

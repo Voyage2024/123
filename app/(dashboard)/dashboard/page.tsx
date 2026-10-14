@@ -10,15 +10,26 @@ export default async function DashboardPage() {
   const { data: authData } = await supabase.auth.getUser();
   if (!authData.user) redirect("/login");
 
-  const { data: profile, error } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", authData.user.id)
     .maybeSingle();
 
-  if (error || !profile) redirect("/login?error=profile_check");
-  if (["owner", "admin", "manager"].includes(String(profile.role))) redirect("/admin");
-  if (profile.role !== "resident") redirect("/login?error=role_check");
+  // Never infer a resident role if the profile is missing or cannot be read.
+  if (profileError) {
+    console.error("[dashboard] Failed to resolve profile role", {
+      code: profileError.code,
+    });
+    redirect("/login?error=profile_check");
+  }
+  if (!profile) redirect("/login?error=profile_check");
+
+  const role = profile.role;
+  if (role === "owner" || role === "admin" || role === "manager") {
+    redirect("/admin");
+  }
+  if (role !== "resident") redirect("/login?error=role_check");
 
   return <ResidentProfileDashboard />;
 }
