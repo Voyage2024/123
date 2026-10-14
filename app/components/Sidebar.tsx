@@ -93,6 +93,23 @@ const STAFF: readonly Role[] = ["manager", "admin", "owner"];
 const ADMIN: readonly Role[] = ["admin", "owner"];
 
 const NAV_SECTIONS: NavSection[] = [
+  // ── Resident workspace: keep the original club navigation ────────────
+  {
+    key: "club",
+    roles: ["resident"],
+    items: [
+      { key: "myVoyage", href: "/dashboard", icon: CreditCard },
+      { key: "myApplications", href: "/dashboard/applications", icon: Inbox },
+      { key: "parties", href: "/dashboard/parties", icon: GlassWater },
+      { key: "tours", href: "/dashboard/tours", icon: Plane },
+      { key: "passport", href: "/dashboard/gamification", icon: Trophy },
+      // Глобальный рейтинг клуба (Influence Index). Туры — локальные соревнования внутри тура.
+      { key: "leaderboard", href: "/dashboard/leaderboard", icon: Crown },
+      { key: "concierge", href: "/dashboard/concierge", icon: ConciergeBell },
+      { key: "inviteFriends", href: "/dashboard/invite", icon: UserPlus },
+      { key: "settings", href: "/dashboard/settings", icon: Settings },
+    ],
+  },
   // ── Partner workspace: manager, admin and owner ─────────────────────
   {
     key: "market",

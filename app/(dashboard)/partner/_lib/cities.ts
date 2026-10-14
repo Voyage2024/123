@@ -8,7 +8,7 @@
 
 import type { Lang } from "@/app/context/LanguageContext";
 
-type CityKey = "dubai" | "sydney" | "milan" | "paris" | "london" | "istanbul";
+type CityKey = "dubai" | "sydney" | "milan" | "paris" | "london" | "istanbul" | "monaco" | "barcelona";
 
 const ALIASES: Record<string, CityKey> = {
   dubai: "dubai", "дубай": "dubai", "dubái": "dubai",
@@ -17,13 +17,15 @@ const ALIASES: Record<string, CityKey> = {
   paris: "paris", "париж": "paris", "parís": "paris",
   london: "london", "лондон": "london", "londres": "london",
   istanbul: "istanbul", "стамбул": "istanbul", "estambul": "istanbul",
+  monaco: "monaco", "монако": "monaco", "mónaco": "monaco",
+  barcelona: "barcelona", "барселона": "barcelona",
 };
 
 const NAMES: Record<Lang, Record<CityKey, string>> = {
-  EN: { dubai: "Dubai", sydney: "Sydney", milan: "Milan", paris: "Paris", london: "London", istanbul: "Istanbul" },
-  RU: { dubai: "Дубай", sydney: "Сидней", milan: "Милан", paris: "Париж", london: "Лондон", istanbul: "Стамбул" },
-  ES: { dubai: "Dubái", sydney: "Sídney", milan: "Milán", paris: "París", london: "Londres", istanbul: "Estambul" },
-  PT: { dubai: "Dubai", sydney: "Sydney", milan: "Milão", paris: "Paris", london: "Londres", istanbul: "Istambul" },
+  EN: { dubai: "Dubai", sydney: "Sydney", milan: "Milan", paris: "Paris", london: "London", istanbul: "Istanbul", monaco: "Monaco", barcelona: "Barcelona" },
+  RU: { dubai: "Дубай", sydney: "Сидней", milan: "Милан", paris: "Париж", london: "Лондон", istanbul: "Стамбул", monaco: "Монако", barcelona: "Барселона" },
+  ES: { dubai: "Dubái", sydney: "Sídney", milan: "Milán", paris: "París", london: "Londres", istanbul: "Estambul", monaco: "Mónaco", barcelona: "Barcelona" },
+  PT: { dubai: "Dubai", sydney: "Sydney", milan: "Milão", paris: "Paris", london: "Londres", istanbul: "Istambul", monaco: "Mônaco", barcelona: "Barcelona" },
 };
 
 export function cityLabel(raw: string | null | undefined, lang: Lang): string {
