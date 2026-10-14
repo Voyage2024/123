@@ -147,6 +147,8 @@ export type InviteClientProps = {
   data?: InviteData;
   /** выдать ключ на имя гостьи; бросает ошибку, если квота исчерпана */
   onIssueKey?: (guestName: string) => Promise<IssuedKey>;
+  /** готовая шапка страницы (PageExplainerHeader из page.tsx); без неё — прежний заголовок */
+  header?: ReactNode;
 };
 
 const NO_MILESTONES: Record<Milestone, boolean> = { approved: false, firstStamp: false, innerCircle: false };
@@ -1458,7 +1460,11 @@ function ProtegeRow({
  * СТРАНИЦА
  * ══════════════════════════════════════════════════════════════════ */
 
-export default function InviteClient({ data = DEMO_INVITE_DATA, onIssueKey = demoIssueKey }: InviteClientProps) {
+export default function InviteClient({
+  data = DEMO_INVITE_DATA,
+  onIssueKey = demoIssueKey,
+  header,
+}: InviteClientProps) {
   const lang = useLang();
   const t = T[lang];
   const patron = usePatronName(data.patronName);
@@ -1590,17 +1596,19 @@ export default function InviteClient({ data = DEMO_INVITE_DATA, onIssueKey = dem
       <style>{INVITE_CSS}</style>
 
       <div className="mx-auto max-w-6xl space-y-16 px-4 pb-10 pt-2 sm:px-8 sm:pb-14 sm:pt-2">
-        {/* ── шапка ── */}
-        <header className="max-w-3xl">
-          <Eyebrow>Voyage · Patronage</Eyebrow>
-          <h1 className={`${cormorant.className} mt-3 text-4xl font-medium leading-[1.05] text-slate-100 sm:text-5xl`}>
-            {t.title}
-          </h1>
-          <p className="mt-4 text-[15px] leading-relaxed text-zinc-400">{t.lead}</p>
-          <p className="mt-5 flex gap-3 border-l border-amber-200/30 pl-4 text-[15px] leading-relaxed text-slate-300">
-            <span>{t.hint(plus(div.firstStamp)) + (hasScout ? t.hintEnd : t.hintScout)}</span>
-          </p>
-        </header>
+        {/* ── шапка: из page.tsx (PageExplainerHeader) или прежняя ── */}
+        {header ?? (
+          <header className="max-w-3xl">
+            <Eyebrow>Voyage · Patronage</Eyebrow>
+            <h1 className={`${cormorant.className} mt-3 text-4xl font-medium leading-[1.05] text-slate-100 sm:text-5xl`}>
+              {t.title}
+            </h1>
+            <p className="mt-4 text-[15px] leading-relaxed text-zinc-400">{t.lead}</p>
+            <p className="mt-5 flex gap-3 border-l border-amber-200/30 pl-4 text-[15px] leading-relaxed text-slate-300">
+              <span>{t.hint(plus(div.firstStamp)) + (hasScout ? t.hintEnd : t.hintScout)}</span>
+            </p>
+          </header>
+        )}
 
         {/* ── ключ и квота ── */}
         <section

@@ -1,13 +1,25 @@
 "use client";
 
+/* ──────────────────────────────────────────────────────────────────────
+ * VOYAGE · ТЕМЫ / ТУСОВКИ — app/(dashboard)/dashboard/parties/page.tsx
+ *
+ * Шапка-объяснялка (PageExplainerHeader, тексты — COPY) + список
+ * активных закрытых мероприятий (global_events) с заявкой в одно
+ * касание. Отказ → повторная заявка через месяц (getCooldownUnlockDate).
+ * ──────────────────────────────────────────────────────────────────── */
+
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { submitEventApplication } from "@/app/actions/event-applications";
 import { motion } from "framer-motion";
-import { Check, Clock, GlassWater, Loader2, MapPin } from "lucide-react";
+import { Check, Clock, Gem, GlassWater, Loader2, MapPin, ScrollText, Send, Ticket } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import PageExplainerHeader, {
+  ResidentPageShell,
+  type ExplainerDict,
+} from "@/app/(dashboard)/dashboard/_components/PageExplainerHeader";
 
 // -----------------------------------------------------
 // Types
@@ -57,9 +69,85 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 // Localization
 // -----------------------------------------------------
 
+/** Шапка страницы — PageExplainerHeader */
+const COPY: ExplainerDict = {
+  EN: {
+    eyebrow: "Private events",
+    title: "Themes & Parties",
+    subtitle:
+      "Private parties, dinners and yacht days — for club residents only. Entry is by approved application: apply right from the event card.",
+    steps: ["Choose an event", "Apply in a single tap", "Wait for the club’s approval"],
+    cards: [
+      {
+        title: "Terms · no surprises",
+        text: "Region, description and conditions are right on the card. Some events require a KYC verification level or are open only to a specific resident segment — if you can’t apply, you’ll see why straight away.",
+      },
+      {
+        title: "Points · for your index",
+        text: "Every completed private event earns points that stay in your Influence Index for good — alongside tour points and stamps. For the Elite segment, they also shape the Elite ranking.",
+        cta: "Global ranking",
+      },
+    ],
+  },
+  RU: {
+    eyebrow: "Закрытые мероприятия",
+    title: "Темы и тусовки",
+    subtitle:
+      "Закрытые вечеринки, ужины и выходы на яхтах — только для резидентов клуба. Попасть можно по одобренной заявке: подайте её прямо с карточки мероприятия.",
+    steps: ["Выберите мероприятие", "Подайте заявку в одно касание", "Дождитесь одобрения клуба"],
+    cards: [
+      {
+        title: "Условия · без сюрпризов",
+        text: "Регион, описание и условия участия — прямо на карточке. Некоторые мероприятия требуют уровня верификации KYC или открыты только своему сегменту резидентов: если подать заявку нельзя, вы сразу увидите причину.",
+      },
+      {
+        title: "Баллы · в ваш индекс",
+        text: "Каждое завершённое закрытое мероприятие приносит баллы — они навсегда остаются в вашем Influence Index вместе с баллами туров и штампами. Для сегмента Elite они же формируют рейтинг Elite.",
+        cta: "Глобальный рейтинг",
+      },
+    ],
+  },
+  ES: {
+    eyebrow: "Eventos privados",
+    title: "Temas y fiestas",
+    subtitle:
+      "Fiestas privadas, cenas y salidas en yate, solo para residentes del club. Se entra con una solicitud aprobada: solicítala directamente desde la tarjeta del evento.",
+    steps: ["Elige un evento", "Solicita con un toque", "Espera la aprobación del club"],
+    cards: [
+      {
+        title: "Condiciones · sin sorpresas",
+        text: "Región, descripción y condiciones, directamente en la tarjeta. Algunos eventos exigen un nivel de verificación KYC o están abiertos solo a un segmento de residentes: si no puedes solicitar, verás el motivo al instante.",
+      },
+      {
+        title: "Puntos · para tu índice",
+        text: "Cada evento privado completado suma puntos que se quedan para siempre en tu Influence Index, junto con los puntos de tours y los sellos. En el segmento Elite, además, definen el ranking Elite.",
+        cta: "Ranking global",
+      },
+    ],
+  },
+  PT: {
+    eyebrow: "Eventos privados",
+    title: "Temas e festas",
+    subtitle:
+      "Festas privadas, jantares e passeios de iate — só para residentes do clube. A entrada é por solicitação aprovada: solicite direto no cartão do evento.",
+    steps: ["Escolha um evento", "Solicite com um toque", "Aguarde a aprovação do clube"],
+    cards: [
+      {
+        title: "Condições · sem surpresas",
+        text: "Região, descrição e condições ficam no próprio cartão. Alguns eventos exigem um nível de verificação KYC ou são abertos só para um segmento de residentes — se não for possível solicitar, você vê o motivo na hora.",
+      },
+      {
+        title: "Pontos · para o seu índice",
+        text: "Cada evento privado concluído rende pontos que ficam para sempre no seu Influence Index — junto com os pontos de tours e os carimbos. No segmento Elite, eles também definem o ranking Elite.",
+        cta: "Ranking global",
+      },
+    ],
+  },
+};
+
+/** Тексты списка и карточек мероприятий */
 const T = {
   EN: {
-    title: "Private Events",
     subtitle: "Exclusive gatherings available to club residents.",
     activeEvents: "Active events",
     privateEvent: "Private event",
@@ -89,7 +177,6 @@ const T = {
     },
   },
   RU: {
-    title: "Закрытые мероприятия",
     subtitle: "Эксклюзивные мероприятия, доступные резидентам клуба.",
     activeEvents: "Актуальные мероприятия",
     privateEvent: "Закрытое мероприятие",
@@ -119,7 +206,6 @@ const T = {
     },
   },
   ES: {
-    title: "Eventos privados",
     subtitle: "Eventos exclusivos disponibles para los residentes del club.",
     activeEvents: "Eventos activos",
     privateEvent: "Evento privado",
@@ -149,7 +235,6 @@ const T = {
     },
   },
   PT: {
-    title: "Eventos privados",
     subtitle: "Eventos exclusivos disponíveis para residentes do clube.",
     activeEvents: "Eventos ativos",
     privateEvent: "Evento privado",
@@ -253,21 +338,21 @@ function PartyCardSkeleton({ index }: { index: number }) {
       className="overflow-hidden rounded-2xl border border-zinc-800/50 bg-zinc-900/40 backdrop-blur-xl"
       aria-hidden
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1.2fr)_minmax(260px,1fr)_190px]">
-        <div className="p-6 lg:p-7">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(280px,1.2fr)_minmax(260px,1fr)_190px]">
+        <div className="p-6 xl:p-7">
           <SkeletonLine className="mb-5 h-3 w-28" />
           <SkeletonLine className="mb-3 h-8 w-3/4" />
           <SkeletonLine className="h-4 w-32" />
         </div>
 
-        <div className="space-y-3 border-t border-zinc-800/40 p-6 lg:border-l lg:border-t-0 lg:p-7">
+        <div className="space-y-3 border-t border-zinc-800/40 p-6 xl:border-l xl:border-t-0 xl:p-7">
           <SkeletonLine className="h-3 w-20" />
           <SkeletonLine className="h-4 w-full" />
           <SkeletonLine className="h-4 w-5/6" />
           <SkeletonLine className="h-4 w-2/3" />
         </div>
 
-        <div className="flex items-center border-t border-zinc-800/40 p-6 lg:border-l lg:border-t-0 lg:p-7">
+        <div className="flex items-center border-t border-zinc-800/40 p-6 xl:border-l xl:border-t-0 xl:p-7">
           <SkeletonLine className="h-12 w-full rounded-xl" />
         </div>
       </div>
@@ -431,9 +516,9 @@ function PartyCard({ event, userId, lang, t }: PartyCardProps) {
         hover:border-amber-200/20 hover:bg-zinc-900/55
       "
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1.2fr)_minmax(260px,1fr)_190px]">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(280px,1.2fr)_minmax(260px,1fr)_190px]">
         {/* Event */}
-        <div className="relative p-6 lg:p-7">
+        <div className="relative p-6 xl:p-7">
           <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-amber-200/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
           <div className="mb-4 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.2em] text-amber-200/70">
@@ -457,7 +542,7 @@ function PartyCard({ event, userId, lang, t }: PartyCardProps) {
         </div>
 
         {/* Description / Conditions */}
-        <div className="border-t border-zinc-800/40 p-6 lg:border-l lg:border-t-0 lg:p-7">
+        <div className="border-t border-zinc-800/40 p-6 xl:border-l xl:border-t-0 xl:p-7">
           <div className="space-y-5">
             {event.description && (
               <div>
@@ -490,7 +575,7 @@ function PartyCard({ event, userId, lang, t }: PartyCardProps) {
         </div>
 
         {/* Application */}
-        <div className="flex flex-col justify-center border-t border-zinc-800/40 p-6 lg:border-l lg:border-t-0 lg:p-7">
+        <div className="flex flex-col justify-center border-t border-zinc-800/40 p-6 xl:border-l xl:border-t-0 xl:p-7">
           <button
             type="button"
             onClick={handleApply}
@@ -651,42 +736,37 @@ export default function PartiesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 pb-8 pt-2 text-zinc-100 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        {/* Header */}
-        <div className="mb-8 flex flex-col gap-5 border-b border-zinc-800/40 pb-7 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.25em] text-amber-200/60">
-              <GlassWater className="h-3.5 w-3.5" />
+    <ResidentPageShell>
+      <PageExplainerHeader
+        copy={COPY}
+        icon={GlassWater}
+        stepIcons={[MapPin, Send, Ticket]}
+        cards={[{ icon: ScrollText }, { icon: Gem, href: "/dashboard/leaderboard" }]}
+      />
+
+      {/* ───────────── Список мероприятий ───────────── */}
+      <section aria-labelledby="parties-list-title" className="mt-10">
+        <div className="mb-5 flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h2 id="parties-list-title" className="text-xl font-medium text-white sm:text-2xl">
               {t.activeEvents}
-            </div>
-
-            <h1
-              className="text-5xl font-medium leading-none text-zinc-100 sm:text-6xl"
-              style={{ fontFamily: "'Cormorant Garamond', serif" }}
-            >
-              {t.title}
-            </h1>
-
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-500 sm:text-base">
-              {t.subtitle}
-            </p>
+            </h2>
+            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-neutral-500">{t.subtitle}</p>
           </div>
 
           {isLoading ? (
-            <SkeletonLine className="h-8 w-40 rounded-full" />
+            <SkeletonLine className="h-8 w-10 shrink-0 rounded-full" />
           ) : (
             events.length > 0 && (
-              <div className="shrink-0 rounded-full border border-zinc-800/50 bg-zinc-900/40 px-4 py-2 text-xs text-zinc-500 backdrop-blur">
-                <span className="text-amber-200/80">{events.length}</span>{" "}
-                {t.activeEvents.toLowerCase()}
-              </div>
+              <span className="flex h-8 min-w-[2rem] shrink-0 items-center justify-center rounded-full border border-[#c9a961]/30 bg-[#c9a961]/10 px-3 font-mono text-sm tabular-nums text-[#c9a961]">
+                {events.length}
+              </span>
             )
           )}
         </div>
 
         {content}
-      </div>
-    </main>
+      </section>
+    </ResidentPageShell>
   );
 }

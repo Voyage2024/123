@@ -11,10 +11,15 @@
  *   game_circles            — квоты ключей по Circle (лестница на странице)
  * Ключ выдаёт RPC club_issue_invite — квоту проверяет сервер.
  * Realtime: решение модератора, штамп протеже → страница перечитывается.
+ *
+ * Шапка-объяснялка (PageExplainerHeader, тексты — COPY) видна сразу,
+ * ещё до загрузки ключей: в состояниях «загрузка» и «ошибка» она стоит
+ * в той же сетке, что и в InviteClient, поэтому ничего не прыгает.
  * ──────────────────────────────────────────────────────────────────── */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, CalendarDays, Crown, Gem, Gift, KeyRound, Loader2, Send } from "lucide-react";
+import PageExplainerHeader, { type ExplainerDict } from "@/app/(dashboard)/dashboard/_components/PageExplainerHeader";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/app/context/AuthContext";
 import { useLanguage } from "@/app/context/LanguageContext";
@@ -42,6 +47,91 @@ type Allowance = {
 };
 
 type Raw = { allowance: Allowance | null; invites: ClubInvite[]; rules: PatronageRuleRow[]; circles: GameCircleRow[] };
+
+/** Шапка страницы — PageExplainerHeader. ES — на «usted», как весь InviteClient */
+const COPY: ExplainerDict = {
+  EN: {
+    eyebrow: "Voyage · Patronage",
+    title: "Extend an invitation",
+    subtitle:
+      "Voyage grows by recommendation alone. Every key is personal: your name stands beside hers on the invitation — so choose without haste.",
+    steps: ["Seal a personal key", "Send it personally", "Earn dividends from her path"],
+    cards: [
+      {
+        title: "Season keys · quota by Circle",
+        text: "The higher your Circle, the more keys you hold each season. A key is single-use and time-limited: unopened, it returns to you; if the club declines your guest, it burns. Keys don’t carry over to the next season.",
+      },
+      {
+        title: "Dividends · for her path, not a sign-up",
+        text: "Influence Index points arrive in stages: she’s admitted to the club → her first visa stamp → Inner Circle. The finest protégées earn you the Club Scout, Patron and Tastemaker distinctions.",
+        cta: "Global ranking",
+      },
+    ],
+  },
+  RU: {
+    eyebrow: "Voyage · Patronage",
+    title: "Пригласить в клуб",
+    subtitle:
+      "Voyage растёт только по рекомендации. Каждый ключ именной: на приглашении ваше имя стоит рядом с её именем — поэтому выбирайте не спеша.",
+    steps: ["Запечатайте именной ключ", "Отправьте его лично", "Получайте дивиденды за её путь"],
+    cards: [
+      {
+        title: "Ключи сезона · квота по Circle",
+        text: "Чем выше ваш Circle, тем больше ключей в сезоне. Ключ одноразовый и живёт ограниченное время: не открыт — вернётся к вам, клуб не принял гостью — сгорает. На следующий сезон ключи не переносятся.",
+      },
+      {
+        title: "Дивиденды · за путь, а не за регистрацию",
+        text: "Баллы в Influence Index приходят по этапам: гостью приняли в клуб → первый визовый штамп → Inner Circle. За лучших протеже — отличия Club Scout, Patron и Tastemaker.",
+        cta: "Глобальный рейтинг",
+      },
+    ],
+  },
+  ES: {
+    eyebrow: "Voyage · Patronage",
+    title: "Extender una invitación",
+    subtitle:
+      "Voyage solo crece por recomendación. Cada llave es nominal: en la invitación su nombre va junto al de ella, así que elija sin prisa.",
+    steps: ["Selle una llave nominal", "Envíela personalmente", "Reciba dividendos por su recorrido"],
+    cards: [
+      {
+        title: "Llaves de temporada · cuota por Circle",
+        text: "Cuanto más alto su Circle, más llaves recibe cada temporada. La llave es de un solo uso y tiene plazo: si no se abre, vuelve a usted; si el club no admite a su invitada, se quema. Las llaves no pasan a la siguiente temporada.",
+      },
+      {
+        title: "Dividendos · por su recorrido, no por el registro",
+        text: "Los puntos del Influence Index llegan por etapas: admitida en el club → primer sello de visado → Inner Circle. Las mejores protegidas le valen las distinciones Club Scout, Patron y Tastemaker.",
+        cta: "Ranking global",
+      },
+    ],
+  },
+  PT: {
+    eyebrow: "Voyage · Patronage",
+    title: "Estender um convite",
+    subtitle:
+      "O Voyage só cresce por indicação. Cada chave é nominal: no convite, o seu nome fica ao lado do dela — por isso escolha sem pressa.",
+    steps: ["Sele uma chave nominal", "Envie pessoalmente", "Ganhe dividendos pelo caminho dela"],
+    cards: [
+      {
+        title: "Chaves da temporada · cota por Circle",
+        text: "Quanto mais alto o seu Circle, mais chaves por temporada. A chave é de uso único e tem prazo: se não for aberta, volta para você; se o clube não aceitar sua convidada, ela queima. As chaves não passam para a próxima temporada.",
+      },
+      {
+        title: "Dividendos · pelo caminho, não pelo cadastro",
+        text: "Os pontos do Influence Index chegam por etapas: aceita no clube → primeiro carimbo de visto → Inner Circle. As melhores protegidas rendem as distinções Club Scout, Patron e Tastemaker.",
+        cta: "Ranking global",
+      },
+    ],
+  },
+};
+
+/** Та же сетка, что у InviteClient: шапка не сдвигается, когда данные приходят */
+function InviteFrame({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-300 antialiased">
+      <div className="mx-auto max-w-6xl space-y-16 px-4 pb-10 pt-2 sm:px-8 sm:pb-14 sm:pt-2">{children}</div>
+    </div>
+  );
+}
 
 const TEXT: Record<Lang, { loading: string; failed: string; migration: string; retry: string }> = {
   en: {
@@ -201,10 +291,20 @@ export default function InvitePage() {
     [scheduleReload],
   );
 
+  const header = (
+    <PageExplainerHeader
+      copy={COPY}
+      icon={Gift}
+      stepIcons={[KeyRound, Send, Gem]}
+      cards={[{ icon: CalendarDays }, { icon: Crown, href: "/dashboard/leaderboard" }]}
+    />
+  );
+
   if (error && !data) {
     return (
-      <div className="flex min-h-screen items-start justify-center bg-zinc-950 px-4 pt-2 pb-8">
-        <div role="alert" className="w-full max-w-lg rounded-2xl border border-red-500/25 bg-red-950/20 px-6 py-5">
+      <InviteFrame>
+        {header}
+        <div role="alert" className="mx-auto w-full max-w-lg rounded-2xl border border-red-500/25 bg-red-950/20 px-6 py-5">
           <p className="flex items-center gap-2.5 text-sm font-medium text-red-200">
             <AlertTriangle size={17} strokeWidth={1.5} aria-hidden />
             {text.failed}
@@ -219,20 +319,21 @@ export default function InvitePage() {
             {text.retry}
           </button>
         </div>
-      </div>
+      </InviteFrame>
     );
   }
 
   if (!data) {
     return (
-      <div className="flex min-h-screen items-start justify-center bg-zinc-950 px-4 pt-2 pb-8 text-sm text-zinc-500">
-        <span className="inline-flex items-center gap-2.5">
+      <InviteFrame>
+        {header}
+        <p role="status" className="flex items-center justify-center gap-2.5 text-sm text-zinc-500">
           <Loader2 size={17} strokeWidth={1.5} className="animate-spin" aria-hidden />
           {text.loading}
-        </span>
-      </div>
+        </p>
+      </InviteFrame>
     );
   }
 
-  return <InviteClient data={data} onIssueKey={issueKey} />;
+  return <InviteClient data={data} onIssueKey={issueKey} header={header} />;
 }

@@ -1736,7 +1736,11 @@ function LegendaryCombos({
 /* ── Страница ────────────────────────────────────────────────────── */
 
 /** demo — показать демонстрационный паспорт без обращения к базе */
-export default function GamificationClient({ demo = false }: { demo?: boolean }) {
+/**
+ * header — готовая шапка страницы (PageExplainerHeader из page.tsx).
+ * Без неё остаётся прежний заголовок «Хроника резидента».
+ */
+export default function GamificationClient({ demo = false, header }: { demo?: boolean; header?: ReactNode }) {
   const lang = useLang();
   const t = T[lang];
   const { resident, userId, authLoading } = useResident();
@@ -1784,15 +1788,19 @@ export default function GamificationClient({ demo = false }: { demo?: boolean })
     <div lang={lang} className="relative mx-auto max-w-5xl px-6 pb-24 pt-2 sm:px-8">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(90%_60%_at_50%_-10%,#191714_0%,#0a0a0b_55%,#060607_100%)]" />
 
-      <header className="mb-14">
-        <p className="text-[10px] uppercase tracking-[0.5em] text-zinc-600">Voyage · Season {SEASON}</p>
-        <h1
-          className={`${cormorant.className} mt-3 text-5xl font-medium tracking-wide text-zinc-50 sm:text-6xl`}
-        >
-          {t.title}
-        </h1>
-        <p className={`${cormorant.className} mt-3 text-lg italic text-zinc-500`}>{t.subtitle}</p>
-      </header>
+      {header ? (
+        <div className="mb-14">{header}</div>
+      ) : (
+        <header className="mb-14">
+          <p className="text-[10px] uppercase tracking-[0.5em] text-zinc-600">Voyage · Season {SEASON}</p>
+          <h1
+            className={`${cormorant.className} mt-3 text-5xl font-medium tracking-wide text-zinc-50 sm:text-6xl`}
+          >
+            {t.title}
+          </h1>
+          <p className={`${cormorant.className} mt-3 text-lg italic text-zinc-500`}>{t.subtitle}</p>
+        </header>
+      )}
 
       <div className="mb-20 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <MembershipCard resident={resident} circle={circle} />
