@@ -1,8 +1,13 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
+  BadgeCheck,
   CheckCircle2,
+  IdCard,
+  LockKeyhole,
+  ScanFace,
   Shield,
+  ShieldCheck,
   Eye,
   EyeOff,
   Wallet,
@@ -68,6 +73,10 @@ import ProfileIdentityQuickEdit from "@/app/components/profile/ProfileIdentityQu
  *    персонал клуба — это гарантирует триггер в БД
  *    (миграция 20261009_profile_kyc_vault.sql), а не только интерфейс.
  *    Документы KYC — в приватном бакете `kyc-vault` (см. KycSection).
+ *
+ * 7. Перед KycSection стоит KycExplainer — «зачем паспорт и видео»
+ *    языком заботы, а не банка (тексты — COPY ниже). Слово «KYC» в
+ *    интерфейсе этого файла заменено на «Верификация».
  * ──────────────────────────────────────────────────────────────────── */
 
 /** Временный запасной доступ — пока у этого аккаунта нет роли owner/admin в profiles */
@@ -87,7 +96,7 @@ const en = {
   next: "Next",
   topCircle: "The club's highest circle",
   influence: "Influence Index",
-  kycShort: "KYC verification",
+  kycShort: "Verification",
   cardAutoNote: "Your card changes colour on its own — with every new circle.",
   cardTapHint: "Touch the card — light will run across it",
 
@@ -157,7 +166,7 @@ const T: Record<Lang, Dict> = {
     next: "Следующий",
     topCircle: "Высший круг клуба",
     influence: "Индекс влияния",
-    kycShort: "KYC-верификация",
+    kycShort: "Верификация",
     cardAutoNote: "Цвет карты меняется сам — с каждым новым кругом.",
     cardTapHint: "Коснитесь карты — блик пройдёт по ней",
 
@@ -221,7 +230,7 @@ const T: Record<Lang, Dict> = {
     next: "Siguiente",
     topCircle: "El círculo más alto del club",
     influence: "Índice de influencia",
-    kycShort: "Verificación KYC",
+    kycShort: "Verificación",
     cardAutoNote: "El color de la tarjeta cambia solo, con cada nuevo círculo.",
     cardTapHint: "Toque la tarjeta: un destello la recorrerá",
 
@@ -285,7 +294,7 @@ const T: Record<Lang, Dict> = {
     next: "Próximo",
     topCircle: "O círculo mais alto do clube",
     influence: "Índice de influência",
-    kycShort: "Verificação KYC",
+    kycShort: "Verificação",
     cardAutoNote: "A cor do cartão muda sozinha a cada novo círculo.",
     cardTapHint: "Toque no cartão — um brilho vai percorrê-lo",
 
@@ -340,6 +349,184 @@ const T: Record<Lang, Dict> = {
     uploading: "Enviando",
   },
 };
+
+// ─── «Зачем паспорт и видео» — блок перед KycSection ────────────────
+
+type KycPoint = { kicker: string; title: string; text: string };
+
+type KycExplainerCopy = {
+  eyebrow: string;
+  title: string;
+  lead: string;
+  /** Плашка у заголовка, когда верификация пройдена полностью */
+  trusted: string;
+  /** Паспорт · Видео · Конфиденциальность */
+  points: readonly [KycPoint, KycPoint, KycPoint];
+};
+
+const COPY: Record<Lang, KycExplainerCopy> = {
+  EN: {
+    eyebrow: "Why we ask",
+    title: "Your safety is part of the service",
+    lead: "We understand that a request for your passport and a video can feel unsettling. Here is, honestly, why we need them — and how we protect your data.",
+    trusted: "Trusted status confirmed",
+    points: [
+      {
+        kicker: "Digital security",
+        title: "Why a passport",
+        text: "No more scans in messengers, where they linger for years and get forwarded on. Your passport is uploaded once to the club’s encrypted vault and used for one thing only — buying your flights and booking your hotel.",
+      },
+      {
+        kicker: "Trusted status",
+        title: "Why a video",
+        text: "Top international tours require guarantees. A short video in which you name the club confirms that you are the real woman behind the profile — and that you run it yourself. It protects you from fakes and opens the door to castings.",
+      },
+      {
+        kicker: "Confidentiality",
+        title: "Who sees your data",
+        text: "Only the club’s founder can open your passport, and only the verification team sees the video. We never pass your documents on to third parties — the sole exception is the airline and the hotel when we arrange your trip.",
+      },
+    ],
+  },
+  RU: {
+    eyebrow: "Зачем это нужно",
+    title: "Ваша безопасность — часть сервиса",
+    lead: "Мы понимаем: просьба загрузить паспорт и записать видео может насторожить. Рассказываем честно, зачем это нужно и как мы бережём ваши данные.",
+    trusted: "Статус Trusted подтверждён",
+    points: [
+      {
+        kicker: "Цифровая безопасность",
+        title: "Зачем паспорт",
+        text: "Больше никаких сканов в мессенджерах, где они живут годами и пересылаются дальше. Паспорт загружается один раз в зашифрованное хранилище клуба и нужен только для одного — купить вам авиабилеты и забронировать отель.",
+      },
+      {
+        kicker: "Статус Trusted",
+        title: "Зачем видео",
+        text: "Топовые международные туры требуют гарантий. Короткое видео, где вы называете клуб, подтверждает: вы — та самая девушка из анкеты, и анкету ведёте вы сами. Это защищает от фейков и открывает доступ к кастингам.",
+      },
+      {
+        kicker: "Конфиденциальность",
+        title: "Кто видит данные",
+        text: "Паспорт может открыть только основатель клуба, видео смотрит только команда верификации. Мы не передаём документы третьим лицам — исключение лишь авиакомпания и отель, когда оформляем вашу поездку.",
+      },
+    ],
+  },
+  ES: {
+    eyebrow: "Por qué lo pedimos",
+    title: "Tu seguridad es parte del servicio",
+    lead: "Entendemos que pedirte el pasaporte y un vídeo puede inquietarte. Te contamos con total sinceridad para qué los necesitamos y cómo protegemos tus datos.",
+    trusted: "Estado Trusted confirmado",
+    points: [
+      {
+        kicker: "Seguridad digital",
+        title: "¿Por qué el pasaporte?",
+        text: "Se acabaron los escaneos por mensajería, donde se quedan años y se reenvían sin control. Subes tu pasaporte una sola vez a la bóveda cifrada del club y solo se usa para una cosa: comprar tus vuelos y reservar tu hotel.",
+      },
+      {
+        kicker: "Estado Trusted",
+        title: "¿Por qué el vídeo?",
+        text: "Los mejores tours internacionales exigen garantías. Un vídeo corto en el que nombras el club confirma que eres la chica real del perfil y que lo gestionas tú misma. Te protege de las falsificaciones y te abre el acceso a los castings.",
+      },
+      {
+        kicker: "Confidencialidad",
+        title: "¿Quién ve tus datos?",
+        text: "Solo el fundador del club puede abrir tu pasaporte, y el vídeo lo ve únicamente el equipo de verificación. No compartimos tus documentos con terceros; la única excepción son la aerolínea y el hotel cuando organizamos tu viaje.",
+      },
+    ],
+  },
+  PT: {
+    eyebrow: "Por que pedimos",
+    title: "Sua segurança faz parte do serviço",
+    lead: "Sabemos que um pedido de passaporte e de vídeo pode deixar você desconfiada. Contamos com toda a sinceridade por que precisamos deles — e como protegemos seus dados.",
+    trusted: "Status Trusted confirmado",
+    points: [
+      {
+        kicker: "Segurança digital",
+        title: "Por que o passaporte",
+        text: "Chega de digitalizações em mensageiros, onde ficam por anos e são reencaminhadas. Você envia o passaporte uma única vez para o cofre criptografado do clube, e ele serve para uma coisa só: comprar suas passagens e reservar seu hotel.",
+      },
+      {
+        kicker: "Status Trusted",
+        title: "Por que o vídeo",
+        text: "Os melhores tours internacionais exigem garantias. Um vídeo curto em que você diz o nome do clube confirma que você é a mesma garota do perfil — e que é você quem cuida dele. Isso protege contra perfis falsos e abre o acesso aos castings.",
+      },
+      {
+        kicker: "Confidencialidade",
+        title: "Quem vê seus dados",
+        text: "Só o fundador do clube pode abrir o seu passaporte, e o vídeo é visto apenas pela equipe de verificação. Não repassamos seus documentos a terceiros — a única exceção são a companhia aérea e o hotel quando organizamos sua viagem.",
+      },
+    ],
+  },
+};
+
+const KYC_POINT_ICONS = [IdCard, ScanFace, LockKeyhole] as const;
+
+/** Объясняющий блок перед KycSection: паспорт, видео, конфиденциальность */
+function KycExplainer({ lang, kycLevel }: { lang: Lang; kycLevel: number }) {
+  const c = COPY[lang] ?? COPY.EN;
+  const trusted = kycLevel >= 3;
+
+  return (
+    <section aria-labelledby="kyc-why-title" className="mb-6">
+      <div className="relative overflow-hidden rounded-2xl border border-[#c9a961]/20 bg-gradient-to-br from-[#c9a961]/[0.07] via-zinc-950 to-zinc-950 p-5 sm:p-7">
+        <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#c9a961]/10 blur-3xl" />
+        <ShieldCheck
+          aria-hidden
+          strokeWidth={1}
+          className="pointer-events-none absolute -bottom-6 -right-4 h-36 w-36 text-[#c9a961]/[0.05] sm:h-44 sm:w-44"
+        />
+
+        <div className="relative">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="inline-flex items-center gap-2 rounded-full border border-[#c9a961]/30 bg-[#c9a961]/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-[#c9a961]">
+              <ShieldCheck aria-hidden className="h-3.5 w-3.5" />
+              {c.eyebrow}
+            </p>
+            {trusted && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/[0.07] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-emerald-200/90">
+                <BadgeCheck aria-hidden className="h-3.5 w-3.5" />
+                {c.trusted}
+              </span>
+            )}
+          </div>
+
+          <h2
+            id="kyc-why-title"
+            className={`${cormorant.className} mt-4 text-[26px] font-medium leading-tight text-zinc-50 sm:text-[32px]`}
+          >
+            {c.title}
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">{c.lead}</p>
+
+          {/* рядом с сайдбаром три колонки тесные — до xl пункты идут строками */}
+          <ul className="mt-6 grid gap-3 xl:grid-cols-3">
+            {c.points.map((point, i) => {
+              const Icon = KYC_POINT_ICONS[i];
+              return (
+                <li
+                  key={point.kicker}
+                  className="flex gap-4 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-4 backdrop-blur-sm sm:p-5 xl:flex-col xl:gap-3"
+                >
+                  <span
+                    aria-hidden
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#c9a961]/20 bg-[#c9a961]/10 text-[#c9a961]"
+                  >
+                    <Icon className="h-[18px] w-[18px]" strokeWidth={1.5} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#c9a961]/80">{point.kicker}</p>
+                    <h3 className="mt-1 text-[15px] font-medium text-zinc-100">{point.title}</h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{point.text}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 // ─── Types ──────────────────────────────────────────────────────────
 interface Profile {
@@ -1435,6 +1622,7 @@ export default function ResidentProfilePage() {
         </section>
 
         {/* ── KYC Verification ───────────────────────────────────── */}
+        <KycExplainer lang={lang} kycLevel={profile.kyc_level} />
         <KycSection
           userId={user.id}
           lang={lang}

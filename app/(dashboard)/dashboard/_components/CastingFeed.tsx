@@ -21,10 +21,11 @@
  *   selected     → рукопожатие, детали придут в Telegram
  *   ошибка       → причина и «Повторить»
  *
- * Все обращения к базе — в _lib/actions.ts (сейчас заглушки).
+ * Все обращения к базе: лента — в _lib/castingFeed.ts (RPC partner_resident_feed),
+ * отклики и тумблер — в _lib/actions.ts.
  * ──────────────────────────────────────────────────────────────────── */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Banknote,
@@ -61,8 +62,14 @@ import {
   TIER_TEXT,
   cormorant,
 } from "../../partner/_components/PartnerUI";
-import { buildCastingFeedMock, type FeedCasting, type ResidentProfile, type ResponseStatus } from "../_lib/castingFeed";
-import { applyToCasting, setOpenToTours, withdrawResponse, type ActionResult } from "../_lib/actions";
+import {
+  fetchCastingFeed,
+  type CastingFeedData,
+  type FeedCasting,
+  type ResidentProfile,
+  type ResponseStatus,
+} from "../_lib/castingFeed";
+import { applyToCasting, markCastingsSeen, setOpenToTours, withdrawResponse, type ActionResult } from "../_lib/actions";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПЕРЕВОДЫ
@@ -103,6 +110,8 @@ type Dict = {
   selectedHint: string;
   error: Record<Failure, string>;
   retry: string;
+  loading: string;
+  loadError: string;
 };
 
 const T: Record<Lang, Dict> = {
@@ -149,6 +158,8 @@ const T: Record<Lang, Dict> = {
       network: "Couldn’t send. Check your connection and try again.",
     },
     retry: "Try again",
+    loading: "Loading castings…",
+    loadError: "Couldn’t load castings. Refresh the page to try again.",
   },
   RU: {
     eyebrow: "Кастинги",
@@ -193,6 +204,8 @@ const T: Record<Lang, Dict> = {
       network: "Не удалось отправить. Проверьте связь и попробуйте ещё раз.",
     },
     retry: "Повторить",
+    loading: "Загружаем кастинги…",
+    loadError: "Не удалось загрузить кастинги. Обновите страницу.",
   },
   ES: {
     eyebrow: "Castings",
@@ -237,6 +250,8 @@ const T: Record<Lang, Dict> = {
       network: "No se pudo enviar. Revisa la conexión e inténtalo de nuevo.",
     },
     retry: "Reintentar",
+    loading: "Cargando castings…",
+    loadError: "No se pudieron cargar los castings. Actualiza la página.",
   },
   PT: {
     eyebrow: "Castings",
@@ -281,6 +296,8 @@ const T: Record<Lang, Dict> = {
       network: "Não foi possível enviar. Verifique a conexão e tente de novo.",
     },
     retry: "Tentar de novo",
+    loading: "Carregando castings…",
+    loadError: "Não foi possível carregar os castings. Atualize a página.",
   },
 };
 
@@ -635,10 +652,45 @@ function patch<V>(cur: Record<string, V>, id: string, v: V | null): Record<strin
   return next;
 }
 
+/** Загрузка: пока идёт запрос — заголовок и строка «Загружаем»; при ошибке — текст вместо ленты */
 export default function CastingFeed() {
+  const { lang } = usePartnerFormat();
+  const t = T[lang] ?? T.EN;
+  const [data, setData] = useState<CastingFeedData | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetchCastingFeed()
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        void markCastingsSeen();
+      })
+      .catch((e: unknown) => {
+        console.error("[castings] feed:", e);
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!data) {
+    return (
+      <section aria-busy={!failed} aria-label={t.title}>
+        <SectionHeader eyebrow={t.eyebrow} title={t.title} icon={Sparkles} />
+        <p className="mt-6 text-sm text-zinc-500">{failed ? t.loadError : t.loading}</p>
+      </section>
+    );
+  }
+
+  return <FeedBody data={data} />;
+}
+
+function FeedBody({ data }: { data: CastingFeedData }) {
   const { lang, c: cm, fmt } = usePartnerFormat();
   const t = T[lang] ?? T.EN;
-  const [data] = useState(buildCastingFeedMock);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [open, setOpen] = useState(data.me.openToTours);
   const [openBusy, setOpenBusy] = useState(false);
@@ -657,7 +709,7 @@ export default function CastingFeed() {
   const markPending = (id: string, v: Pending | null) => setPending((cur) => patch(cur, id, v));
   const markFailure = (id: string, v: Failure | null) => setFailures((cur) => patch(cur, id, v));
 
-  /** Заглушка отклика: вся работа с базой — в _lib/actions.ts → applyToCasting */
+  /** Отклик: запись в базу — в _lib/actions.ts → applyToCasting */
   const handleApply = async (id: string) => {
     if (pending[id]) return;
     markFailure(id, null);

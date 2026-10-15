@@ -1,5 +1,5 @@
 /* ──────────────────────────────────────────────────────────────────────
- * VOYAGE · РЕЗИДЕНТКА — лента кастингов: типы и демо-данные
+ * VOYAGE · РЕЗИДЕНТКА — лента кастингов: типы и загрузка
  * app/(dashboard)/dashboard/_lib/castingFeed.ts
  *
  * Что видит резидентка (правила клуба):
@@ -8,16 +8,28 @@
  *   · менеджера — только по репутации (Ключ, оценка, число туров),
  *     без имени и контактов: до рукопожатия никаких личных сообщений;
  *   · только кастинги, куда её пустит база (partner_me_can_respond):
- *     полная верификация, не в Blacklist, кастинг открыт и не истёк.
+ *     полная верификация, тумблер «Открыта к турам», не в Blacklist,
+ *     кастинг открыт и не истёк.
  *
- * Для живых данных нужна RPC ленты: сейчас резидентка не читает
- * partner_castings (select — только менеджер и админ), а гонорара,
- * оплаты перелёта и отеля, роста и языков в таблице кастинга нет —
- * они есть только в тексте брифа. См. комментарий в конце файла.
+ * Данные — RPC public.partner_resident_feed(), миграция
+ * supabase/migrations/20261015120000_partner_resident_feed.sql
  * ──────────────────────────────────────────────────────────────────── */
 
-import { DAY, HOUR, MIN } from "../../partner/_lib/clock";
-import type { KeyTier, Payer, ProjectKey } from "../../partner/_lib/command";
+import { supabase } from "@/lib/supabase";
+import {
+  PAYERS,
+  PROJECTS,
+  arr,
+  num,
+  obj,
+  oneOf,
+  str,
+  time,
+  type KeyTier,
+  type Payer,
+  type ProjectKey,
+  type Raw,
+} from "../../partner/_lib/command";
 
 /**
  * Отклик резидентки — partner_casting_responses.status, null — ещё не откликалась.
@@ -25,6 +37,7 @@ import type { KeyTier, Payer, ProjectKey } from "../../partner/_lib/command";
  *   option    менеджер поставил опцион — мягкая бронь до option_expires_at
  *   selected  рукопожатие: она в составе тура
  *   withdrawn сама отозвала отклик (можно откликнуться снова)
+ * declined в ленту не попадает: кастинг для неё скрыт.
  */
 export type ResponseStatus = "ready" | "option" | "selected" | "withdrawn";
 
@@ -64,80 +77,95 @@ export type CastingFeedData = {
   castings: FeedCasting[];
 };
 
-export function buildCastingFeedMock(): CastingFeedData {
-  const t = Date.now();
-  const midnight = new Date(t);
-  midnight.setHours(0, 0, 0, 0);
-  const d0 = midnight.getTime();
+/* ══════════════════════════════════════════════════════════════════
+ * ЗАГРУЗКА
+ * ══════════════════════════════════════════════════════════════════ */
 
+export async function fetchCastingFeed(): Promise<CastingFeedData> {
+  const { data, error } = await supabase.rpc("partner_resident_feed");
+  if (error) throw new Error(error.message);
+  return parseFeed(data);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+ * РАЗБОР ОТВЕТА
+ * Каждое поле проверяется: кривая запись выпадает из ленты, остальные
+ * кастинги не страдают
+ * ══════════════════════════════════════════════════════════════════ */
+
+const TIERS = ["silver", "gold", "platinum"] as const;
+const RESPONSE_STATUSES = ["ready", "option", "selected", "withdrawn"] as const;
+
+/** «2026-10-20» → локальная полночь (Date.parse сдвинул бы день к западу от Гринвича) */
+const day = (v: unknown): number | null => {
+  const m = typeof v === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(v) : null;
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : null;
+};
+
+const langs = (v: unknown): string[] =>
+  arr(v).flatMap((x) => (typeof x === "string" && /^[A-Z]{2}$/.test(x) ? [x] : []));
+
+function parseResponse(v: unknown): FeedCasting["response"] {
+  if (!v || typeof v !== "object") return null;
+  const r = obj(v);
+  const status = oneOf(r.status, RESPONSE_STATUSES);
+  if (!status) return null;
   return {
-    generatedAt: t,
-    me: { height: 176, languages: ["EN", "RU"], openToTours: true },
-    castings: [
-      {
-        id: "cs-mxp-02", city: "Milan", project: "show",
-        startsAt: d0 + 14 * DAY, endsAt: d0 + 16 * DAY, slots: 2, closesAt: t + 5 * HOUR + 20 * MIN,
-        fee: { amount: 900, currency: "EUR" }, flightPaidBy: "participant", hotelPaidBy: "manager",
-        heightMin: 175, languages: ["EN"],
-        note: "Неделя моды: два выхода, примерка накануне.",
-        manager: { tier: "gold", rating: 4.8, tours: 24 },
-        fresh: false,
-        response: { status: "option", at: t - 20 * HOUR, optionUntil: t + 30 * HOUR },
-      },
-      {
-        id: "cs-dxb-01", city: "Dubai", project: "campaign",
-        startsAt: d0 + 9 * DAY, endsAt: d0 + 13 * DAY, slots: 4, closesAt: t + 18 * HOUR,
-        fee: { amount: 1500, currency: "USD" }, flightPaidBy: "manager", hotelPaidBy: "manager",
-        heightMin: 172, languages: ["EN"],
-        note: "Кампейн бренда купальников: день на яхте, день в студии.",
-        manager: { tier: "gold", rating: 4.8, tours: 24 },
-        fresh: true,
-        response: null,
-      },
-      {
-        id: "cs-cdg-03", city: "Paris", project: "shoot",
-        startsAt: d0 + 21 * DAY, endsAt: d0 + 22 * DAY, slots: 3, closesAt: t + 2 * DAY + 4 * HOUR,
-        fee: { amount: 1200, currency: "EUR" }, flightPaidBy: "manager", hotelPaidBy: "manager",
-        heightMin: 170, languages: ["EN"],
-        note: "Лукбук для ювелирного дома, студия в 8-м округе.",
-        manager: { tier: "platinum", rating: 4.9, tours: 41 },
-        fresh: false,
-        response: { status: "ready", at: t - 2 * HOUR, optionUntil: null },
-      },
-      {
-        id: "cs-lhr-04", city: "London", project: "event",
-        startsAt: d0 + 18 * DAY, endsAt: d0 + 19 * DAY, slots: 6, closesAt: t + 3 * DAY + 2 * HOUR,
-        fee: { amount: 700, currency: "GBP" }, flightPaidBy: "manager", hotelPaidBy: "split",
-        heightMin: null, languages: ["EN"],
-        note: null,
-        manager: { tier: "silver", rating: null, tours: 1 },
-        fresh: true,
-        response: null,
-      },
-      {
-        id: "cs-mco-05", city: "Monaco", project: "event",
-        startsAt: d0 + 30 * DAY, endsAt: d0 + 32 * DAY, slots: 3, closesAt: t + 4 * DAY,
-        fee: null, flightPaidBy: "manager", hotelPaidBy: "manager",
-        heightMin: 170, languages: ["EN"],
-        note: "Гала-ужин, дресс-код black tie.",
-        manager: { tier: "gold", rating: 4.6, tours: 9 },
-        fresh: false,
-        response: null,
-      },
-    ],
+    status,
+    at: time(r.at) ?? Date.now(),
+    optionUntil: time(r.option_until),
   };
 }
 
-/* ──────────────────────────────────────────────────────────────────────
- * ДЛЯ ПОДКЛЮЧЕНИЯ К БАЗЕ
- *
- * 1. Миграция: в partner_castings добавить поля брифа, которые сейчас
- *    живут только в тексте — fee_amount, fee_currency, flight_paid_by,
- *    hotel_paid_by, height_min, languages text[].
- * 2. RPC partner_resident_feed() (security definer, как partner_command):
- *    открытые кастинги (status = 'open', closes_at > now()), только если
- *    у резидентки kyc_level >= 3, open_to_tours = true и её нет в Blacklist;
- *    требования брифа совпадают с профилем; плюс её собственный отклик.
- *    Менеджер — только tier / rating / tours из partner_manager_stats.
- * 3. buildCastingFeedMock() заменить вызовом этой RPC.
- * ──────────────────────────────────────────────────────────────────── */
+function parseCasting(r: Raw): FeedCasting | null {
+  const id = str(r.id);
+  const project = oneOf(r.project, PROJECTS);
+  const startsAt = day(r.starts_on);
+  const endsAt = day(r.ends_on);
+  const closesAt = time(r.closes_at);
+  if (!id || !project || startsAt === null || endsAt === null || closesAt === null) return null;
+
+  const feeAmount = num(r.fee_amount);
+  const feeCurrency = str(r.fee_currency);
+  const m = obj(r.manager);
+
+  return {
+    id,
+    city: str(r.city) ?? "—",
+    project,
+    startsAt,
+    endsAt,
+    slots: num(r.slots) ?? 1,
+    closesAt,
+    fee: feeAmount !== null && feeCurrency ? { amount: feeAmount, currency: feeCurrency } : null,
+    flightPaidBy: oneOf(r.flight_paid_by, PAYERS) ?? "manager",
+    hotelPaidBy: oneOf(r.hotel_paid_by, PAYERS) ?? "manager",
+    heightMin: num(r.height_min),
+    languages: langs(r.languages),
+    note: str(r.brief),
+    manager: {
+      tier: oneOf(m.tier, TIERS) ?? "silver",
+      rating: num(m.rating),
+      tours: num(m.tours) ?? 0,
+    },
+    fresh: r.fresh === true,
+    response: parseResponse(r.response),
+  };
+}
+
+export function parseFeed(raw: unknown): CastingFeedData {
+  const root = obj(raw);
+  const me = obj(root.me);
+  return {
+    generatedAt: time(root.generated_at) ?? Date.now(),
+    me: {
+      height: num(me.height),
+      languages: langs(me.languages),
+      openToTours: me.open_to_tours === true,
+    },
+    castings: arr(root.castings).flatMap((x) => {
+      const c = parseCasting(obj(x));
+      return c ? [c] : [];
+    }),
+  };
+}

@@ -152,7 +152,7 @@ type KycDict = {
 };
 
 const RU: KycDict = {
-  title: "KYC-верификация",
+  title: "Верификация",
   subtitle: "— Уровни доверия",
   level: "Уровень",
   l1Title: "Личность",
@@ -178,7 +178,7 @@ const RU: KycDict = {
   videoSizeShort: "Файл — не более 50 МБ",
   passportFormats: "JPG, PNG или PDF.",
   passportSize: "Размер файла — не более 10 МБ.",
-  l3Brief: "Для получения третьего уровня KYC необходимо согласовать и провести созвон через консьержа.",
+  l3Brief: "Для получения третьего уровня верификации необходимо согласовать и провести созвон через консьержа.",
   uploadPassport: "Загрузить паспорт",
   uploadVideo: "Загрузить видео",
   passportDialogTitle: "Загрузка паспорта",
@@ -203,7 +203,7 @@ const RU: KycDict = {
 };
 
 const EN: KycDict = {
-  title: "KYC Verification",
+  title: "Verification",
   subtitle: "— Trust Tiers",
   level: "Level",
   l1Title: "Identity",
@@ -229,7 +229,7 @@ const EN: KycDict = {
   videoSizeShort: "File — up to 50 MB",
   passportFormats: "JPG, PNG or PDF.",
   passportSize: "File size — no more than 10 MB.",
-  l3Brief: "To reach KYC level three, arrange and hold a call through the concierge.",
+  l3Brief: "To reach verification level three, arrange and hold a call through the concierge.",
   uploadPassport: "Upload passport",
   uploadVideo: "Upload video",
   passportDialogTitle: "Passport upload",
@@ -254,7 +254,7 @@ const EN: KycDict = {
 };
 
 const ES: KycDict = {
-  title: "Verificación KYC",
+  title: "Verificación",
   subtitle: "— Niveles de confianza",
   level: "Nivel",
   l1Title: "Identidad",
@@ -281,7 +281,7 @@ const ES: KycDict = {
   passportFormats: "JPG, PNG o PDF.",
   passportSize: "Tamaño del archivo — no más de 10 MB.",
   l3Brief:
-    "Para obtener el tercer nivel de KYC, es necesario acordar y realizar una llamada a través del concierge.",
+    "Para obtener el tercer nivel de verificación, es necesario acordar y realizar una llamada a través del concierge.",
   uploadPassport: "Subir pasaporte",
   uploadVideo: "Subir video",
   passportDialogTitle: "Subir pasaporte",
@@ -306,7 +306,7 @@ const ES: KycDict = {
 };
 
 const PT: KycDict = {
-  title: "Verificação KYC",
+  title: "Verificação",
   subtitle: "— Níveis de confiança",
   level: "Nível",
   l1Title: "Identidade",
@@ -333,7 +333,7 @@ const PT: KycDict = {
   passportFormats: "JPG, PNG ou PDF.",
   passportSize: "Tamanho do arquivo — no máximo 10 MB.",
   l3Brief:
-    "Para obter o terceiro nível de KYC, é necessário agendar e realizar uma chamada por meio do concierge.",
+    "Para obter o terceiro nível de verificação, é necessário agendar e realizar uma chamada por meio do concierge.",
   uploadPassport: "Enviar passaporte",
   uploadVideo: "Enviar vídeo",
   passportDialogTitle: "Envio do passaporte",
@@ -687,7 +687,7 @@ function UploadDialog({
         <div className="flex items-center justify-between gap-3">
           <span className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-300/85">
             <FileIcon aria-hidden className="h-3.5 w-3.5" strokeWidth={1.6} />
-            KYC · {t.level} {level}
+            {t.level} {level}
           </span>
           <button
             ref={closeRef}

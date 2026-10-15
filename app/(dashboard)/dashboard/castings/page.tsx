@@ -6,12 +6,10 @@
  * Шапка-объяснялка (PageExplainerHeader) + лента кастингов.
  * Механика ленты — в ../_components/CastingFeed:
  *   «Открыта к турам» → «Готова в тур» → опцион → рукопожатие.
- * Пока лента на демо-данных (buildCastingFeedMock), рядом с пилюлей
- * висит бейдж «Демо» — снять вместе с моком.
+ * Лента живая: данные из partner_resident_feed (см. _components/CastingFeed).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { EyeOff, Handshake, Hourglass, MousePointerClick, Sparkles, ToggleRight } from "lucide-react";
-import { usePartnerFormat } from "@/app/(dashboard)/partner/_lib/format";
 import CastingFeed from "@/app/(dashboard)/dashboard/_components/CastingFeed";
 import PageExplainerHeader, {
   ResidentPageShell,
@@ -94,8 +92,6 @@ const COPY: ExplainerDict = {
 };
 
 export default function ResidentCastingsPage() {
-  const { c: cm } = usePartnerFormat();
-
   return (
     <ResidentPageShell>
       <PageExplainerHeader
@@ -103,15 +99,6 @@ export default function ResidentCastingsPage() {
         icon={Sparkles}
         stepIcons={[ToggleRight, MousePointerClick, Handshake]}
         cards={[{ icon: EyeOff }, { icon: Hourglass, href: "/dashboard/tours" }]}
-        badge={
-          // пока лента на демо-данных — снять вместе с buildCastingFeedMock
-          <span
-            title={cm.demoHint}
-            className="rounded-full border border-zinc-700/80 px-2 py-0.5 text-[9px] uppercase tracking-[0.2em] text-zinc-500"
-          >
-            {cm.demo}
-          </span>
-        }
       />
 
       <div className="mt-10">
