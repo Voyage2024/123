@@ -1184,7 +1184,7 @@ export default function DirectoryClient({
   initialKyc?: KycFilter;
   refreshing?: boolean;
   migrationMissing?: boolean;
-  /** кто смотрит: паспорта — только role = owner; email — в водяной знак */
+  /** кто смотрит: паспорта — owner/admin; email — в водяной знак */
   viewer?: DirectoryViewer;
   onRefresh: () => void;
   /** null — успех, строка — текст ошибки */
@@ -1196,7 +1196,7 @@ export default function DirectoryClient({
 }) {
   const { t, lang } = useDirectoryI18n();
   const kyc = useKycSubmissions();
-  const canViewPassport = viewer.role === "owner";
+  const canViewPassport = viewer.role === "owner" || viewer.role === "admin";
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
