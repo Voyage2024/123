@@ -44,6 +44,7 @@ export type ResponseStatus = "ready" | "option" | "selected" | "withdrawn";
 export type FeedCasting = {
   id: string;
   city: string;
+  audienceSegment: "all" | "working" | "elite";
   project: ProjectKey;
   startsAt: number;
   endsAt: number;
@@ -132,6 +133,7 @@ function parseCasting(r: Raw): FeedCasting | null {
   return {
     id,
     city: str(r.city) ?? "—",
+    audienceSegment: oneOf(r.audience_segment, ["all", "working", "elite"] as const) ?? "working",
     project,
     startsAt,
     endsAt,

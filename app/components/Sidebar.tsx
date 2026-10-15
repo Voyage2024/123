@@ -513,7 +513,7 @@ const SWIPE_CLOSE_PX = 72;
 const BRANCH_X = "left-[25px]";
 
 export default function Sidebar() {
-  const { user, role, loading, logout } = useAuth();
+  const { user, role, segment, loading, logout } = useAuth();
   const { lang } = useLanguage();
   const pathname = usePathname();
   const router = useRouter();
@@ -534,10 +534,21 @@ export default function Sidebar() {
 
   const t = translations[(lang as LangKey) in translations ? (lang as LangKey) : "EN"];
 
-  const sections = useMemo(
-    () => (role ? NAV_SECTIONS.filter((s) => s.roles.includes(role)) : []),
-    [role]
-  );
+  const sections = useMemo(() => {
+    if (!role) return [];
+    return NAV_SECTIONS.filter((section) => section.roles.includes(role)).map((section) => {
+      if (role !== "resident" || section.key !== "club" || segment !== "elite") return section;
+      // ELITE keeps event application history and passport access, but not the
+      // ordinary Working tour-points shortcut. The applications page hides its
+      // Tours tab for Elite residents and defaults directly to Events.
+      return {
+        ...section,
+        items: section.items.map((item) => item.key === "leaderboard" && item.children
+          ? { ...item, children: item.children.filter((child) => child.key !== "tourPoints") }
+          : item),
+      };
+    });
+  }, [role, segment]);
 
   const showSectionTitles = sections.length > 1;
 

@@ -38,6 +38,8 @@ type GlobalEvent = {
   description: string | null;
   conditions: string | null;
   is_active: boolean;
+  audience_segment: "all" | "working" | "elite";
+  minimum_level?: number | null;
   minimum_kyc_level?: number | null;
   capacity?: number | null;
   application_closes_at?: string | null;
@@ -50,6 +52,8 @@ type FormState = {
   description: string;
   conditions: string;
   is_active: boolean;
+  audience_segment: "all" | "working" | "elite";
+  minimum_level: number;
   minimum_kyc_level: number;
   capacity: string;
   application_closes_at: string;
@@ -65,6 +69,8 @@ const EMPTY_FORM: FormState = {
   description: '',
   conditions: '',
   is_active: true,
+  audience_segment: "all",
+  minimum_level: 1,
   minimum_kyc_level: 2,
   capacity: '',
   application_closes_at: '',
@@ -109,6 +115,12 @@ const T = {
     phDescription: 'Short description of the party…',
     phConditions: 'Dates, fees, accommodation, requirements, contract terms…',
     fieldMinimumKyc: 'Minimum KYC level',
+    fieldTargetAudience: 'Target audience',
+    audienceAll: 'All residents',
+    audienceWorking: 'Working only',
+    audienceElite: 'Elite only',
+    fieldMinimumLevel: 'Minimum resident level',
+    levelHint: 'Set 1 for no additional level restriction.',
     fieldCapacity: 'Capacity (optional)',
     capacityUnlimited: 'Unlimited if empty',
     fieldClosesAt: 'Application deadline (optional)',
@@ -167,6 +179,12 @@ const T = {
     phDescription: 'Краткое описание тусовки…',
     phConditions: 'Даты, оплата, проживание, требования, условия контракта…',
     fieldMinimumKyc: 'Минимальный уровень KYC',
+    fieldTargetAudience: 'Целевая аудитория',
+    audienceAll: 'Для всех',
+    audienceWorking: 'Только Working',
+    audienceElite: 'Только Elite',
+    fieldMinimumLevel: 'Минимальный уровень резидентки',
+    levelHint: 'Уровень 1 не добавляет ограничений.',
     fieldCapacity: 'Вместимость (необязательно)',
     capacityUnlimited: 'Пусто - без ограничения',
     fieldClosesAt: 'Дедлайн заявок (необязательно)',
@@ -225,6 +243,12 @@ const T = {
     phDescription: 'Breve descripción de la fiesta…',
     phConditions: 'Fechas, pagos, alojamiento, requisitos, condiciones del contrato…',
     fieldMinimumKyc: 'Nivel mínimo de KYC',
+    fieldTargetAudience: 'Audiencia objetivo',
+    audienceAll: 'Todas las residentes',
+    audienceWorking: 'Solo Working',
+    audienceElite: 'Solo Elite',
+    fieldMinimumLevel: 'Nivel mínimo de residente',
+    levelHint: 'El nivel 1 no añade restricciones.',
     fieldCapacity: 'Capacidad (opcional)',
     capacityUnlimited: 'Sin límite si está vacío',
     fieldClosesAt: 'Fecha límite de solicitudes (opcional)',
@@ -283,6 +307,12 @@ const T = {
     phDescription: 'Breve descrição da festa…',
     phConditions: 'Datas, pagamentos, hospedagem, requisitos, termos do contrato…',
     fieldMinimumKyc: 'Nível mínimo de KYC',
+    fieldTargetAudience: 'Público-alvo',
+    audienceAll: 'Todas as residentes',
+    audienceWorking: 'Só Working',
+    audienceElite: 'Só Elite',
+    fieldMinimumLevel: 'Nível mínimo da residente',
+    levelHint: 'O nível 1 não adiciona restrições.',
     fieldCapacity: 'Capacidade (opcional)',
     capacityUnlimited: 'Sem limite se ficar vazio',
     fieldClosesAt: 'Prazo para inscrições (opcional)',
@@ -438,6 +468,8 @@ export default function PartiesAdminPage() {
       description: ev.description ?? '',
       conditions: ev.conditions ?? '',
       is_active: ev.is_active,
+      audience_segment: ev.audience_segment === 'elite' || ev.audience_segment === 'working' ? ev.audience_segment : 'all',
+      minimum_level: Number.isInteger(ev.minimum_level) ? Number(ev.minimum_level) : 1,
       minimum_kyc_level: Number.isInteger(ev.minimum_kyc_level) ? Number(ev.minimum_kyc_level) : 0,
       capacity: ev.capacity == null ? '' : String(ev.capacity),
       application_closes_at: toDatetimeLocal(ev.application_closes_at),
@@ -489,6 +521,8 @@ export default function PartiesAdminPage() {
       description: form.description.trim() || null,
       conditions: form.conditions.trim() || null,
       is_active: form.is_active,
+      audience_segment: form.audience_segment,
+      minimum_level: form.minimum_level,
       minimum_kyc_level: form.minimum_kyc_level,
       capacity: capacityValue,
       application_closes_at: deadlineValue,
@@ -679,6 +713,9 @@ export default function PartiesAdminPage() {
                   <div className="min-w-0">
                     <h3 className={`${cormorant.className} truncate text-2xl font-semibold text-neutral-100`}>
                       {ev.title}
+                      <span className={`ml-2 inline-flex rounded-full border px-2 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-wider ${ev.audience_segment === 'elite' ? 'border-[#c9a961]/40 bg-[#c9a961]/10 text-[#c9a961]' : ev.audience_segment === 'working' ? 'border-zinc-700 bg-zinc-800/60 text-zinc-300' : 'border-zinc-700/70 bg-zinc-900/60 text-zinc-400'}`}>
+                        {ev.audience_segment === 'elite' ? 'ELITE' : ev.audience_segment === 'working' ? 'WORKING' : 'ALL'}
+                      </span>
                     </h3>
                     <div className="mt-1 flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-amber-200/80">
                       <MapPin className="h-3.5 w-3.5" />
@@ -848,7 +885,30 @@ export default function PartiesAdminPage() {
 
               <div className="rounded-2xl border border-amber-200/10 bg-amber-200/[0.025] p-4">
                 <div className="mb-3 text-xs leading-5 text-neutral-500">{t.kycHint}</div>
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">{t.fieldTargetAudience}</label>
+                    <select
+                      value={form.audience_segment}
+                      onChange={(e) => setForm((f) => ({ ...f, audience_segment: e.target.value as FormState['audience_segment'] }))}
+                      className={`${inputBase} border-neutral-800`}
+                    >
+                      <option value="all">{t.audienceAll}</option>
+                      <option value="working">{t.audienceWorking}</option>
+                      <option value="elite">{t.audienceElite}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">{t.fieldMinimumLevel}</label>
+                    <select
+                      value={form.minimum_level}
+                      onChange={(e) => setForm((f) => ({ ...f, minimum_level: Number(e.target.value) }))}
+                      className={`${inputBase} border-neutral-800`}
+                    >
+                      {[1, 2, 3, 4, 5, 6].map((level) => <option key={level} value={level}>Level {level}</option>)}
+                    </select>
+                    <p className="mt-1 text-[10px] leading-4 text-neutral-500">{t.levelHint}</p>
+                  </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">{t.fieldMinimumKyc}</label>
                     <select

@@ -20,6 +20,8 @@ import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import type { Payer, ProjectKey } from "../_lib/command";
 
 export const PROJECT_TYPES: ProjectKey[] = ["shoot", "show", "campaign", "event"];
+export const AUDIENCE_SEGMENTS = ["all", "working", "elite"] as const;
+export type AudienceSegment = (typeof AUDIENCE_SEGMENTS)[number];
 export const CURRENCIES = ["USD", "EUR", "AED", "AUD", "GBP"] as const;
 export const LANGUAGE_CODES = ["EN", "RU", "ES", "PT", "FR", "IT", "DE", "AR"] as const;
 const PAYERS: Payer[] = ["manager", "participant", "split"];
@@ -28,6 +30,7 @@ const MAX_LANGS = 5;
 
 export type BriefValues = {
   city: string;
+  audienceSegment: AudienceSegment;
   project: ProjectKey;
   startsOn: string; // YYYY-MM-DD
   endsOn: string;
@@ -44,6 +47,7 @@ export type BriefValues = {
 
 export const EMPTY_BRIEF: BriefValues = {
   city: "",
+  audienceSegment: "working",
   project: "shoot",
   startsOn: "",
   endsOn: "",
@@ -98,6 +102,7 @@ export function briefToRow(v: BriefValues) {
   const fee = v.feeAmount.trim() === "" ? null : Number(v.feeAmount.replace(",", "."));
   return {
     city: v.city.trim(),
+    audience_segment: v.audienceSegment,
     project_type: v.project,
     starts_on: v.startsOn,
     ends_on: v.endsOn,
@@ -133,6 +138,8 @@ type Dict = {
   city: string;
   cityHint: string;
   project: string;
+  audienceSegment: string;
+  audiences: Record<AudienceSegment, string>;
   projects: Record<ProjectKey, string>;
   dates: string;
   from: string;
@@ -159,6 +166,8 @@ const T: Record<Lang, Dict> = {
     city: "City",
     cityHint: "As it will appear in the brief.",
     project: "Project type",
+    audienceSegment: "Target audience",
+    audiences: { all: "All residents", working: "Working", elite: "Elite" },
     projects: { shoot: "Shoot", show: "Show", campaign: "Campaign", event: "Event" },
     dates: "Dates",
     from: "From",
@@ -192,6 +201,8 @@ const T: Record<Lang, Dict> = {
     city: "Город",
     cityHint: "Так он будет виден в брифе.",
     project: "Тип проекта",
+    audienceSegment: "Целевая аудитория",
+    audiences: { all: "Все резидентки", working: "Working", elite: "Elite" },
     projects: { shoot: "Съёмка", show: "Показ", campaign: "Кампейн", event: "Ивент" },
     dates: "Даты",
     from: "С",
@@ -225,6 +236,8 @@ const T: Record<Lang, Dict> = {
     city: "Ciudad",
     cityHint: "Tal como aparecerá en el brief.",
     project: "Tipo de proyecto",
+    audienceSegment: "Audiencia objetivo",
+    audiences: { all: "Todas las residentes", working: "Working", elite: "Elite" },
     projects: { shoot: "Sesión", show: "Desfile", campaign: "Campaña", event: "Evento" },
     dates: "Fechas",
     from: "Desde",
@@ -258,6 +271,8 @@ const T: Record<Lang, Dict> = {
     city: "Cidade",
     cityHint: "Como vai aparecer no brief.",
     project: "Tipo de projeto",
+    audienceSegment: "Público-alvo",
+    audiences: { all: "Todas as residentes", working: "Working", elite: "Elite" },
     projects: { shoot: "Ensaio", show: "Desfile", campaign: "Campanha", event: "Evento" },
     dates: "Datas",
     from: "De",
@@ -393,6 +408,18 @@ export function CastingBriefFields({
           render={(p) => t.projects[p]}
           onChange={(p) => set({ project: p })}
         />
+      </div>
+
+      <div className="space-y-2 md:col-span-2">
+        <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-zinc-400">{t.audienceSegment}</p>
+        <Choice
+          label={t.audienceSegment}
+          value={value.audienceSegment}
+          options={AUDIENCE_SEGMENTS}
+          render={(audience) => t.audiences[audience]}
+          onChange={(audience) => set({ audienceSegment: audience })}
+        />
+        <p className="text-[11px] text-zinc-500">Working sees Working/All castings; Elite sees only Elite/All castings.</p>
       </div>
 
       <div className="space-y-2">

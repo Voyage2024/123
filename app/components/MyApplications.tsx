@@ -166,12 +166,12 @@ function StatusBadge({ status, label }: { status: ApplicationStatus; label: stri
   );
 }
 
-export default function MyApplications({ locale = 'ru' }: { locale?: Locale }) {
+export default function MyApplications({ locale = 'ru', segment = 'working' }: { locale?: Locale; segment?: 'working' | 'elite' }) {
   const t = T[locale] ?? T.ru;
 
   const [apps, setApps] = useState<Application[]>([]);
   const [eventApps, setEventApps] = useState<EventApplication[]>([]);
-  const [tab, setTab] = useState<Tab>('tours');
+  const [tab, setTab] = useState<Tab>(segment === 'elite' ? 'events' : 'tours');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -180,6 +180,12 @@ export default function MyApplications({ locale = 'ru' }: { locale?: Locale }) {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+
+    if (segment === 'elite' && tab === 'tours') {
+      setApps([]);
+      setLoading(false);
+      return;
+    }
 
     const {
       data: { user },
@@ -214,13 +220,17 @@ export default function MyApplications({ locale = 'ru' }: { locale?: Locale }) {
       }
     }
     setLoading(false);
-  }, [t.error, t.eventError, tab]);
+  }, [t.error, t.eventError, tab, segment]);
 
   useEffect(() => {
+    if (segment === 'elite' && tab === 'tours') {
+      setTab('events');
+      return;
+    }
     // Initial data loading is intentionally kicked off after mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-  }, [load]);
+  }, [load, segment, tab]);
 
   const cancelApplication = async (id: string) => {
     setDeletingId(id);
@@ -270,7 +280,7 @@ export default function MyApplications({ locale = 'ru' }: { locale?: Locale }) {
         aria-label={t.title}
         className="mb-5 inline-flex rounded-full border border-white/10 bg-zinc-900/70 p-1 backdrop-blur-xl"
       >
-        {(['tours', 'events'] as const).map((key) => (
+        {(segment === 'elite' ? (['events'] as const) : (['tours', 'events'] as const)).map((key) => (
           <button
             key={key}
             id={`my-apps-tab-${key}`}
