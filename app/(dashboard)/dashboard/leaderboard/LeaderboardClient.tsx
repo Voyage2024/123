@@ -37,6 +37,9 @@ export type LeaderboardEntry = {
   position: number;
   name: string;
   avatarUrl: string | null;
+  segment: "working" | "elite";
+  level: number;
+  reliability: number;
   circleKey: CircleKey;
   circleTitle: string;
   influence: number;
@@ -53,6 +56,7 @@ export type LeaderboardData = {
   /** по убыванию Индекса */
   entries: LeaderboardEntry[];
   meId: string | null;
+  mySegment: "working" | "elite";
   updatedAt: string;
 };
 
@@ -532,8 +536,10 @@ function Standing({ me, ranked, t }: { me: LeaderboardEntry; ranked: Leaderboard
       <div className="min-w-0">
         <p className={`${cormorant.className} text-3xl font-medium leading-none lining-nums tabular-nums text-zinc-50`}>{fmtPoints(me.influence)}</p>
         <p className="mt-1.5 text-[10px] uppercase tracking-[0.24em] text-zinc-500">Influence Index</p>
-        <div className="mt-2.5">
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           <CircleBadge circleKey={me.circleKey} title={me.circleTitle} />
+          <span className="rounded-full border border-zinc-800/80 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-zinc-400">Level {me.level}</span>
+          <span className={`rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-[0.12em] ${me.reliability >= 90 ? "border-emerald-400/20 text-emerald-300" : me.reliability >= 70 ? "border-amber-400/20 text-amber-200" : "border-red-400/20 text-red-300"}`}>Reliability {me.reliability}%</span>
         </div>
       </div>
 
@@ -582,8 +588,10 @@ function PodiumCard({ e, slot, me, t }: { e: LeaderboardEntry; slot: 1 | 2 | 3; 
         <span className={`${cormorant.className} lb-pod-name font-medium text-zinc-50`}>{name}</span>
         <span className="flex max-w-full flex-wrap items-center gap-1.5">
           <CircleBadge circleKey={e.circleKey} title={e.circleTitle} />
+          <span className="rounded-full border border-zinc-800/80 px-2 py-0.5 text-[9px] uppercase tracking-[0.12em] text-zinc-400">Level {e.level}</span>
           {me && <YouTag label={t.you} />}
         </span>
+        <span className={`text-[10px] ${e.reliability >= 90 ? "text-emerald-300" : e.reliability >= 70 ? "text-amber-200" : "text-red-300"}`}>Reliability {e.reliability}%</span>
         <span className="lb-pod-score mt-1">
           <span className={`${cormorant.className} lb-pod-value font-medium lining-nums tabular-nums text-zinc-50`}>
             {fmtPoints(e.influence)}
@@ -621,8 +629,10 @@ function RankRow({ e, me, elite, t }: { e: LeaderboardEntry; me: boolean; elite:
         </span>
         {me && <YouTag label={t.you} />}
       </span>
-      <span className="lb-row-badge flex">
+      <span className="lb-row-badge flex flex-wrap items-center gap-1.5">
         <CircleBadge circleKey={e.circleKey} title={e.circleTitle} compact />
+        <span className="rounded-full border border-zinc-800/80 px-2 py-0.5 text-[9px] uppercase tracking-[0.1em] text-zinc-500">Level {e.level}</span>
+        <span className={`text-[9px] ${e.reliability >= 90 ? "text-emerald-300" : e.reliability >= 70 ? "text-amber-200" : "text-red-300"}`}>{e.reliability}%</span>
       </span>
       <span className="lb-row-stats items-center">
         <Stat icon={Stamp} value={e.stamps} label={t.stamps} />
@@ -655,8 +665,22 @@ export default function LeaderboardClient({
   const lang = normalizeLang(ctx && typeof ctx === "object" ? (ctx as Record<string, unknown>).lang : ctx);
   const t = TEXT[lang];
 
+  const [segment, setSegment] = useState<"working" | "elite">(data.mySegment ?? "working");
+  const [shown, setShown] = useState(PAGE);
+  const [scrollTo, setScrollTo] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSegment(data.mySegment ?? "working");
+    setShown(PAGE);
+  }, [data.mySegment]);
+
+  const segmentEntries = useMemo(
+    () => data.entries.filter((entry) => entry.segment === segment),
+    [data.entries, segment],
+  );
+
   const { ranked, podium, ten, rest, me, unranked, threshold } = useMemo(() => {
-    const ranked = data.entries.filter((e) => e.influence > 0);
+    const ranked = segmentEntries.filter((e) => e.influence > 0);
     const elite = ranked.filter((e) => e.position <= TOP);
     const podium = elite.filter((e) => e.position <= PODIUM).slice(0, PODIUM);
     const podiumIds = new Set(podium.map((e) => e.profileId));
@@ -665,14 +689,11 @@ export default function LeaderboardClient({
       podium,
       ten: elite.filter((e) => !podiumIds.has(e.profileId)),
       rest: ranked.filter((e) => e.position > TOP),
-      me: data.meId ? (data.entries.find((e) => e.profileId === data.meId) ?? null) : null,
-      unranked: data.entries.length - ranked.length,
+      me: data.meId ? (segmentEntries.find((e) => e.profileId === data.meId) ?? null) : null,
+      unranked: segmentEntries.length - ranked.length,
       threshold: elite.length ? elite[elite.length - 1].influence : null,
     };
-  }, [data]);
-
-  const [shown, setShown] = useState(PAGE);
-  const [scrollTo, setScrollTo] = useState<string | null>(null);
+  }, [data.meId, segmentEntries]);
   const meRestIndex = me ? rest.findIndex((e) => e.profileId === me.profileId) : -1;
 
   useEffect(() => {
@@ -734,12 +755,33 @@ export default function LeaderboardClient({
           </div>
         </header>
 
+        <div className="mt-7 inline-flex rounded-full border border-zinc-800/80 bg-zinc-900/50 p-1 backdrop-blur-xl" role="tablist" aria-label="Resident segment">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={segment === "working"}
+            onClick={() => { setSegment("working"); setShown(PAGE); }}
+            className={`rounded-full px-5 py-2 text-[10px] font-medium tracking-[0.18em] transition ${segment === "working" ? "bg-zinc-200 text-zinc-950 shadow-[0_0_20px_-10px_rgba(255,255,255,0.45)]" : "text-zinc-400 hover:text-zinc-100"}`}
+          >WORKING</button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={segment === "elite"}
+            onClick={() => { setSegment("elite"); setShown(PAGE); }}
+            className={`rounded-full px-5 py-2 text-[10px] font-medium tracking-[0.18em] transition ${segment === "elite" ? "bg-amber-200 text-zinc-950 shadow-[0_0_24px_-10px_rgba(253,230,138,0.6)]" : "text-zinc-400 hover:text-zinc-100"}`}
+          >ELITE</button>
+        </div>
+
         {/* ── Ваше место ── */}
         <div className="mt-10">
           {me ? (
             <Standing me={me} ranked={ranked} t={t} />
           ) : (
-            <p className="rounded-xl border border-zinc-800/80 bg-zinc-900/30 px-4 py-3 text-xs text-zinc-500">{t.staffNote}</p>
+            <p className="rounded-xl border border-zinc-800/80 bg-zinc-900/30 px-4 py-3 text-xs text-zinc-500">
+              {data.entries.some((entry) => entry.profileId === data.meId)
+                ? `Your profile is in ${data.mySegment.toUpperCase()}. Select that league to view your position.`
+                : t.staffNote}
+            </p>
           )}
         </div>
 

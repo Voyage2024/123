@@ -523,11 +523,51 @@ function useResident() {
   return { resident, userId: user?.id ?? null, authLoading };
 }
 
+type PassportStampRow = {
+  id: string;
+  country_code: string;
+  country_title: string;
+  issued_at: string;
+  points_awarded: number | string;
+  activity_id?: string | null;
+};
+
+type ScoreEventRow = {
+  id: number | string;
+  event_key: string;
+  category: string;
+  points: number | string;
+  reason: string;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+type ResidentAchievementRow = {
+  achievement_key: string;
+  title: string;
+  activity_id?: string | null;
+  points_awarded: number | string;
+  earned_at: string;
+};
+
+type ResidentMetricsSnapshot = {
+  total_points: number | string;
+  stamps_count: number | string;
+  destinations_count: number | string;
+  combos_completed: number | string;
+  completed_activities: number | string;
+  achievements_count: number | string;
+};
+
 type GameData = {
   destinations: DestinationConfig[];
   combos: ComboConfig[];
   circles: CircleConfig[];
   stamps: StampInput[];
+  passportStamps: PassportStampRow[];
+  scoreEvents: ScoreEventRow[];
+  achievements: ResidentAchievementRow[];
+  metrics: ResidentMetricsSnapshot | null;
   completedComboIds: string[];
   standing: LeaderboardRow | null;
 };
@@ -537,8 +577,26 @@ const DEFAULT_CONFIG = {
   combos: resolveCombos(),
   circles: resolveCircles(),
 };
-const EMPTY_DATA: GameData = { ...DEFAULT_CONFIG, stamps: [], completedComboIds: [], standing: null };
-const DEMO_DATA: GameData = { ...DEFAULT_CONFIG, stamps: DEMO_STAMPS, completedComboIds: [], standing: null };
+const EMPTY_DATA: GameData = {
+  ...DEFAULT_CONFIG,
+  stamps: [],
+  passportStamps: [],
+  scoreEvents: [],
+  achievements: [],
+  metrics: null,
+  completedComboIds: [],
+  standing: null,
+};
+const DEMO_DATA: GameData = {
+  ...DEFAULT_CONFIG,
+  stamps: DEMO_STAMPS,
+  passportStamps: [],
+  scoreEvents: [],
+  achievements: [],
+  metrics: null,
+  completedComboIds: [],
+  standing: null,
+};
 
 const toStamp = (row: AttendanceRow): StampInput => ({
   destinationId: row.destination_id,
@@ -560,8 +618,8 @@ function useGameData(userId: string | null, authLoading: boolean, demo: boolean)
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const load = async () => {
-      const [destRes, comboRes, circleRes, stampRes, standingRes, scoreRes, achievementRes] = await Promise.all([
-        supabase.from("game_destinations").select("id, visa_tier, points, multiplier, active, sort_order"),
+      const [destRes, comboRes, circleRes, stampRes, passportStampRes, standingRes, scoreRes, achievementRes, metricsRes] = await Promise.all([
+        supabase.from("game_destinations").select("id, country_code, visa_tier, points, multiplier, active, sort_order"),
         supabase.from("game_combos").select("id, title, destination_ids, required_count, bonus, active, sort_order"),
         supabase.from("game_circles").select("level, key, title, min_influence"),
         supabase
@@ -569,25 +627,36 @@ function useGameData(userId: string | null, authLoading: boolean, demo: boolean)
           .select("id, destination_id, visit_number, points, multiplier, stamped_at")
           .eq("profile_id", userId)
           .order("stamped_at", { ascending: true }),
+        supabase
+          .from("resident_passport_stamps")
+          .select("id, country_code, country_title, issued_at, points_awarded, activity_id")
+          .eq("profile_id", userId)
+          .order("issued_at", { ascending: false }),
         supabase.from("v_global_leaderboard").select("*").eq("profile_id", userId).maybeSingle(),
         supabase
           .from("resident_score_events")
-          .select("event_key, category, points")
+          .select("id, event_key, category, points, reason, metadata, created_at")
           .eq("profile_id", userId)
-          .in("category", ["stamp", "combo"]),
+          .order("created_at", { ascending: false })
+          .limit(250),
         supabase
           .from("resident_achievements")
-          .select("achievement_key")
+          .select("achievement_key, title, activity_id, points_awarded, earned_at")
           .eq("profile_id", userId)
-          .like("achievement_key", "combo:%"),
+          .order("earned_at", { ascending: false }),
+        supabase
+          .from("resident_metrics")
+          .select("total_points, stamps_count, destinations_count, combos_completed, completed_activities, achievements_count")
+          .eq("profile_id", userId)
+          .maybeSingle(),
       ]);
       if (cancelled) return;
 
-      for (const res of [destRes, comboRes, circleRes, stampRes, standingRes, scoreRes, achievementRes]) {
+      for (const res of [destRes, comboRes, circleRes, stampRes, passportStampRes, standingRes, scoreRes, achievementRes, metricsRes]) {
         if (res.error) console.error("[Gamification] Load error:", res.error);
       }
 
-      const scoreRows = scoreRes.error ? [] : ((scoreRes.data ?? []) as Array<{ event_key: string; category: string; points: number | string }>);
+      const scoreRows = scoreRes.error ? [] : ((scoreRes.data ?? []) as ScoreEventRow[]);
       const awardedByAttendance = new Map<string, number>();
       const completedComboIds = new Set<string>();
       for (const row of scoreRows) {
@@ -599,7 +668,8 @@ function useGameData(userId: string | null, authLoading: boolean, demo: boolean)
           if (parts.length >= 3) completedComboIds.add(parts.slice(2).join(":"));
         }
       }
-      for (const row of (achievementRes.error ? [] : (achievementRes.data ?? [])) as Array<{ achievement_key: string }>) {
+      const achievementRows = achievementRes.error ? [] : ((achievementRes.data ?? []) as ResidentAchievementRow[]);
+      for (const row of achievementRows) {
         if (row.achievement_key.startsWith("combo:")) completedComboIds.add(row.achievement_key.slice("combo:".length));
       }
 
@@ -614,6 +684,10 @@ function useGameData(userId: string | null, authLoading: boolean, demo: boolean)
         combos: resolveCombos(comboRes.error ? null : (comboRes.data as GameComboRow[])),
         circles: resolveCircles(circleRes.error ? null : (circleRes.data as GameCircleRow[])),
         stamps,
+        passportStamps: passportStampRes.error ? [] : ((passportStampRes.data ?? []) as PassportStampRow[]),
+        scoreEvents: scoreRows,
+        achievements: achievementRows,
+        metrics: metricsRes.error ? null : ((metricsRes.data ?? null) as ResidentMetricsSnapshot | null),
         completedComboIds: [...completedComboIds],
         standing: standingRes.error ? null : ((standingRes.data ?? null) as LeaderboardRow | null),
       });
@@ -634,6 +708,16 @@ function useGameData(userId: string | null, authLoading: boolean, demo: boolean)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "game_attendance", filter: `profile_id=eq.${userId}` },
+        schedule,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "resident_passport_stamps", filter: `profile_id=eq.${userId}` },
+        schedule,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "resident_metrics", filter: `profile_id=eq.${userId}` },
         schedule,
       )
       .on(
@@ -1778,6 +1862,232 @@ function LegendaryCombos({
   );
 }
 
+const LEDGER_COPY: Record<Lang, {
+  ledgerTitle: string;
+  ledgerSubtitle: string;
+  ledgerEmpty: string;
+  nextLevel: (points: string, title: string) => string;
+  topCircle: string;
+  achievementsTitle: string;
+  earned: string;
+  available: string;
+  progress: (done: number, total: number) => string;
+  noAchievement: string;
+  dateUnknown: string;
+}> = {
+  en: {
+    ledgerTitle: "Influence Index · Bank Statement",
+    ledgerSubtitle: "Immutable history of points awarded by the club scoring engine.",
+    ledgerEmpty: "No score events have been recorded yet.",
+    nextLevel: (points, title) => `${points} points to ${title}`,
+    topCircle: "Black Circle · highest level reached",
+    achievementsTitle: "Achievements & Milestones",
+    earned: "Earned",
+    available: "In progress",
+    progress: (done, total) => `${done} / ${total}`,
+    noAchievement: "Not earned yet",
+    dateUnknown: "Date unavailable",
+  },
+  ru: {
+    ledgerTitle: "Influence Index · Банковская выписка",
+    ledgerSubtitle: "Неизменяемая история начислений серверного движка клуба.",
+    ledgerEmpty: "Начислений пока нет.",
+    nextLevel: (points, title) => `До уровня ${title} осталось ${points} б.`,
+    topCircle: "Black Circle · максимальный уровень достигнут",
+    achievementsTitle: "Ачивки и достижения",
+    earned: "Получено",
+    available: "В процессе",
+    progress: (done, total) => `${done} / ${total}`,
+    noAchievement: "Пока не получено",
+    dateUnknown: "Дата не указана",
+  },
+  es: {
+    ledgerTitle: "Influence Index · Extracto de puntos",
+    ledgerSubtitle: "Historial inmutable de los puntos otorgados por el motor del club.",
+    ledgerEmpty: "Todavía no hay movimientos.",
+    nextLevel: (points, title) => `Faltan ${points} puntos para ${title}`,
+    topCircle: "Black Circle · nivel máximo alcanzado",
+    achievementsTitle: "Logros y hitos",
+    earned: "Conseguido",
+    available: "En progreso",
+    progress: (done, total) => `${done} / ${total}`,
+    noAchievement: "Aún no conseguido",
+    dateUnknown: "Fecha no disponible",
+  },
+  pt: {
+    ledgerTitle: "Influence Index · Extrato de pontos",
+    ledgerSubtitle: "Histórico imutável dos pontos concedidos pelo motor do clube.",
+    ledgerEmpty: "Ainda não há lançamentos.",
+    nextLevel: (points, title) => `Faltam ${points} pontos para ${title}`,
+    topCircle: "Black Circle · nível máximo alcançado",
+    achievementsTitle: "Conquistas e marcos",
+    earned: "Conquistado",
+    available: "Em andamento",
+    progress: (done, total) => `${done} / ${total}`,
+    noAchievement: "Ainda não conquistado",
+    dateUnknown: "Data indisponível",
+  },
+};
+
+const BASIC_ACHIEVEMENTS: Array<{
+  key: string;
+  title: Record<Lang, string>;
+  description: Record<Lang, string>;
+  goal: number;
+  metric: "activities" | "countries";
+}> = [
+  {
+    key: "first_completed_activity",
+    title: { en: "First completed activity", ru: "Первая завершённая активность", es: "Primera actividad completada", pt: "Primeira atividade concluída" },
+    description: { en: "Complete a club tour or event.", ru: "Завершите тур или мероприятие клуба.", es: "Complete un tour o evento del club.", pt: "Conclua um tour ou evento do clube." },
+    goal: 1,
+    metric: "activities",
+  },
+  {
+    key: "first_country_stamp",
+    title: { en: "First passport stamp", ru: "Первый штамп паспорта", es: "Primer sello del pasaporte", pt: "Primeiro carimbo do passaporte" },
+    description: { en: "Receive your first country stamp.", ru: "Получите первый штамп страны.", es: "Reciba el primer sello de país.", pt: "Receba o primeiro carimbo de país." },
+    goal: 1,
+    metric: "countries",
+  },
+  {
+    key: "five_countries",
+    title: { en: "Five countries", ru: "Пять стран", es: "Cinco países", pt: "Cinco países" },
+    description: { en: "Collect passport stamps from five countries.", ru: "Соберите штампы пяти стран.", es: "Reúna sellos de cinco países.", pt: "Reúna carimbos de cinco países." },
+    goal: 5,
+    metric: "countries",
+  },
+];
+
+function AchievementShelf({
+  achievements,
+  metrics,
+  passportCount,
+  lang,
+}: {
+  achievements: ResidentAchievementRow[];
+  metrics: ResidentMetricsSnapshot | null;
+  passportCount: number;
+  lang: Lang;
+}) {
+  const copy = LEDGER_COPY[lang];
+  const earnedByKey = new Map(achievements.map((row) => [row.achievement_key, row]));
+  const knownKeys = new Set(BASIC_ACHIEVEMENTS.map((item) => item.key));
+  const extraAchievements = achievements.filter((row) => !knownKeys.has(row.achievement_key) && !row.achievement_key.startsWith("combo:"));
+
+  return (
+    <section className="mt-20">
+      <div className="mb-6 flex items-baseline justify-between gap-4">
+        <h2 className="text-[10px] uppercase tracking-[0.4em] text-zinc-600">{copy.achievementsTitle}</h2>
+        <span className="font-mono text-[10px] tabular-nums text-zinc-600">{achievements.length}</span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {BASIC_ACHIEVEMENTS.map((item) => {
+          const earned = earnedByKey.get(item.key);
+          const current = item.metric === "activities" ? Number(metrics?.completed_activities ?? 0) : passportCount;
+          const done = Math.min(item.goal, current);
+          return (
+            <article key={item.key} className={`rounded-2xl border p-4 ${earned ? "border-[#c9a961]/25 bg-[#c9a961]/[0.045]" : "border-white/[0.07] bg-white/[0.015]"}`}>
+              <div className="flex items-start justify-between gap-3">
+                <h3 className={`${cormorant.className} text-xl leading-tight ${earned ? "text-[#e6d3a3]" : "text-zinc-200"}`}>{earned?.title ?? item.title[lang]}</h3>
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] uppercase tracking-[0.14em] ${earned ? "border-emerald-400/20 text-emerald-300" : "border-white/10 text-zinc-500"}`}>{earned ? copy.earned : copy.available}</span>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-zinc-500">{item.description[lang]}</p>
+              <div className="mt-4 flex items-center justify-between gap-3 text-[10px]">
+                <span className="text-zinc-500">{earned ? new Date(earned.earned_at).toLocaleDateString(({ en: "en-GB", ru: "ru-RU", es: "es-ES", pt: "pt-PT" })[lang]) : copy.progress(done, item.goal)}</span>
+                {earned ? <span className="font-mono text-[#e6d3a3]">+{fmtPoints(Number(earned.points_awarded) || 0)}</span> : <span className="text-zinc-600">{copy.noAchievement}</span>}
+              </div>
+            </article>
+          );
+        })}
+        {extraAchievements.map((achievement) => (
+          <article key={achievement.achievement_key} className="rounded-2xl border border-[#c9a961]/25 bg-[#c9a961]/[0.045] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className={`${cormorant.className} text-xl leading-tight text-[#e6d3a3]`}>{achievement.title}</h3>
+              <span className="shrink-0 rounded-full border border-emerald-400/20 px-2 py-0.5 text-[8px] uppercase tracking-[0.14em] text-emerald-300">{copy.earned}</span>
+            </div>
+            <p className="mt-4 flex items-center justify-between gap-3 text-[10px] text-zinc-500">
+              <span>{new Date(achievement.earned_at).toLocaleDateString(({ en: "en-GB", ru: "ru-RU", es: "es-ES", pt: "pt-PT" })[lang])}</span>
+              <span className="font-mono text-[#e6d3a3]">+{fmtPoints(Number(achievement.points_awarded) || 0)}</span>
+            </p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ScoreLedger({
+  events,
+  index,
+  circle,
+  next,
+  lang,
+}: {
+  events: ScoreEventRow[];
+  index: number;
+  circle: CircleConfig;
+  next: CircleConfig | null;
+  lang: Lang;
+}) {
+  const copy = LEDGER_COPY[lang];
+  const remaining = next ? Math.max(0, next.min - index) : 0;
+  const locale = ({ en: "en-GB", ru: "ru-RU", es: "es-ES", pt: "pt-PT" })[lang];
+  const categoryNames: Record<Lang, Record<string, string>> = {
+    en: { tour: "Tour", event: "Event", stamp: "Country stamp", combo: "Combo", achievement: "Achievement", adjustment: "Adjustment" },
+    ru: { tour: "Тур", event: "Мероприятие", stamp: "Штамп страны", combo: "Комбо", achievement: "Ачивка", adjustment: "Корректировка" },
+    es: { tour: "Tour", event: "Evento", stamp: "Sello de país", combo: "Combo", achievement: "Logro", adjustment: "Ajuste" },
+    pt: { tour: "Tour", event: "Evento", stamp: "Carimbo de país", combo: "Combo", achievement: "Conquista", adjustment: "Ajuste" },
+  };
+
+  return (
+    <section className="mt-20">
+      <div className="relative overflow-hidden rounded-3xl border border-[#c9a961]/20 bg-gradient-to-br from-[#c9a961]/[0.05] via-zinc-950 to-zinc-950 p-5 sm:p-7">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-[#c9a961]/[0.06] blur-3xl" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[9px] uppercase tracking-[0.4em] text-[#c9a961]/70">VOYAGE · LEDGER</p>
+            <h2 className={`${cormorant.className} mt-2 text-3xl font-medium text-zinc-100 sm:text-4xl`}>{copy.ledgerTitle}</h2>
+            <p className="mt-2 max-w-xl text-xs leading-relaxed text-zinc-500">{copy.ledgerSubtitle}</p>
+          </div>
+          <div className="rounded-2xl border border-white/[0.07] bg-black/20 px-4 py-3 text-right">
+            <p className="text-[8px] uppercase tracking-[0.25em] text-zinc-600">{circle.title}</p>
+            <p className="mt-1 font-mono text-xl tabular-nums text-[#e6d3a3]">{fmtPoints(index)}</p>
+            <p className="mt-1 text-[10px] text-zinc-500">{next ? copy.nextLevel(fmtPoints(remaining), next.title) : copy.topCircle}</p>
+          </div>
+        </div>
+        <div className="relative mt-6 border-t border-white/[0.06] pt-2">
+          {events.length === 0 ? (
+            <p className="py-8 text-center text-xs text-zinc-500">{copy.ledgerEmpty}</p>
+          ) : (
+            <ol className="divide-y divide-white/[0.05]">
+              {events.slice(0, 30).map((event) => {
+                const points = Number(event.points) || 0;
+                const date = event.created_at ? new Date(event.created_at).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" }) : copy.dateUnknown;
+                return (
+                  <li key={String(event.id)} className="flex items-center justify-between gap-4 py-3.5">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm text-zinc-200">{event.reason || event.event_key}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[9px] uppercase tracking-[0.15em] text-zinc-600">
+                        <span>{categoryNames[lang][event.category] ?? event.category}</span>
+                        <span aria-hidden>·</span>
+                        <span>{date}</span>
+                      </div>
+                    </div>
+                    <span className={`shrink-0 font-mono text-sm tabular-nums ${points > 0 ? "text-emerald-300" : "text-red-300"}`}>
+                      {points > 0 ? "+" : ""}{fmtPoints(points)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ── Страница ────────────────────────────────────────────────────── */
 
 /** demo — показать демонстрационный паспорт без обращения к базе */
@@ -1801,37 +2111,70 @@ export default function GamificationClient({ demo = false, header }: { demo?: bo
       const destination = destinationById.get(stamp.destinationId);
       if (destination?.active) visited.add(destination.id);
     }
+    // Stage 2's canonical passport ledger may contain country stamps that were not
+    // created from game_attendance. Resolve those countries to the destination catalog
+    // as well, so the Consular Clearance map and country progress use the same source.
+    const destinationsByCountry = new Map<string, DestinationConfig[]>();
+    for (const destination of data.destinations) {
+      if (!destination.active || !destination.countryCode) continue;
+      const bucket = destinationsByCountry.get(destination.countryCode) ?? [];
+      bucket.push(destination);
+      destinationsByCountry.set(destination.countryCode, bucket);
+    }
+    for (const stamp of data.passportStamps) {
+      const countryCode = stamp.country_code?.trim().toUpperCase();
+      if (!countryCode) continue;
+      const matches = destinationsByCountry.get(countryCode) ?? [];
+      // A country passport stamp does not identify a specific city. Only map it to a
+      // Consular Clearance node when the destination-country relation is unambiguous;
+      // otherwise exact city visits remain sourced from game_attendance.
+      if (matches.length === 1) visited.add(matches[0].id);
+    }
     const byTier: Record<Tier, number> = { free: 0, evisa: 0, hard: 0 };
     for (const id of visited) {
       const destination = destinationById.get(id);
       if (destination) byTier[destination.tier] += 1;
     }
     return { visited, byTier };
-  }, [data.stamps, data.destinations]);
+  }, [data.stamps, data.passportStamps, data.destinations]);
   const dbCircle = normalizeCircleKey(data.standing?.circle_key);
   const circle = data.circles.find((c) => c.key === dbCircle) ?? circleFor(index, data.circles);
   const next = nextCircle(index, data.circles);
 
   const stamps = useMemo(() => {
+    if (data.passportStamps.length > 0) {
+      return data.passportStamps.map((stamp, i): StampData => ({
+        key: stamp.id,
+        city: stamp.country_title || stamp.country_code,
+        code: stamp.country_code,
+        date: fmtStampDate(stamp.issued_at),
+        ink: INKS[hash(stamp.country_code) % INKS.length],
+        shape: SHAPES[hash(`${stamp.country_code}:shape`) % SHAPES.length],
+        rotate: (hash(`${stamp.country_code}:${stamp.issued_at ?? i}`) % 15) - 7,
+        value: Number(stamp.points_awarded) || 0,
+      }));
+    }
+
+    // Compatibility fallback for old accounts where Stage 2 passport backfill has not yet produced country rows.
     const byId = new Map<string, DestinationConfig>(data.destinations.map((d) => [d.id, d] as const));
     const out: StampData[] = [];
-    data.stamps.forEach((s, i) => {
-      if (!isDestId(s.destinationId)) return;
-      const d = byId.get(s.destinationId);
-      if (!d) return;
+    data.stamps.forEach((stamp, i) => {
+      if (!isDestId(stamp.destinationId)) return;
+      const destination = byId.get(stamp.destinationId);
+      if (!destination) return;
       out.push({
-        key: `${s.destinationId}-${s.date ?? ""}-${i}`,
-        city: PLACES[lang][d.id][0],
-        code: d.code,
-        date: fmtStampDate(s.date),
-        ink: INKS[hash(d.id) % INKS.length],
-        shape: SHAPES[hash(`${d.id}:shape`) % SHAPES.length],
-        rotate: (hash(`${s.destinationId}:${s.date ?? i}`) % 15) - 7,
-        value: num(s.awardedPoints) ?? 0,
+        key: `${stamp.destinationId}-${stamp.date ?? ""}-${i}`,
+        city: PLACES[lang][destination.id][0],
+        code: destination.code,
+        date: fmtStampDate(stamp.date),
+        ink: INKS[hash(destination.id) % INKS.length],
+        shape: SHAPES[hash(`${destination.id}:shape`) % SHAPES.length],
+        rotate: (hash(`${stamp.destinationId}:${stamp.date ?? i}`) % 15) - 7,
+        value: num(stamp.awardedPoints) ?? 0,
       });
     });
     return out;
-  }, [data.stamps, data.destinations, lang]);
+  }, [data.passportStamps, data.stamps, data.destinations, lang]);
 
   const mrz = useMemo(
     () => buildMrz(resident.name, resident.memberNo),
@@ -1880,12 +2223,27 @@ export default function GamificationClient({ demo = false, header }: { demo?: bo
         <ConsularGrid t={t} lang={lang} destinations={data.destinations} visited={passport.visited} />
       </div>
 
+      <AchievementShelf
+        achievements={data.achievements}
+        metrics={data.metrics}
+        passportCount={data.passportStamps.length}
+        lang={lang}
+      />
+
       <LegendaryCombos
         t={t}
         lang={lang}
         combos={data.combos}
         visited={passport.visited}
         completedComboIds={new Set(data.completedComboIds)}
+      />
+
+      <ScoreLedger
+        events={data.scoreEvents}
+        index={index}
+        circle={circle}
+        next={next}
+        lang={lang}
       />
 
       <p

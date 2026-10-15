@@ -42,7 +42,8 @@ const POLL_MS = 60_000;
 
 const COLUMNS =
   "profile_id, position, total_influence, rank_title, level, circle_key, full_name, avatar_url, " +
-  "stamps_count, destinations_count, combos_completed, patronage_points, proteges_count, tour_points, tours_count";
+  "stamps_count, destinations_count, combos_completed, patronage_points, proteges_count, tour_points, tours_count, " +
+  "segment, reliability, profile_level, profile_circle, segment_position";
 
 const TEXT: Record<Lang, { loading: string; failed: string; migration: string; retry: string }> = {
   en: {
@@ -71,7 +72,7 @@ const TEXT: Record<Lang, { loading: string; failed: string; migration: string; r
   },
 };
 
-type Raw = { rows: LeaderboardRow[]; circles: GameCircleRow[]; loadedAt: string };
+type Raw = { rows: LeaderboardRow[]; circles: GameCircleRow[]; loadedAt: string; mySegment: "working" | "elite" };
 
 function toEntries(raw: Raw): LeaderboardEntry[] {
   const circles = resolveCircles(raw.circles);
@@ -81,7 +82,10 @@ function toEntries(raw: Raw): LeaderboardEntry[] {
       const circle = circles.find((c) => c.key === normalizeCircleKey(r.circle_key)) ?? circleFor(influence, circles);
       return {
         profileId: r.profile_id,
-        position: num(r.position) ?? 0,
+        position: num(r.segment_position ?? r.position) ?? 0,
+        segment: r.segment === "elite" ? "elite" : "working",
+        level: Math.max(1, Math.min(6, Math.round(num(r.profile_level ?? r.level) ?? 1))),
+        reliability: Math.max(0, Math.min(100, num(r.reliability) ?? 100)),
         name: r.full_name?.trim() || "",
         avatarUrl: resolveAvatarUrl(r.avatar_url),
         circleKey: circle.key,
@@ -99,9 +103,10 @@ function toEntries(raw: Raw): LeaderboardEntry[] {
 }
 
 export default function LeaderboardPage() {
-  const auth = useAuth() as unknown as { user?: { id?: string } | null; loading?: boolean } | null;
+  const auth = useAuth() as unknown as { user?: { id?: string } | null; loading?: boolean; segment?: "working" | "elite" | null } | null;
   const userId = auth?.user?.id ?? null;
   const authLoading = auth?.loading ?? false;
+  const mySegment = auth?.segment === "elite" ? "elite" : "working";
   const ctx: unknown = useLanguage();
   const lang = normalizeLang(ctx && typeof ctx === "object" ? (ctx as Record<string, unknown>).lang : ctx);
   const text = TEXT[lang];
@@ -146,10 +151,19 @@ export default function LeaderboardPage() {
         });
         return;
       }
+      const rows = (lb.data ?? []) as LeaderboardRow[];
+      if (rows.length > 0 && (rows[0].segment == null || rows[0].segment_position == null)) {
+        setError({
+          message: "The Stage 3 leaderboard schema is missing segment/reliability columns. Apply the Stage 3 SQL migration.",
+          schema: true,
+        });
+        return;
+      }
       setRaw({
-        rows: (lb.data ?? []) as LeaderboardRow[],
+        rows,
         circles: (circlesRes.data ?? []) as GameCircleRow[],
         loadedAt: new Date().toISOString(),
+        mySegment,
       });
       setError(null);
     } catch (e) {
@@ -157,7 +171,7 @@ export default function LeaderboardPage() {
       console.error("[Leaderboard] Load exception:", e);
       setError({ message: e instanceof Error ? e.message : String(e), schema: false });
     }
-  }, [userId]);
+  }, [userId, mySegment]);
 
   const scheduleReload = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -176,7 +190,7 @@ export default function LeaderboardPage() {
 
     const channel = supabase.channel(`voyage-global-ranking-${userId}`);
     // только таблицы из публикации supabase_realtime (миграции gamification_v2 и club_invites)
-    for (const table of ["game_attendance", "club_invites", "game_circles", "game_destinations", "game_combos", "club_patronage_rules"]) {
+    for (const table of ["game_attendance", "resident_metrics", "resident_score_events", "resident_passport_stamps", "resident_achievements", "club_invites", "game_circles", "game_destinations", "game_combos", "club_patronage_rules"]) {
       channel.on("postgres_changes", { event: "*", schema: "public", table }, scheduleReload);
     }
     channel.subscribe();
@@ -199,7 +213,7 @@ export default function LeaderboardPage() {
 
   const data = useMemo<LeaderboardData | null>(() => {
     if (!raw) return null;
-    return { entries: toEntries(raw), meId: userId, updatedAt: raw.loadedAt };
+    return { entries: toEntries(raw), meId: userId, mySegment: raw.mySegment, updatedAt: raw.loadedAt };
   }, [raw, userId]);
 
   if (error && !data) {

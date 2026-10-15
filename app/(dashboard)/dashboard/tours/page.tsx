@@ -35,8 +35,13 @@ interface LeaderRow {
   is_me: boolean;
   /* с миграции 20261014 */
   profile_id?: string | null;
+  segment?: 'working' | 'elite' | null;
+  level?: number | null;
+  circle_key?: string | null;
   circle_title?: string | null;
+  reliability?: number | string | null;
   influence?: number | null;
+  influence_index?: number | null;
   index_points?: number | null;
   tour_id?: string | null;
   tour_title?: string | null;
@@ -340,7 +345,10 @@ export default function ToursPage() {
   const nf = useMemo(() => new Intl.NumberFormat(LOCALES[currentLang]), [currentLang]);
 
   const [rows, setRows] = useState<LeaderRow[]>([]);
-  const [segment, setSegment] = useState<'working' | 'elite'>('working');
+  const [segment, setSegment] = useState<'working' | 'elite'>(residentSegment === 'elite' ? 'elite' : 'working');
+  useEffect(() => {
+    if (residentSegment === 'working' || residentSegment === 'elite') setSegment(residentSegment);
+  }, [residentSegment]);
   const title = segment === 'elite' ? t.eliteTitle : t.title;
   const subtitle = segment === 'elite' ? t.eliteSubtitle : t.subtitle;
   const step1 = segment === 'elite' ? t.eliteStep1 : t.step1;
@@ -385,6 +393,9 @@ export default function ToursPage() {
           tour_points: Number(r.tour_points ?? 0),
           index_points: r.index_points == null ? null : Number(r.index_points),
           influence: r.influence == null ? null : Number(r.influence),
+          influence_index: r.influence_index == null ? (r.influence == null ? null : Number(r.influence)) : Number(r.influence_index),
+          level: r.level == null ? 1 : Number(r.level),
+          reliability: r.reliability == null ? 100 : Number(r.reliability),
           avatar_url: resolveAvatarUrl(r.avatar_url),
         })),
       );
@@ -594,6 +605,14 @@ export default function ToursPage() {
                             {t.you}
                           </span>
                         )}
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-400 sm:justify-center">
+                          <span className="rounded-full border border-[#c9a961]/20 bg-[#c9a961]/[0.06] px-2 py-0.5 text-[#e6d3a3]">
+                            Level {r.level ?? 1} · {r.circle_title || 'Voyager'}
+                          </span>
+                          <span className={`rounded-full border px-2 py-0.5 ${Number(r.reliability ?? 100) >= 90 ? 'border-emerald-400/20 text-emerald-300' : Number(r.reliability ?? 100) >= 70 ? 'border-amber-400/20 text-amber-200' : 'border-red-400/20 text-red-300'}`}>
+                            Reliability {Number(r.reliability ?? 100)}%
+                          </span>
+                        </div>
                         <p
                           className="mt-2 font-serif text-2xl font-light tabular-nums sm:text-3xl"
                           style={{ color: p.color }}
@@ -637,14 +656,23 @@ export default function ToursPage() {
                           size={36}
                           ringClass={r.is_me ? 'ring-[#c9a961]/60' : 'ring-white/10'}
                         />
-                        <span className={`truncate text-sm ${r.is_me ? 'text-white' : 'text-neutral-200'}`}>
-                          {displayName(r)}
-                        </span>
-                        {r.is_me && (
-                          <span className="shrink-0 rounded-full bg-[#c9a961]/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-[#c9a961]">
-                            {t.you}
-                          </span>
-                        )}
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className={`truncate text-sm ${r.is_me ? 'text-white' : 'text-neutral-200'}`}>
+                              {displayName(r)}
+                            </span>
+                            {r.is_me && (
+                              <span className="shrink-0 rounded-full bg-[#c9a961]/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-[#c9a961]">
+                                {t.you}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">
+                            <span className="rounded-full border border-[#c9a961]/20 px-2 py-0.5 text-[#e6d3a3]">Level {r.level ?? 1} · {r.circle_title || 'Voyager'}</span>
+                            <span className={`rounded-full border px-2 py-0.5 ${Number(r.reliability ?? 100) >= 90 ? 'border-emerald-400/20 text-emerald-300' : Number(r.reliability ?? 100) >= 70 ? 'border-amber-400/20 text-amber-200' : 'border-red-400/20 text-red-300'}`}>Reliability {Number(r.reliability ?? 100)}%</span>
+                            <span>Index {nf.format(Number(r.influence_index ?? r.influence ?? 0))}</span>
+                          </div>
+                        </div>
                       </div>
                       <span className="text-right text-sm tabular-nums text-neutral-100">
                         {nf.format(r.tour_points)}
@@ -679,6 +707,8 @@ export default function ToursPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[10px] uppercase tracking-[0.18em] text-neutral-500">{yourPlaceText}</p>
                   <p className="truncate text-sm text-white">{displayName(me)}</p>
+                  <p className="mt-1 truncate text-[10px] text-[#e6d3a3]">Level {me.level ?? 1} · {me.circle_title || 'Voyager'} · Reliability {Number(me.reliability ?? 100)}%</p>
+                  <p className="mt-0.5 truncate text-[10px] text-neutral-500">Influence Index {nf.format(Number(me.influence_index ?? me.influence ?? 0))}</p>
                   {gapToTop10 !== null && (
                     <p className="mt-0.5 text-xs text-neutral-400">
                       +{nf.format(gapToTop10)} {t.pts} {t.toTop10}

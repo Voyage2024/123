@@ -515,6 +515,7 @@ export type GameDestinationRow = {
   id: string;
   name?: string | null;
   region?: string | null;
+  country_code?: string | null;
   visa_tier?: string | null;
   points?: Num;
   multiplier?: Num;
@@ -553,6 +554,11 @@ export type AttendanceRow = {
 export type LeaderboardRow = {
   profile_id: string;
   total_influence?: Num;
+  segment?: "working" | "elite" | null;
+  reliability?: Num;
+  profile_level?: Num;
+  profile_circle?: string | null;
+  segment_position?: Num;
   rank_title?: string | null;
   level?: number | null;
   circle_key?: string | null;
@@ -579,6 +585,7 @@ export type DestinationConfig = {
   id: DestId;
   region: RegionId;
   code: string;
+  countryCode?: string | null;
   tier: Tier;
   points: number;
   multiplier: number;
@@ -641,6 +648,7 @@ export function resolveDestinations(rows?: GameDestinationRow[] | null): Destina
       id: d.id,
       region: d.region,
       code: d.code,
+      countryCode: typeof row?.country_code === "string" ? row.country_code.trim().toUpperCase() : null,
       tier,
       points: num(row?.points) ?? TIERS[tier].points,
       multiplier: num(row?.multiplier) ?? TIERS[tier].multiplier,

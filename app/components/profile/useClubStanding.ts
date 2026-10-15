@@ -7,11 +7,10 @@
  *   v_global_leaderboard (своя строка) → circle_key, total_influence
  *   game_circles                      → названия и пороги кругов
  *
- * Realtime: штампы, комбо, веса направлений, поручительства и пороги
- * кругов пересчитывают вью — хук перечитывает её (с дебаунсом), и
- * кардхолдер сам меняет цвет при повышении круга. Плюс перечитка при
- * возврате на вкладку — страховка для источников без realtime-подписки
- * (например, баллов туров).
+ * Realtime: серверная витрина resident_metrics / v_global_leaderboard является
+ * источником баллов и круга. Подписки на ledger + metrics вызывают перечитку
+ * после выдачи штампов, ачивок и завершения активности. Периодическая проверка
+ * и перечитка при возврате на вкладку страхуют сценарии без realtime-публикации.
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useEffect, useMemo, useState } from "react";
@@ -32,6 +31,9 @@ type Snapshot = {
   userId: string;
   circles: CircleConfig[];
   row: LeaderboardRow | null;
+  metricsPoints: number | null;
+  profileLevel: number | null;
+  profileCircle: string | null;
 };
 
 export type ClubStanding = {
@@ -63,19 +65,28 @@ export function useClubStanding(
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const load = async () => {
-      const [circleRes, rowRes] = await Promise.all([
+      const [circleRes, rowRes, metricsRes, profileRes] = await Promise.all([
         supabase.from("game_circles").select("level, key, title, min_influence"),
         supabase.from("v_global_leaderboard").select("*").eq("profile_id", userId).maybeSingle(),
+        supabase.from("resident_metrics").select("total_points").eq("profile_id", userId).maybeSingle(),
+        supabase.from("profiles").select("level, circle, influence_index").eq("id", userId).maybeSingle(),
       ]);
       if (cancelled) return;
 
       if (circleRes.error) console.error("[Cardholder] circles:", circleRes.error.message);
       if (rowRes.error) console.error("[Cardholder] standing:", rowRes.error.message);
+      if (metricsRes.error) console.error("[Cardholder] resident metrics:", metricsRes.error.message);
+      if (profileRes.error) console.error("[Cardholder] cached profile status:", profileRes.error.message);
 
+      const profile = profileRes.error ? null : profileRes.data;
+      const metricPoints = metricsRes.error ? null : Number(metricsRes.data?.total_points);
       setSnap({
         userId,
         circles: resolveCircles(circleRes.error ? null : (circleRes.data as GameCircleRow[])),
         row: rowRes.error ? null : ((rowRes.data ?? null) as LeaderboardRow | null),
+        metricsPoints: Number.isFinite(metricPoints) ? metricPoints : null,
+        profileLevel: profile?.level == null ? null : Number(profile.level),
+        profileCircle: typeof profile?.circle === "string" ? profile.circle : null,
       });
     };
 
@@ -87,6 +98,9 @@ export function useClubStanding(
     const onVisible = () => {
       if (document.visibilityState === "visible") schedule();
     };
+    const poll = setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") schedule();
+    }, 60_000);
 
     void load();
 
@@ -102,6 +116,31 @@ export function useClubStanding(
       )
       .on(
         "postgres_changes",
+        { event: "*", schema: "public", table: "resident_metrics", filter: `profile_id=eq.${userId}` },
+        schedule,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "resident_score_events", filter: `profile_id=eq.${userId}` },
+        schedule,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "resident_passport_stamps", filter: `profile_id=eq.${userId}` },
+        schedule,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "resident_achievements", filter: `profile_id=eq.${userId}` },
+        schedule,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "resident_activities", filter: `profile_id=eq.${userId}` },
+        schedule,
+      )
+      .on(
+        "postgres_changes",
         { event: "*", schema: "public", table: "club_invites", filter: `patron_id=eq.${userId}` },
         schedule,
       )
@@ -112,6 +151,7 @@ export function useClubStanding(
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      clearInterval(poll);
       document.removeEventListener("visibilitychange", onVisible);
       void supabase.removeChannel(channel);
     };
@@ -122,16 +162,19 @@ export function useClubStanding(
 
   return useMemo<ClubStanding>(() => {
     const circles = [...(current?.circles ?? resolveCircles())].sort((a, b) => a.level - b.level);
-    const index = num(current?.row?.total_influence) ?? 0;
+    const index = current?.metricsPoints ?? num(current?.row?.total_influence) ?? 0;
 
-    // 1) круг, посчитанный базой; 2) по индексу, если строка есть; 3) profiles.status; 4) база
-    const dbKey = normalizeCircleKey(current?.row?.circle_key);
+    // Metrics points are canonical. Use profiles.level/circle only when that cached
+    // status agrees with the threshold-derived level for the same ledger balance.
+    const thresholdCircle = circleFor(index, circles);
+    const profileCircleKey = normalizeCircleKey(current?.profileCircle);
+    const cachedCircle = circles.find((c) => c.level === current?.profileLevel)
+      ?? circles.find((c) => c.key === profileCircleKey);
+    const viewCircle = circles.find((c) => c.key === normalizeCircleKey(current?.row?.circle_key));
     const statusKey = normalizeCircleKey(fallbackStatus);
-    const circle =
-      circles.find((c) => c.key === dbKey) ??
-      (current?.row ? circleFor(index, circles) : undefined) ??
-      circles.find((c) => c.key === statusKey) ??
-      circleFor(index, circles);
+    const circle = cachedCircle && cachedCircle.level === thresholdCircle.level
+      ? cachedCircle
+      : viewCircle ?? thresholdCircle ?? circles.find((c) => c.key === statusKey) ?? circles[0];
 
     // следующий — по уровню показанного круга, чтобы шкала не спорила с картой
     const next = circles.find((c) => c.level > circle.level) ?? null;
