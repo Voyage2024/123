@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleUserRound,
-  Clock3,
+  Clock,
   Handshake,
   Languages,
   MapPin,
@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  Users,
   UserRoundCheck,
   XCircle,
 } from "lucide-react";
@@ -237,18 +238,18 @@ export default function CastingResponsesPage() {
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-amber-100/60">Partner workspace · Response board</p>
               <h1 className="mt-3 font-serif text-3xl text-zinc-50 sm:text-4xl">{casting.city} <span className="text-amber-100/50">/</span> {casting.project_type}</h1>
-              <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-400"><span className="inline-flex items-center gap-1.5"><CalendarClock size={13} /> {date(casting.starts_on)} – {date(casting.ends_on)}</span><span className="inline-flex items-center gap-1.5"><MapPin size={13} /> {casting.slots} мест</span><span className="inline-flex items-center gap-1.5"><Clock3 size={13} /> Закрытие: {date(casting.closes_at, true)}</span></p>
+              <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-400"><span className="inline-flex items-center gap-1.5"><CalendarClock size={13} /> {date(casting.starts_on)} – {date(casting.ends_on)}</span><span className="inline-flex items-center gap-1.5"><MapPin size={13} /> {casting.slots} мест</span><span className="inline-flex items-center gap-1.5"><Clock size={13} /> Закрытие: {date(casting.closes_at, true)}</span></p>
             </div>
             <div className="shrink-0 rounded-2xl border border-zinc-800 bg-black/20 px-4 py-3"><p className="text-[9px] uppercase tracking-[0.2em] text-zinc-600">Гонорар</p><p className="mt-1 font-serif text-xl text-amber-100">{feeLabel(casting.fee_amount, casting.fee_currency)}</p><p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-zinc-600">{casting.status}</p></div>
           </div>
         </header>
 
-        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <Stat label="Всего откликов" value={counts.all} icon={UsersIcon} />
-          <Stat label="На рассмотрении" value={counts.ready} icon={Clock3} />
-          <Stat label="Опционы" value={counts.option} icon={Sparkles} />
-          <Stat label="Одобрено" value={counts.selected} icon={BadgeCheck} />
-        </section>
+<section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+  <Stat label="Всего откликов" value={counts.all} icon={Users as any} />
+  <Stat label="На рассмотрении" value={counts.ready} icon={Clock as any} />
+  <Stat label="Опционы" value={counts.option} icon={Sparkles as any} />
+  <Stat label="Одобрено" value={counts.selected} icon={BadgeCheck as any} />
+</section>
       </>}
 
       {notice && <div role="status" className="rounded-xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-sm text-emerald-200">{notice}</div>}
@@ -292,12 +293,12 @@ export default function CastingResponsesPage() {
                     </div>
                   </div>
 
-                  {status === "option" && row.option_expires_at && <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-violet-200"><Clock3 size={12} /> Опцион до {date(row.option_expires_at, true)}</p>}
+                  {status === "option" && row.option_expires_at && <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-violet-200"><Clock size={12} /> Опцион до {date(row.option_expires_at, true)}</p>}
                   <p className="mt-3 text-[10px] text-zinc-600">Отклик: {date(row.response_created_at, true)}</p>
 
                   {actionable && <div className="mt-4 space-y-3 border-t border-zinc-800/70 pt-4">
                     <div className="grid gap-2 sm:grid-cols-2">
-                      <button type="button" disabled={busy || !canProcess} onClick={() => void runAction(`${row.resident_id}:option`, () => setCastingResponseOption(id, row.resident_id, 24), "Опцион установлен на 24 часа.")} className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-300/[0.07] px-3 py-2.5 text-xs text-violet-100 transition hover:bg-violet-300/[0.13] disabled:cursor-not-allowed disabled:opacity-50"><Clock3 size={14} /> {status === "option" ? "Продлить опцион на 24 ч" : "Опцион · 24 ч"}</button>
+                      <button type="button" disabled={busy || !canProcess} onClick={() => void runAction(`${row.resident_id}:option`, () => setCastingResponseOption(id, row.resident_id, 24), "Опцион установлен на 24 часа.")} className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-300/[0.07] px-3 py-2.5 text-xs text-violet-100 transition hover:bg-violet-300/[0.13] disabled:cursor-not-allowed disabled:opacity-50"><Clock size={14} /> {status === "option" ? "Продлить опцион на 24 ч" : "Опцион · 24 ч"}</button>
                       <button type="button" disabled={busy || !canProcess} onClick={() => { if (window.confirm(`Отклонить отклик ${row.full_name || "резидентки"}?`)) void runAction(`${row.resident_id}:decline`, () => declineCastingResponse(id, row.resident_id), "Отклик отклонён."); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-400/20 bg-rose-400/[0.04] px-3 py-2.5 text-xs text-rose-200/90 transition hover:bg-rose-400/[0.1] disabled:cursor-not-allowed disabled:opacity-50"><XCircle size={14} /> Отклонить</button>
                     </div>
                     <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.035] p-3">
