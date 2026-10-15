@@ -27,7 +27,10 @@ import {
 
 import { supabase } from '@/lib/supabase';
 import RoleGuard from '@/app/components/RoleGuard';
+import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage, type Lang } from '@/app/context/LanguageContext';
+import EventApplicationsPanel from './EventApplicationsPanel';
+import { ResidentSocialLiftControls, ResidentTrustBadges, type Segment } from './ResidentTrustControls';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Настройки
@@ -39,7 +42,7 @@ type ApplicationTranslations = {
   searchPlaceholder: string; colResident: string; colTour: string; colDate: string; colStatus: string; colActions: string;
   model: string; unknownModel: string; profileUnavailable: string; tourShort: string; dossier: string;
   approveTour: string; approve: string; reject: string;
-  statusPending: string; statusApproved: string; statusRejected: string;
+  statusPending: string; statusApproved: string; statusRejected: string; statusCompleted: string;
   kycPassed: string; kycReview: string; kycRejected: string; kycNotPassed: string;
   unknownError: string; permissionError: string;
   approvedInTour: (name: string, hub: string) => string; rejectedNotice: (name: string) => string;
@@ -58,7 +61,7 @@ const translations: Record<Lang, ApplicationTranslations> = {
     searchPlaceholder: 'Search by name, city or tour…', colResident: 'Resident', colTour: 'Tour / hub', colDate: 'Date', colStatus: 'Status', colActions: 'Actions',
     model: 'Resident', unknownModel: 'Resident', profileUnavailable: 'Profile unavailable', tourShort: 'Tour:', dossier: 'Profile',
     approveTour: 'Approve for tour', approve: 'Approve', reject: 'Reject',
-    statusPending: 'Pending review', statusApproved: 'Approved', statusRejected: 'Rejected',
+    statusPending: 'Pending review', statusApproved: 'Approved', statusRejected: 'Rejected', statusCompleted: 'Completed',
     kycPassed: 'KYC passed', kycReview: 'KYC under review', kycRejected: 'KYC rejected', kycNotPassed: 'KYC not completed',
     unknownError: 'An unexpected error occurred.', permissionError: 'You do not have permission to update this application.',
     approvedInTour: (name, hub) => `${name} approved for tour “${hub}”`, rejectedNotice: (name) => `Application for ${name} rejected`,
@@ -75,7 +78,7 @@ const translations: Record<Lang, ApplicationTranslations> = {
     searchPlaceholder: 'Поиск по имени, городу или туру…', colResident: 'Резидентка', colTour: 'Тур / хаб', colDate: 'Дата', colStatus: 'Статус', colActions: 'Действия',
     model: 'Резидентка', unknownModel: 'Модель', profileUnavailable: 'Профиль недоступен', tourShort: 'Тур:', dossier: 'Досье',
     approveTour: 'Одобрить в тур', approve: 'Одобрить', reject: 'Отклонить',
-    statusPending: 'На рассмотрении', statusApproved: 'Одобрена', statusRejected: 'Отклонена',
+    statusPending: 'На рассмотрении', statusApproved: 'Одобрена', statusRejected: 'Отклонена', statusCompleted: 'Завершена',
     kycPassed: 'KYC пройден', kycReview: 'KYC на проверке', kycRejected: 'KYC отклонён', kycNotPassed: 'KYC не пройден',
     unknownError: 'Неизвестная ошибка.', permissionError: 'Нет прав на изменение этой заявки.',
     approvedInTour: (name, hub) => `${name} одобрена в тур «${hub}»`, rejectedNotice: (name) => `Заявка ${name} отклонена`,
@@ -92,7 +95,7 @@ const translations: Record<Lang, ApplicationTranslations> = {
     searchPlaceholder: 'Buscar por nombre, ciudad o tour…', colResident: 'Residente', colTour: 'Tour / hub', colDate: 'Fecha', colStatus: 'Estado', colActions: 'Acciones',
     model: 'Residente', unknownModel: 'Modelo', profileUnavailable: 'Perfil no disponible', tourShort: 'Tour:', dossier: 'Perfil',
     approveTour: 'Aprobar para el tour', approve: 'Aprobar', reject: 'Rechazar',
-    statusPending: 'Pendiente de revisión', statusApproved: 'Aprobada', statusRejected: 'Rechazada',
+    statusPending: 'Pendiente de revisión', statusApproved: 'Aprobada', statusRejected: 'Rechazada', statusCompleted: 'Completada',
     kycPassed: 'KYC completado', kycReview: 'KYC en revisión', kycRejected: 'KYC rechazado', kycNotPassed: 'KYC no completado',
     unknownError: 'Se produjo un error inesperado.', permissionError: 'No tienes permiso para modificar esta solicitud.',
     approvedInTour: (name, hub) => `${name} aprobada para el tour «${hub}»`, rejectedNotice: (name) => `Solicitud de ${name} rechazada`,
@@ -109,7 +112,7 @@ const translations: Record<Lang, ApplicationTranslations> = {
     searchPlaceholder: 'Buscar por nome, cidade ou tour…', colResident: 'Residente', colTour: 'Tour / hub', colDate: 'Data', colStatus: 'Status', colActions: 'Ações',
     model: 'Residente', unknownModel: 'Modelo', profileUnavailable: 'Perfil indisponível', tourShort: 'Tour:', dossier: 'Perfil',
     approveTour: 'Aprovar para o tour', approve: 'Aprovar', reject: 'Rejeitar',
-    statusPending: 'Aguardando análise', statusApproved: 'Aprovada', statusRejected: 'Rejeitada',
+    statusPending: 'Aguardando análise', statusApproved: 'Aprovada', statusRejected: 'Rejeitada', statusCompleted: 'Concluída',
     kycPassed: 'KYC concluído', kycReview: 'KYC em análise', kycRejected: 'KYC rejeitado', kycNotPassed: 'KYC não concluído',
     unknownError: 'Ocorreu um erro inesperado.', permissionError: 'Você não tem permissão para alterar esta solicitação.',
     approvedInTour: (name, hub) => `${name} aprovada para o tour “${hub}”`, rejectedNotice: (name) => `Solicitação de ${name} rejeitada`,
@@ -130,7 +133,7 @@ const PORTFOLIO_BUCKET = 'user-uploads';
  * Типы
  * ──────────────────────────────────────────────────────────────────────────── */
 
-type AppStatus = 'pending' | 'approved' | 'rejected';
+type AppStatus = 'pending' | 'approved' | 'rejected' | 'completed';
 type StatusFilter = 'all' | AppStatus;
 
 interface ApplicationRow {
@@ -147,6 +150,11 @@ type RawProfile = Record<string, any>;
 interface ModelProfile {
   id: string;
   fullName: string;
+  segment: Segment;
+  level: number;
+  reliability: number;
+  kycLevel: number;
+  kycSubmissionLevel: number | null;
   avatarUrl: string | null;
   city: string | null;
   height: string | null;
@@ -229,11 +237,16 @@ function normalizeProfile(raw: RawProfile, resolve: (p: string) => string, t: Ap
   return {
     id: String(raw.id),
     fullName: str(pick(raw, ['full_name', 'fullName', 'name', 'nickname'])) ?? t.unknownModel,
+    segment: str(pick(raw, ['segment'])) === 'elite' ? 'elite' : 'working',
+    level: Math.max(1, Math.min(6, Math.floor(Number(pick(raw, ['level'])) || 1))),
+    reliability: Math.max(0, Math.min(100, pick(raw, ['reliability']) == null ? 100 : Number(pick(raw, ['reliability'])) || 0)),
     avatarUrl: avatar ? resolve(avatar) : photos[0] ?? null,
     city: str(pick(raw, ['city', 'location', 'base_city', 'location'])),
     height,
     measurements: measurements || null,
-    kycStatus: str(pick(raw, ['kyc_level', 'kyc_status', 'kycStatus', 'verification_status'])),
+    kycLevel: Math.max(0, Math.min(3, Math.floor(Number(pick(raw, ['kyc_level'])) || 0))),
+    kycSubmissionLevel: null,
+    kycStatus: null,
     photos,
     bio: str(pick(raw, ['bio', 'about', 'description'])),
     instagram: str(pick(raw, ['instagram', 'instagram_handle', 'ig'])),
@@ -265,6 +278,7 @@ function statusMeta(status: AppStatus, t: ApplicationTranslations) {
     pending: { label: t.statusPending, cls: 'border-amber-200/30 bg-amber-200/10 text-amber-200', dot: 'bg-amber-200 animate-pulse' },
     approved: { label: t.statusApproved, cls: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300', dot: 'bg-emerald-400' },
     rejected: { label: t.statusRejected, cls: 'border-rose-400/30 bg-rose-400/10 text-rose-300', dot: 'bg-rose-400' },
+    completed: { label: t.statusCompleted, cls: 'border-amber-200/30 bg-amber-200/10 text-amber-100', dot: 'bg-amber-200' },
   };
   return map[status] ?? map.pending;
 }
@@ -293,6 +307,10 @@ export default function ApplicationsPage() {
 }
 
 function ApplicationsDashboard() {
+  const auth = useAuth();
+  const canManageTrust = auth.role === 'owner' || auth.role === 'admin';
+  const [activeTab, setActiveTab] = useState<'tours' | 'events'>('tours');
+  const effectiveTab = canManageTrust ? activeTab : 'tours';
   const { lang } = useLanguage();
   const t = translations[lang] ?? translations.EN;
   const locale = LOCALE[lang] ?? LOCALE.EN;
@@ -338,8 +356,34 @@ function ApplicationsDashboard() {
 
           if (profilesError) throw profilesError;
 
+          let latestKycByProfile = new Map<string, { status: string; level: number }>();
+          // kyc_submissions RLS is intentionally restricted to owner/admin. Managers keep
+          // the safe level-only indicator and do not issue a query they cannot read.
+          if (canManageTrust) {
+            const { data: submissions, error: kycError } = await supabase
+              .from('kyc_submissions')
+              .select('profile_id,level,status,created_at')
+              .in('profile_id', userIds)
+              .order('created_at', { ascending: false });
+            if (kycError) console.warn('[admin-applications] KYC status unavailable:', kycError.message);
+            for (const submission of submissions ?? []) {
+              const id = String(submission.profile_id);
+              if (!latestKycByProfile.has(id)) {
+                latestKycByProfile.set(id, { status: String(submission.status), level: Number(submission.level) || 1 });
+              }
+            }
+          }
+
           profileMap = new Map(
-            ((profiles ?? []) as RawProfile[]).map((p) => [String(p.id), normalizeProfile(p, resolveUrl, t)]),
+            ((profiles ?? []) as RawProfile[]).map((rawProfile) => {
+              const normalized = normalizeProfile(rawProfile, resolveUrl, t);
+              const latestKyc = latestKycByProfile.get(normalized.id);
+              return [normalized.id, {
+                ...normalized,
+                kycStatus: latestKyc?.status ?? null,
+                kycSubmissionLevel: latestKyc?.level ?? null,
+              }];
+            }),
           );
         }
 
@@ -352,7 +396,7 @@ function ApplicationsDashboard() {
         setRefreshing(false);
       }
     },
-    [resolveUrl, t],
+    [resolveUrl, t, canManageTrust],
   );
 
   useEffect(() => {
@@ -413,6 +457,7 @@ function ApplicationsDashboard() {
       pending: items.filter((i) => i.status === 'pending').length,
       approved: items.filter((i) => i.status === 'approved').length,
       rejected: items.filter((i) => i.status === 'rejected').length,
+      completed: items.filter((i) => i.status === 'completed').length,
     }),
     [items],
   );
@@ -429,6 +474,12 @@ function ApplicationsDashboard() {
   }, [items, filter, query]);
 
   const selected = items.find((i) => i.id === selectedId) ?? null;
+
+  const updateTrust = useCallback((profileId: string, next: { segment: Segment; reliability: number }) => {
+    setItems((current) => current.map((item) => item.profile && item.profile.id === profileId
+      ? { ...item, profile: { ...item.profile, segment: next.segment, reliability: next.reliability } }
+      : item));
+  }, []);
 
   return (
     <div className="relative min-h-screen bg-zinc-950 text-zinc-100">
@@ -462,13 +513,36 @@ function ApplicationsDashboard() {
           </button>
         </header>
 
-        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-white/[0.08] bg-zinc-900/40 p-1.5 backdrop-blur-xl" role="tablist" aria-label="Тип заявок">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={effectiveTab === 'tours'}
+            onClick={() => setActiveTab('tours')}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm transition ${effectiveTab === 'tours' ? 'border border-amber-200/25 bg-amber-200/[0.08] text-amber-100' : 'border border-transparent text-zinc-400 hover:text-zinc-100'}`}
+          >
+            <MapPin className="h-4 w-4" /> Туры
+          </button>
+          {canManageTrust && <button
+            type="button"
+            role="tab"
+            aria-selected={effectiveTab === 'events'}
+            onClick={() => { setSelectedId(null); setActiveTab('events'); }}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm transition ${effectiveTab === 'events' ? 'border border-amber-200/25 bg-amber-200/[0.08] text-amber-100' : 'border border-transparent text-zinc-400 hover:text-zinc-100'}`}
+          >
+            <Calendar className="h-4 w-4" /> Тусовки
+          </button>}
+        </div>
+
+        {effectiveTab === 'tours' ? <>
+        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
           {(
             [
               ['all', t.all],
               ['pending', t.pending],
               ['approved', t.approved],
               ['rejected', t.rejected],
+              ['completed', t.statusCompleted],
             ] as [StatusFilter, string][]
           ).map(([key, label]) => {
             const active = filter === key;
@@ -529,6 +603,8 @@ function ApplicationsDashboard() {
                   key={item.id}
                   item={item}
                   t={t}
+                  canManageTrust={canManageTrust}
+                  onTrustUpdated={(next) => item.profile && updateTrust(item.profile.id, next)}
                   locale={locale}
                   busyStatus={busy[item.id]}
                   onOpen={() => setSelectedId(item.id)}
@@ -539,9 +615,10 @@ function ApplicationsDashboard() {
             </ul>
           )}
         </section>
+        </> : <EventApplicationsPanel canManageTrust={canManageTrust} />}
       </div>
 
-      {selected && (
+      {effectiveTab === 'tours' && selected && (
         <DossierDrawer
           key={selected.id}
           item={selected}
@@ -564,6 +641,8 @@ function ApplicationRowView({
   t,
   locale,
   busyStatus,
+  canManageTrust,
+  onTrustUpdated,
   onOpen,
   onApprove,
   onReject,
@@ -572,6 +651,8 @@ function ApplicationRowView({
   t: ApplicationTranslations;
   locale: string;
   busyStatus?: AppStatus;
+  canManageTrust: boolean;
+  onTrustUpdated: (next: { segment: Segment; reliability: number }) => void;
   onOpen: () => void;
   onApprove: () => void;
   onReject: () => void;
@@ -581,15 +662,23 @@ function ApplicationRowView({
 
   return (
     <li className="grid grid-cols-1 gap-4 px-4 py-4 transition hover:bg-white/[0.025] sm:px-6 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] md:items-center">
-      <button onClick={onOpen} className="flex min-w-0 items-center gap-3 text-left">
+      <div className="flex min-w-0 items-start gap-3 text-left">
         <Avatar src={p?.avatarUrl ?? null} name={p?.fullName ?? '?'} size="md" />
-        <div className="min-w-0">
-          <p className="truncate font-medium text-zinc-100">{p?.fullName ?? t.profileUnavailable}</p>
+        <div className="min-w-0 flex-1">
+          <button type="button" onClick={onOpen} className="block max-w-full truncate text-left font-medium text-zinc-100 transition hover:text-amber-100">{p?.fullName ?? t.profileUnavailable}</button>
           <p className="truncate text-xs text-zinc-500">
             {[p?.city, p?.height, p?.measurements].filter(Boolean).join(' · ') || '—'}
           </p>
+          {p && <ResidentTrustBadges segment={p.segment} level={p.level} reliability={p.reliability} kycLevel={p.kycLevel} kycStatus={p.kycStatus} kycSubmissionLevel={p.kycSubmissionLevel} />}
+          {p && <ResidentSocialLiftControls
+            profileId={p.id}
+            segment={p.segment}
+            reliability={p.reliability}
+            enabled={canManageTrust}
+            onUpdated={onTrustUpdated}
+          />}
         </div>
-      </button>
+      </div>
 
       <div className="flex items-center gap-2 md:block">
         <span className="text-[11px] uppercase tracking-widest text-zinc-500 md:hidden">{t.tourShort}</span>
@@ -649,7 +738,7 @@ function ActionButtons({
 
   return (
     <>
-      {status !== 'approved' || busyStatus === 'approved' ? (
+      {status !== 'completed' && (status !== 'approved' || busyStatus === 'approved') ? (
         <button
           onClick={onApprove}
           disabled={isBusy}
@@ -665,7 +754,7 @@ function ActionButtons({
         </button>
       ) : null}
 
-      {status !== 'rejected' || busyStatus === 'rejected' ? (
+      {status !== 'completed' && (status !== 'rejected' || busyStatus === 'rejected') ? (
         <button
           onClick={onReject}
           disabled={isBusy}

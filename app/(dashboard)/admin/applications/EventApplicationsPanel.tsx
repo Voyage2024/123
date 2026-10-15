@@ -5,15 +5,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calendar, Check, Loader2, RefreshCw, Search, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { ResidentSocialLiftControls, ResidentTrustBadges, type Segment } from './ResidentTrustControls';
 
 type Status = 'pending' | 'approved' | 'rejected' | 'completed';
 type Profile = {
   id: string;
   full_name: string | null;
   avatar_url: string | null;
-  segment: 'working' | 'elite';
+  segment: Segment;
   level: number;
   reliability: number;
+  kyc_level: number;
+  kyc_status: string | null;
+  kyc_submission_level: number | null;
   location: string | null;
 };
 type GlobalEvent = {
@@ -67,7 +71,7 @@ function completionDetails() {
   return { completion_value: value, complexity_score: complexity, completion_country_code: country || null };
 }
 
-export default function EventApplicationsPanel() {
+export default function EventApplicationsPanel({ canManageTrust = false }: { canManageTrust?: boolean }) {
   const [items, setItems] = useState<EventApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -92,7 +96,7 @@ export default function EventApplicationsPanel() {
       const eventIds = [...new Set(rows.map((row) => String(row.event_id)))];
       const [profilesResult, eventsResult] = await Promise.all([
         userIds.length
-          ? supabase.from('profiles').select('id,full_name,avatar_url,segment,level,reliability,location').in('id', userIds)
+          ? supabase.from('profiles').select('id,user_id,full_name,avatar_url,segment,level,reliability,kyc_level,location').in('user_id', userIds)
           : Promise.resolve({ data: [], error: null } as never),
         eventIds.length
           ? supabase.from('global_events').select('id,title,region,country_code,audience_segment').in('id', eventIds)
@@ -101,7 +105,28 @@ export default function EventApplicationsPanel() {
       if (profilesResult.error) throw profilesResult.error;
       if (eventsResult.error) throw eventsResult.error;
 
-      const profiles = new Map((profilesResult.data ?? []).map((profile: Record<string, unknown>) => [String(profile.id), profile]));
+      let kycRows: Record<string, unknown>[] = [];
+      const profileIds = (profilesResult.data ?? []).map((profile: Record<string, unknown>) => String(profile.id));
+      if (canManageTrust && profileIds.length) {
+        const { data: submissions, error: kycError } = await supabase
+          .from('kyc_submissions')
+          .select('profile_id,level,status,created_at')
+          .in('profile_id', profileIds)
+          .order('created_at', { ascending: false });
+        if (kycError) console.warn('[event-applications] KYC status unavailable:', kycError.message);
+        else kycRows = (submissions ?? []) as unknown as Record<string, unknown>[];
+      }
+
+      const latestKyc = new Map<string, { status: string; level: number }>();
+      for (const submission of kycRows) {
+        const id = String(submission.profile_id);
+        if (!latestKyc.has(id)) latestKyc.set(id, {
+          status: String(submission.status),
+          level: Number(submission.level) || 1,
+        });
+      }
+
+      const profiles = new Map((profilesResult.data ?? []).map((profile: Record<string, unknown>) => [String(profile.user_id), profile]));
       const events = new Map((eventsResult.data ?? []).map((event: Record<string, unknown>) => [String(event.id), event]));
       setItems(rows.map((row: Record<string, unknown>) => {
         const rawProfile = profiles.get(String(row.user_id));
@@ -112,7 +137,10 @@ export default function EventApplicationsPanel() {
           avatar_url: typeof rawProfile.avatar_url === 'string' ? rawProfile.avatar_url : null,
           segment: String(rawProfile.segment) === 'elite' ? 'elite' : 'working',
           level: Math.max(1, Math.min(6, Number(rawProfile.level ?? 1) || 1)),
-          reliability: Math.max(0, Math.min(100, Number(rawProfile.reliability ?? 100) || 0)),
+          reliability: Math.max(0, Math.min(100, rawProfile.reliability == null ? 100 : (Number(rawProfile.reliability) || 0))),
+          kyc_level: Math.max(0, Math.min(3, Number(rawProfile.kyc_level ?? 0) || 0)),
+          kyc_status: latestKyc.get(String(rawProfile.id))?.status ?? null,
+          kyc_submission_level: latestKyc.get(String(rawProfile.id))?.level ?? null,
           location: typeof rawProfile.location === 'string' ? rawProfile.location : null,
         } : null;
         const event: GlobalEvent | null = rawEvent ? {
@@ -135,13 +163,19 @@ export default function EventApplicationsPanel() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [canManageTrust]);
 
   useEffect(() => {
     // Async data synchronization on mount; load manages its loading/error state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  const updateTrust = useCallback((profileId: string, next: { segment: Segment; reliability: number }) => {
+    setItems((current) => current.map((item) => item.profile && item.profile.id === profileId
+      ? { ...item, profile: { ...item.profile, segment: next.segment, reliability: next.reliability } }
+      : item));
+  }, []);
 
   const visible = useMemo(() => {
     const q = query.trim().toLocaleLowerCase();
@@ -206,7 +240,6 @@ export default function EventApplicationsPanel() {
       ) : (
         <ul className="divide-y divide-white/[0.06]">
           {visible.map((item) => {
-            const segment = item.profile?.segment ?? 'working';
             return (
               <li key={item.id} className="flex flex-col gap-4 px-4 py-5 transition hover:bg-white/[0.02] sm:px-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
@@ -216,11 +249,21 @@ export default function EventApplicationsPanel() {
                   <div className="min-w-0">
                     <p className="truncate font-medium text-zinc-100">{item.profile?.full_name ?? 'Профиль недоступен'}</p>
                     <p className="mt-0.5 truncate text-xs text-zinc-500">{item.profile?.location ?? 'Локация не указана'} · {dateFormatter.format(new Date(item.created_at))}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold tracking-[0.14em] ${segment === 'elite' ? 'border-amber-200/40 bg-amber-200/10 text-amber-100' : 'border-white/10 bg-white/[0.04] text-zinc-400'}`}>{segment.toUpperCase()}</span>
-                      <span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] text-zinc-400">LVL {item.profile?.level ?? 1}</span>
-                      <span className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] text-zinc-400">Надёжность {item.profile?.reliability ?? 100}%</span>
-                    </div>
+                    {item.profile && <ResidentTrustBadges
+                      segment={item.profile.segment}
+                      level={item.profile.level}
+                      reliability={item.profile.reliability}
+                      kycLevel={item.profile.kyc_level}
+                      kycStatus={item.profile.kyc_status}
+                      kycSubmissionLevel={item.profile.kyc_submission_level}
+                    />}
+                    {item.profile && <ResidentSocialLiftControls
+                      profileId={item.profile.id}
+                      segment={item.profile.segment}
+                      reliability={item.profile.reliability}
+                      enabled={canManageTrust}
+                      onUpdated={(next) => updateTrust(item.profile!.id, next)}
+                    />}
                   </div>
                 </div>
                 <div className="flex min-w-0 flex-col gap-2 lg:w-[360px] lg:items-end">
