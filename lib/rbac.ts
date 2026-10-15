@@ -1,8 +1,8 @@
 /* ──────────────────────────────────────────────────────────────────────
  * RBAC — единый источник правды о ролях и доступе к разделам.
  *
- * Используется и на сервере (middleware), и на клиенте (admin/layout.tsx),
- * поэтому здесь нет "use client" и нет зависимостей от React.
+ * Используется в admin/layout.tsx для определения разрешённых ролей маршрута.
+ * Файл не выполняет проверку сам по себе: вызывающая сторона должна применить правила.
  * Права должны совпадать с NAV_SECTIONS в Sidebar.tsx и RLS в базе.
  * ──────────────────────────────────────────────────────────────────── */
 
@@ -31,15 +31,17 @@ export const OWNER_ROLES: readonly Role[] = ["owner"];
 type RouteRule = { prefix: string; roles: readonly Role[] };
 
 /**
- * All /admin routes are closed to managers by default. The longest matching rule
- * wins, so personal profile settings remain available to staff while sensitive
- * sections have their own stricter role lists.
+ * All /admin routes are restricted to owner/admin by default. The longest matching
+ * rule wins, so personal settings remain available to staff and sensitive sections
+ * can define stricter access independently.
  */
 export const ADMIN_ROUTE_RULES: RouteRule[] = [
   // Baseline: administrative workspace is admin/owner only.
   { prefix: "/admin", roles: ADMIN_ROLES },
 
   // Explicit exceptions / stricter access.
+  // Control Tower is admin/owner only; keep the rule explicit for future maintenance.
+  { prefix: "/admin/negotiations", roles: ADMIN_ROLES },
   { prefix: "/admin/settings", roles: STAFF_ROLES },
   { prefix: "/admin/roles", roles: OWNER_ROLES },
   { prefix: "/admin/global-tours", roles: OWNER_ROLES },

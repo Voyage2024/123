@@ -26,6 +26,7 @@ import {
   FileText,
   GlassWater,
   Plane,
+  Radar,
   Trophy,
   Coins,
   BadgeCheck,
@@ -83,6 +84,7 @@ type NavKey =
   | "roleManagement"
   | "adminParties"
   | "mapLocations"
+  | "negotiations"
   | "database"
   | "command"
   | "castings"
@@ -168,6 +170,7 @@ const NAV_SECTIONS: NavSection[] = [
       { key: "directory", href: "/admin", icon: Users },
       { key: "database", href: "/admin/database", icon: Database },
       { key: "applications", href: "/admin/applications", icon: ClipboardList },
+      { key: "negotiations", href: "/admin/negotiations", icon: Radar },
       { key: "membershipRequests", href: "/admin/requests", icon: UserPlus },
       { key: "faceControl", href: "/admin/face-control", icon: ShieldAlert },
       { key: "concierge", href: "/admin/concierge", icon: ConciergeBell },
@@ -242,6 +245,7 @@ const translations = {
       overview: "Overview",
       myLocation: "My Location",
       applications: "Resident Applications",
+      negotiations: "Control Tower",
       membershipRequests: "Membership Requests",
       directory: "Directory",
       faceControl: "Face Control",
@@ -301,6 +305,7 @@ const translations = {
       overview: "Обзор",
       myLocation: "Моя локация",
       applications: "Заявки резидентов",
+      negotiations: "Переговоры",
       membershipRequests: "Заявки на вступление",
       directory: "Справочник",
       faceControl: "Фейс-контроль",
@@ -360,6 +365,7 @@ const translations = {
       overview: "Resumen",
       myLocation: "Mi ubicación",
       applications: "Solicitudes",
+      negotiations: "Torre de control",
       membershipRequests: "Solicitudes de ingreso",
       directory: "Directorio",
       faceControl: "Control de acceso",
@@ -419,6 +425,7 @@ const translations = {
       overview: "Visão geral",
       myLocation: "Minha localização",
       applications: "Solicitações",
+      negotiations: "Torre de controle",
       membershipRequests: "Pedidos de adesão",
       directory: "Diretório",
       faceControl: "Controle de acesso",
