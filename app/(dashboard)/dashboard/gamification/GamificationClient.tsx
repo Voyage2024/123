@@ -14,11 +14,10 @@
  *   game_destinations / game_combos / game_circles — веса, комбо, пороги
  *   game_attendance (свои строки)                  — штампы паспорта
  *   v_global_leaderboard (своя строка)             — Индекс и Circle
- * Индекс и Circle берутся из вью — это единый расчёт в БД, общий с
- * админкой и таблицей лидеров. Локальный computeStanding() из
- * lib/gamification.ts (та же формула) нужен для разбивки по цензам и
- * комбо и для мгновенного отклика, пока вью не ответила.
- * Правки админа приходят по realtime — страница пересчитывается сама.
+ * Все начисленные баллы и Circle берутся из БД: v_global_leaderboard
+ * и resident_score_events. Клиент не вычисляет рейтинг, бонусы штампов
+ * или награды комбо. Из UI показываются фактически начисленные значения.
+ * Правки админа приходят по realtime — страница перечитывает данные.
  *
  * Каталог, названия, регионы и лор комбо — lib/gamification.ts.
  * Бренд-слой (Voyage Passport, Consular Clearance, Circle, названия
@@ -68,7 +67,6 @@ import {
   TIERS,
   circleFor,
   comboNeed,
-  computeStanding,
   fmtPoints,
   isDestId,
   nextCircle,
@@ -78,7 +76,6 @@ import {
   resolveCircles,
   resolveCombos,
   resolveDestinations,
-  stampValue,
   type AttendanceRow,
   type CircleConfig,
   type CircleKey,
@@ -358,16 +355,16 @@ const COMBO_ICON: Record<ComboIcon, LucideIcon> = {
   waves: Waves,
 };
 
-/* демо-паспорт: только при <GamificationClient demo /> */
+/* Demo-only static fixture; these are illustrative points, never used for real scoring. */
 const DEMO_STAMPS: StampInput[] = [
-  { destinationId: "turkey", date: "2026-01-18" },
-  { destinationId: "georgia", date: "2026-02-03" },
-  { destinationId: "bali", date: "2026-02-14" },
-  { destinationId: "armenia", date: "2026-03-09" },
-  { destinationId: "cambodia", date: "2026-04-21" },
-  { destinationId: "vietnam", date: "2026-05-23" },
-  { destinationId: "cyprus_turkish", date: "2026-06-12", points: 400 }, // кастомный вес штампа
-  { destinationId: "phuket", date: "2026-07-30" },
+  { destinationId: "turkey", date: "2026-01-18", awardedPoints: 120},
+  { destinationId: "georgia", date: "2026-02-03", awardedPoints: 140},
+  { destinationId: "bali", date: "2026-02-14", awardedPoints: 180},
+  { destinationId: "armenia", date: "2026-03-09", awardedPoints: 90},
+  { destinationId: "cambodia", date: "2026-04-21", awardedPoints: 160},
+  { destinationId: "vietnam", date: "2026-05-23", awardedPoints: 200},
+  { destinationId: "cyprus_turkish", date: "2026-06-12", points: 400, awardedPoints: 400}, // кастомный вес штампа
+  { destinationId: "phuket", date: "2026-07-30", awardedPoints: 150},
 ];
 
 /* ══════════════════════════════════════════════════════════════════
@@ -531,6 +528,7 @@ type GameData = {
   combos: ComboConfig[];
   circles: CircleConfig[];
   stamps: StampInput[];
+  completedComboIds: string[];
   standing: LeaderboardRow | null;
 };
 
@@ -539,8 +537,8 @@ const DEFAULT_CONFIG = {
   combos: resolveCombos(),
   circles: resolveCircles(),
 };
-const EMPTY_DATA: GameData = { ...DEFAULT_CONFIG, stamps: [], standing: null };
-const DEMO_DATA: GameData = { ...DEFAULT_CONFIG, stamps: DEMO_STAMPS, standing: null };
+const EMPTY_DATA: GameData = { ...DEFAULT_CONFIG, stamps: [], completedComboIds: [], standing: null };
+const DEMO_DATA: GameData = { ...DEFAULT_CONFIG, stamps: DEMO_STAMPS, completedComboIds: [], standing: null };
 
 const toStamp = (row: AttendanceRow): StampInput => ({
   destinationId: row.destination_id,
@@ -548,6 +546,7 @@ const toStamp = (row: AttendanceRow): StampInput => ({
   points: row.points,
   multiplier: row.multiplier,
   date: row.stamped_at,
+  awardedPoints: row.awarded_points ?? 0,
 });
 
 /** Конфигурация, свои штампы и своя строка лидерборда + realtime */
@@ -561,28 +560,61 @@ function useGameData(userId: string | null, authLoading: boolean, demo: boolean)
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const load = async () => {
-      const [destRes, comboRes, circleRes, stampRes, standingRes] = await Promise.all([
+      const [destRes, comboRes, circleRes, stampRes, standingRes, scoreRes, achievementRes] = await Promise.all([
         supabase.from("game_destinations").select("id, visa_tier, points, multiplier, active, sort_order"),
         supabase.from("game_combos").select("id, title, destination_ids, required_count, bonus, active, sort_order"),
         supabase.from("game_circles").select("level, key, title, min_influence"),
         supabase
           .from("game_attendance")
-          .select("destination_id, visit_number, points, multiplier, stamped_at")
+          .select("id, destination_id, visit_number, points, multiplier, stamped_at")
           .eq("profile_id", userId)
           .order("stamped_at", { ascending: true }),
         supabase.from("v_global_leaderboard").select("*").eq("profile_id", userId).maybeSingle(),
+        supabase
+          .from("resident_score_events")
+          .select("event_key, category, points")
+          .eq("profile_id", userId)
+          .in("category", ["stamp", "combo"]),
+        supabase
+          .from("resident_achievements")
+          .select("achievement_key")
+          .eq("profile_id", userId)
+          .like("achievement_key", "combo:%"),
       ]);
       if (cancelled) return;
 
-      for (const res of [destRes, comboRes, circleRes, stampRes, standingRes]) {
+      for (const res of [destRes, comboRes, circleRes, stampRes, standingRes, scoreRes, achievementRes]) {
         if (res.error) console.error("[Gamification] Load error:", res.error);
       }
+
+      const scoreRows = scoreRes.error ? [] : ((scoreRes.data ?? []) as Array<{ event_key: string; category: string; points: number | string }>);
+      const awardedByAttendance = new Map<string, number>();
+      const completedComboIds = new Set<string>();
+      for (const row of scoreRows) {
+        if (row.category === "stamp" && row.event_key.startsWith("game-attendance:")) {
+          awardedByAttendance.set(row.event_key.slice("game-attendance:".length), Number(row.points) || 0);
+        }
+        if (row.category === "combo") {
+          const parts = row.event_key.split(":");
+          if (parts.length >= 3) completedComboIds.add(parts.slice(2).join(":"));
+        }
+      }
+      for (const row of (achievementRes.error ? [] : (achievementRes.data ?? [])) as Array<{ achievement_key: string }>) {
+        if (row.achievement_key.startsWith("combo:")) completedComboIds.add(row.achievement_key.slice("combo:".length));
+      }
+
+      const attendanceRows = stampRes.error ? [] : ((stampRes.data ?? []) as AttendanceRow[]);
+      const stamps = attendanceRows.map((row) => toStamp({
+        ...row,
+        awarded_points: row.id ? (awardedByAttendance.get(row.id) ?? 0) : 0,
+      }));
 
       setData({
         destinations: resolveDestinations(destRes.error ? null : (destRes.data as GameDestinationRow[])),
         combos: resolveCombos(comboRes.error ? null : (comboRes.data as GameComboRow[])),
         circles: resolveCircles(circleRes.error ? null : (circleRes.data as GameCircleRow[])),
-        stamps: stampRes.error ? [] : ((stampRes.data ?? []) as AttendanceRow[]).map(toStamp),
+        stamps,
+        completedComboIds: [...completedComboIds],
         standing: standingRes.error ? null : ((standingRes.data ?? null) as LeaderboardRow | null),
       });
     };
@@ -602,6 +634,16 @@ function useGameData(userId: string | null, authLoading: boolean, demo: boolean)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "game_attendance", filter: `profile_id=eq.${userId}` },
+        schedule,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "resident_score_events", filter: `profile_id=eq.${userId}` },
+        schedule,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "resident_achievements", filter: `profile_id=eq.${userId}` },
         schedule,
       )
       // протеже приняли / сожгли поручительство → меняются дивиденды в Индексе
@@ -1517,7 +1559,7 @@ function DestinationCard({
             {TIERS[dest.tier].label}
           </p>
           <p className="font-mono text-[10px] tabular-nums text-zinc-600">
-            {fmtPoints(stampValue(dest, {}))}
+            {fmtPoints(dest.points)}
             {dest.multiplier !== 1 && <span className="ml-1 text-[#dfe4ea]/60">×{dest.multiplier}</span>}
           </p>
         </div>
@@ -1609,11 +1651,13 @@ function LegendaryCombos({
   lang,
   combos,
   visited,
+  completedComboIds,
 }: {
   t: Dict;
   lang: Lang;
   combos: ComboConfig[];
   visited: ReadonlySet<DestId>;
+  completedComboIds: ReadonlySet<string>;
 }) {
   const active = combos.filter((c) => c.active && c.ids.length > 0);
 
@@ -1630,7 +1674,8 @@ function LegendaryCombos({
           const Icon = COMBO_ICON[combo.icon];
           const need = comboNeed(combo);
           const done = ids.filter((i) => visited.has(i)).length;
-          const complete = done >= need;
+          // Visited destinations show progress; only a server ledger/achievement row confirms award.
+          const complete = completedComboIds.has(id);
 
           return (
             <article
@@ -1746,20 +1791,29 @@ export default function GamificationClient({ demo = false, header }: { demo?: bo
   const { resident, userId, authLoading } = useResident();
   const data = useGameData(userId, authLoading, demo);
 
-  // та же формула, что во вью: разбивка по цензам и комбо + мгновенный отклик
-  const local = useMemo(
-    () => computeStanding(data.stamps, data.destinations, data.combos, data.circles),
-    [data],
-  );
-
-  // Индекс и Circle — из БД (v_global_leaderboard); пока вью не ответила — локальный расчёт
-  const index = num(data.standing?.total_influence) ?? local.index;
+  // The browser only displays server-calculated values from the leaderboard and immutable ledger.
+  const index = num(data.standing?.total_influence) ?? 0;
+  const passport = useMemo(() => {
+    const visited = new Set<DestId>();
+    const destinationById = new Map<string, DestinationConfig>(data.destinations.map((destination) => [destination.id, destination] as const));
+    for (const stamp of data.stamps) {
+      if (!isDestId(stamp.destinationId)) continue;
+      const destination = destinationById.get(stamp.destinationId);
+      if (destination?.active) visited.add(destination.id);
+    }
+    const byTier: Record<Tier, number> = { free: 0, evisa: 0, hard: 0 };
+    for (const id of visited) {
+      const destination = destinationById.get(id);
+      if (destination) byTier[destination.tier] += 1;
+    }
+    return { visited, byTier };
+  }, [data.stamps, data.destinations]);
   const dbCircle = normalizeCircleKey(data.standing?.circle_key);
   const circle = data.circles.find((c) => c.key === dbCircle) ?? circleFor(index, data.circles);
   const next = nextCircle(index, data.circles);
 
   const stamps = useMemo(() => {
-    const byId = new Map(data.destinations.map((d) => [d.id, d]));
+    const byId = new Map<string, DestinationConfig>(data.destinations.map((d) => [d.id, d] as const));
     const out: StampData[] = [];
     data.stamps.forEach((s, i) => {
       if (!isDestId(s.destinationId)) return;
@@ -1773,11 +1827,11 @@ export default function GamificationClient({ demo = false, header }: { demo?: bo
         ink: INKS[hash(d.id) % INKS.length],
         shape: SHAPES[hash(`${d.id}:shape`) % SHAPES.length],
         rotate: (hash(`${s.destinationId}:${s.date ?? i}`) % 15) - 7,
-        value: local.values[i] ?? 0,
+        value: num(s.awardedPoints) ?? 0,
       });
     });
     return out;
-  }, [data.stamps, data.destinations, local.values, lang]);
+  }, [data.stamps, data.destinations, lang]);
 
   const mrz = useMemo(
     () => buildMrz(resident.name, resident.memberNo),
@@ -1807,9 +1861,9 @@ export default function GamificationClient({ demo = false, header }: { demo?: bo
         <InfluencePanel
           t={t}
           index={index}
-          destinationsCount={local.destinationsCount}
-          byTier={local.byTier}
-          combosDone={local.completedCombos.length}
+          destinationsCount={num(data.standing?.destinations_count) ?? passport.visited.size}
+          byTier={passport.byTier}
+          combosDone={num(data.standing?.combos_completed) ?? data.completedComboIds.length}
           combosTotal={data.combos.filter((c) => c.active).length}
           patronage={num(data.standing?.patronage_points) ?? 0}
           tourPoints={num(data.standing?.tour_points) ?? 0}
@@ -1823,10 +1877,16 @@ export default function GamificationClient({ demo = false, header }: { demo?: bo
       </div>
 
       <div className="mb-20">
-        <ConsularGrid t={t} lang={lang} destinations={data.destinations} visited={local.visited} />
+        <ConsularGrid t={t} lang={lang} destinations={data.destinations} visited={passport.visited} />
       </div>
 
-      <LegendaryCombos t={t} lang={lang} combos={data.combos} visited={local.visited} />
+      <LegendaryCombos
+        t={t}
+        lang={lang}
+        combos={data.combos}
+        visited={passport.visited}
+        completedComboIds={new Set(data.completedComboIds)}
+      />
 
       <p
         className={`${cormorant.className} mt-20 border-t border-white/[0.05] pt-8 text-center text-sm italic text-zinc-600`}

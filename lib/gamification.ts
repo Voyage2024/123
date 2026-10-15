@@ -9,13 +9,9 @@
  *   • уровни Circle (1–6) и пороги по умолчанию;
  *   • формула Индекса глобального влияния.
  *
- * Канонический расчёт Индекса живёт в БД: game_base_influence (штампы +
- * комбо + баллы туров) и v_global_leaderboard (+ дивиденды патронажа) —
- * миграции 20261008_gamification_v2, 20261009_club_invites и
- * 20261014_tour_points_influence. computeStanding() ниже — точное зеркало
- * штампов и комбо для мгновенного отклика интерфейса; баллы туров
- * (tour_points) и патронаж (patronage_points) приходят из вью.
- * Меняешь формулу в одном месте — меняй и в другом.
+ * Канонический расчёт Индекса живёт в БД: resident_score_events →
+ * resident_metrics → v_global_leaderboard. Значения в интерфейсе читаются
+ * из БД; preview-функции ниже не должны использоваться для начислений.
  *
  *   вес штампа = round(points × multiplier × фактор визита)
  *     points / multiplier — свои у штампа, иначе у направления
@@ -544,11 +540,14 @@ export type GameCircleRow = {
 };
 
 export type AttendanceRow = {
+  id?: string;
   destination_id: string;
   visit_number?: number | null;
   points?: Num;
   multiplier?: Num;
   stamped_at?: string | null;
+  /** Actual server-awarded points from resident_score_events, not a browser estimate. */
+  awarded_points?: Num;
 };
 
 export type LeaderboardRow = {
@@ -686,7 +685,7 @@ export function resolveCircles(rows?: GameCircleRow[] | null): CircleConfig[] {
   });
 }
 
-/* ── Формула Индекса (зеркало SQL-вью) ───────────────────────────── */
+/* ── Совместимые preview-утилиты; actual scoring is DB-only ───────── */
 
 /** 1-й визит ×1 · 2-й ×1.5 · 3-й и далее ×2 */
 export function visitFactor(visitNumber: number | null | undefined) {
@@ -703,12 +702,11 @@ export type StampInput = {
   points?: Num;
   multiplier?: Num;
   date?: string | null;
+  /** Actual score read from the immutable DB ledger. */
+  awardedPoints?: Num;
 };
 
-/**
- * Вес штампа. Считается в целых сотых, чтобы округление совпадало с
- * Postgres round(numeric) до единицы (половина — от нуля).
- */
+/** @deprecated Display/config preview only. Actual awarded points come from resident_score_events. */
 export function stampValue(
   dest: Pick<DestinationConfig, "points" | "multiplier">,
   stamp: Pick<StampInput, "points" | "multiplier" | "visitNumber">,
@@ -735,6 +733,7 @@ export function nextCircle(index: number, circles: CircleConfig[]): CircleConfig
 export const comboNeed = (c: Pick<ComboConfig, "ids" | "required">) =>
   Math.min(c.required ?? c.ids.length, c.ids.length);
 
+/** @deprecated Legacy preview helper. Never use its output for a resident's actual Influence Index. */
 export type Standing = {
   index: number;
   stampPoints: number;
@@ -750,7 +749,7 @@ export type Standing = {
   next: CircleConfig | null;
 };
 
-/** stamps — в хронологическом порядке */
+/** @deprecated Legacy UI preview only. Authoritative scoring is performed by PostgreSQL ledger triggers. */
 export function computeStanding(
   stamps: StampInput[],
   destinations: DestinationConfig[],

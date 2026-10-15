@@ -60,7 +60,6 @@ import {
   comboNeed,
   nextCircle,
   normalizeLang,
-  stampValue,
   type CircleConfig,
   type CircleKey,
   type ComboConfig,
@@ -1080,7 +1079,7 @@ function DestinationPicker({
                         <span className="block truncate text-[10px] text-zinc-600">{sub}</span>
                       </span>
                       <span className="shrink-0 font-mono text-[10px] tabular-nums text-zinc-500">
-                        {stampValue(d, {})}
+                        {d.points}
                       </span>
                       {active && <Check size={13} strokeWidth={2} className="shrink-0" />}
                     </button>
@@ -1165,16 +1164,25 @@ const ResidentRow = memo(function ResidentRow({
       const { data, error } = await supabase
         .from("game_attendance")
         .insert(payload)
-        .select("visit_number")
-        .single<{ visit_number: number | null }>();
+        .select("id, visit_number")
+        .single<{ id: string; visit_number: number | null }>();
       if (error) throw error;
+      if (!data) throw new Error("Stamp insert returned no row");
 
-      const n = Number(data?.visit_number ?? 1);
+      const n = Number(data.visit_number ?? 1);
+      // The database AFTER INSERT trigger writes the authoritative award to the append-only ledger.
+      // Never reproduce the scoring formula in the browser.
+      const { data: scoreRow, error: scoreError } = await supabase
+        .from("resident_score_events")
+        .select("points")
+        .eq("event_key", `game-attendance:${data.id}`)
+        .maybeSingle<{ points: number | string }>();
+      if (scoreError) console.error("[Gamification] Stamp was saved, but score confirmation failed:", scoreError);
       showToast({
         kind: "ok",
         destination: destination.id,
         visit: n,
-        value: stampValue(destination, { points: custom, visitNumber: n }),
+        value: Math.max(0, Number(scoreRow?.points ?? 0)),
       });
       setSelected(null);
       setWeight("");
@@ -1516,7 +1524,7 @@ const DestinationEditor = memo(function DestinationEditor({
 
   const p = parseIntInput(draft.points);
   const m = parseDecimalInput(draft.multiplier);
-  const value = p !== null && m !== null ? stampValue({ points: p, multiplier: m }, {}) : null;
+  const value = p !== null && m !== null ? `${nf.format(p)} × ${nf.format(m)}` : null;
 
   return (
     <li
@@ -1571,7 +1579,7 @@ const DestinationEditor = memo(function DestinationEditor({
         />
 
         <p className="whitespace-nowrap text-right font-mono text-sm tabular-nums text-amber-200">
-          {value === null ? "—" : `= ${nf.format(value)}`}
+          {value === null ? "—" : `= ${value}`}
         </p>
 
         <div className="flex justify-center">
