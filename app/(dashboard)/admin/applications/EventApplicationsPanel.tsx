@@ -5,14 +5,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calendar, Check, Loader2, RefreshCw, Search, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { ResidentSocialLiftControls, ResidentTrustBadges, type Segment } from './ResidentTrustControls';
+import { ResidentTrustBadges } from './ResidentTrustBadges';
 
 type Status = 'pending' | 'approved' | 'rejected' | 'completed';
 type Profile = {
   id: string;
   full_name: string | null;
   avatar_url: string | null;
-  segment: Segment;
+  segment: 'working' | 'elite';
   level: number;
   reliability: number;
   kyc_level: number;
@@ -171,11 +171,6 @@ export default function EventApplicationsPanel({ canManageTrust = false }: { can
     void load();
   }, [load]);
 
-  const updateTrust = useCallback((profileId: string, next: { segment: Segment; reliability: number }) => {
-    setItems((current) => current.map((item) => item.profile && item.profile.id === profileId
-      ? { ...item, profile: { ...item.profile, segment: next.segment, reliability: next.reliability } }
-      : item));
-  }, []);
 
   const visible = useMemo(() => {
     const q = query.trim().toLocaleLowerCase();
@@ -256,13 +251,6 @@ export default function EventApplicationsPanel({ canManageTrust = false }: { can
                       kycLevel={item.profile.kyc_level}
                       kycStatus={item.profile.kyc_status}
                       kycSubmissionLevel={item.profile.kyc_submission_level}
-                    />}
-                    {item.profile && <ResidentSocialLiftControls
-                      profileId={item.profile.id}
-                      segment={item.profile.segment}
-                      reliability={item.profile.reliability}
-                      enabled={canManageTrust}
-                      onUpdated={(next) => updateTrust(item.profile!.id, next)}
                     />}
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarClock, CircleUserRound, ShieldCheck } from "lucide-react";
+import ResidentProfileManagement from "./ResidentProfileManagement";
 import { createClient } from "@/lib/supabase/server";
 
 function isUuid(value: string) {
@@ -25,10 +26,21 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: actor, error: actorError } = await supabase.from("profiles")
-    .select("role,banned_until,ban_permanent")
-    .eq("id", user.id)
+  const actorByUser = await supabase.from("profiles")
+    .select("id,user_id,role,banned_until,ban_permanent")
+    .eq("user_id", user.id)
     .maybeSingle();
+  let actor = actorByUser.data;
+  let actorError = actorByUser.error;
+  // Older installs may still use auth.users.id as profiles.id.
+  if (!actor && !actorError) {
+    const legacyActor = await supabase.from("profiles")
+      .select("id,user_id,role,banned_until,ban_permanent")
+      .eq("id", user.id)
+      .maybeSingle();
+    actor = legacyActor.data;
+    actorError = legacyActor.error;
+  }
   if (actorError || !actor || !["owner", "admin"].includes(String(actor.role))) {
     return <div className="mx-auto max-w-xl rounded-2xl border border-rose-500/20 bg-rose-950/10 p-6 text-sm text-rose-200">Доступ к профилям разрешён только владельцу и администраторам.</div>;
   }
@@ -60,7 +72,20 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
     </header>
 
     <section className="space-y-3"><h2 className="font-serif text-xl text-zinc-100">Идентификация и доступ</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Email / логин" value={profile.email} /><Field label="Telegram ID" value={profile.telegram_id} /><Field label="Telegram username" value={profile.telegram_username ? `@${profile.telegram_username.replace(/^@/, "")}` : null} /><Field label="Роль" value={profile.role} /><Field label="KYC" value={`${profile.kyc_level ?? 0}/3`} /><Field label="Дата создания" value={fmt(profile.created_at)} /><Field label="Источник регистрации" value={profile.registration_source} /><Field label="Блокировка до" value={profile.ban_permanent ? "Навсегда" : profile.banned_until ? bannedUntil : "Не заблокирован"} /><Field label="Причина блокировки" value={profile.ban_reason} /></div></section>
-    <section className="space-y-3"><h2 className="font-serif text-xl text-zinc-100">Профиль резидента</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Локация" value={profile.location} /><Field label="Гражданство" value={profile.citizenship} /><Field label="Дата рождения" value={profile.birth_date} /><Field label="Рост" value={profile.height} /><Field label="Вес" value={profile.weight} /><Field label="Параметры" value={profile.measurements} /><Field label="Сегмент" value={profile.segment} /><Field label="Круг" value={profile.circle} /><Field label="Уровень" value={profile.level} /><Field label="Индекс влияния" value={profile.influence_index} /><Field label="Баллы" value={profile.tour_points} /><Field label="Надёжность" value={profile.reliability === null ? null : `${profile.reliability}%`} /><Field label="USDT кошелёк" value={profile.usdt_wallet} /></div></section>
+    <section className="space-y-3"><h2 className="font-serif text-xl text-zinc-100">Профиль резидента</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Локация" value={profile.location} /><Field label="Гражданство" value={profile.citizenship} /><Field label="Дата рождения" value={profile.birth_date} /><Field label="Рост" value={profile.height} /><Field label="Вес" value={profile.weight} /><Field label="Параметры" value={profile.measurements} /><Field label="Индекс влияния" value={profile.influence_index} /><Field label="Баллы" value={profile.tour_points} /><Field label="USDT кошелёк" value={profile.usdt_wallet} /></div></section>
+    {profile.role === "resident" && <ResidentProfileManagement
+      profileId={profile.id}
+      fullName={name}
+      segment={profile.segment}
+      level={profile.level}
+      circle={profile.circle}
+      reliability={profile.reliability}
+      kycLevel={profile.kyc_level}
+      viewerRole={String(actor.role)}
+      viewerId={user.id}
+      viewerEmail={user.email ?? null}
+    />}
+
     <section className="rounded-2xl border border-zinc-800/80 bg-zinc-900/25 p-5"><h2 className="font-serif text-xl text-zinc-100">О себе</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-400">{profile.about?.trim() || "Описание не заполнено."}</p></section>
   </div>;
 }

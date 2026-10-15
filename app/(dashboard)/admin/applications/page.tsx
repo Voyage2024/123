@@ -30,7 +30,7 @@ import RoleGuard from '@/app/components/RoleGuard';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage, type Lang } from '@/app/context/LanguageContext';
 import EventApplicationsPanel from './EventApplicationsPanel';
-import { ResidentSocialLiftControls, ResidentTrustBadges, type Segment } from './ResidentTrustControls';
+import { ResidentTrustBadges } from './ResidentTrustBadges';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Настройки
@@ -150,7 +150,7 @@ type RawProfile = Record<string, any>;
 interface ModelProfile {
   id: string;
   fullName: string;
-  segment: Segment;
+  segment: 'working' | 'elite';
   level: number;
   reliability: number;
   kycLevel: number;
@@ -475,11 +475,6 @@ function ApplicationsDashboard() {
 
   const selected = items.find((i) => i.id === selectedId) ?? null;
 
-  const updateTrust = useCallback((profileId: string, next: { segment: Segment; reliability: number }) => {
-    setItems((current) => current.map((item) => item.profile && item.profile.id === profileId
-      ? { ...item, profile: { ...item.profile, segment: next.segment, reliability: next.reliability } }
-      : item));
-  }, []);
 
   return (
     <div className="relative min-h-screen bg-zinc-950 text-zinc-100">
@@ -603,8 +598,6 @@ function ApplicationsDashboard() {
                   key={item.id}
                   item={item}
                   t={t}
-                  canManageTrust={canManageTrust}
-                  onTrustUpdated={(next) => item.profile && updateTrust(item.profile.id, next)}
                   locale={locale}
                   busyStatus={busy[item.id]}
                   onOpen={() => setSelectedId(item.id)}
@@ -641,8 +634,6 @@ function ApplicationRowView({
   t,
   locale,
   busyStatus,
-  canManageTrust,
-  onTrustUpdated,
   onOpen,
   onApprove,
   onReject,
@@ -651,8 +642,6 @@ function ApplicationRowView({
   t: ApplicationTranslations;
   locale: string;
   busyStatus?: AppStatus;
-  canManageTrust: boolean;
-  onTrustUpdated: (next: { segment: Segment; reliability: number }) => void;
   onOpen: () => void;
   onApprove: () => void;
   onReject: () => void;
@@ -670,13 +659,6 @@ function ApplicationRowView({
             {[p?.city, p?.height, p?.measurements].filter(Boolean).join(' · ') || '—'}
           </p>
           {p && <ResidentTrustBadges segment={p.segment} level={p.level} reliability={p.reliability} kycLevel={p.kycLevel} kycStatus={p.kycStatus} kycSubmissionLevel={p.kycSubmissionLevel} />}
-          {p && <ResidentSocialLiftControls
-            profileId={p.id}
-            segment={p.segment}
-            reliability={p.reliability}
-            enabled={canManageTrust}
-            onUpdated={onTrustUpdated}
-          />}
         </div>
       </div>
 
