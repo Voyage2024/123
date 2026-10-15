@@ -77,5 +77,10 @@ export async function updateResidentTrust(
   revalidatePath("/admin/database");
   revalidatePath("/admin/directory");
   revalidatePath("/admin/applications");
-  return result;
+  return {
+      ok: true,
+      profileId,
+      segment: row.segment as "working" | "elite",
+      reliability: Number(reliability),
+    };
 }
