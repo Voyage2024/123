@@ -12,16 +12,13 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Cormorant_Garamond } from "next/font/google";
 import { ArrowUpRight, CalendarDays, Clock3, GlassWater, LayoutDashboard, MapPin, RefreshCw, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
+import { cormorant } from "@/app/components/profile/fonts";
 import { normalizeLang, type Lang } from "@/lib/gamification";
 import { initials } from "@/lib/memberCards";
 
-export const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "latin-ext", "cyrillic"],
-  weight: ["400", "500", "600"],
-});
+export { cormorant };
 
 /* ── Данные ───────────────────────────────────────────────────────── */
 

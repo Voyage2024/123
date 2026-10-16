@@ -18,14 +18,11 @@
  * ──────────────────────────────────────────────────────────────────── */
 
 import type { ReactNode } from "react";
-import { Cormorant_Garamond } from "next/font/google";
 import { Search, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
+import { cormorant } from "@/app/components/profile/fonts";
 import type { KeyTier } from "../_lib/command";
 
-export const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "latin-ext", "cyrillic"],
-  weight: ["500", "600"],
-});
+export { cormorant };
 
 /* ── токены ────────────────────────────────────────────────────────── */
 

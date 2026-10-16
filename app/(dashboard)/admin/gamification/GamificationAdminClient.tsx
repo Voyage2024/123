@@ -20,7 +20,6 @@
  * ──────────────────────────────────────────────────────────────────── */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Cormorant_Garamond } from "next/font/google";
 import {
   AlertTriangle,
   Anchor,
@@ -72,13 +71,9 @@ import {
   type Lang,
   type Tier,
 } from "@/lib/gamification";
+import { cormorant } from "@/app/components/profile/fonts";
 
-// Шрифт объявлен один раз и экспортируется — page.tsx берёт его отсюда.
-export const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "cyrillic"],
-  weight: ["500", "600"],
-  style: ["normal", "italic"],
-});
+export { cormorant };
 
 /* ══════════════════════════════════════════════════════════════════
  * i18n

@@ -22,7 +22,6 @@
 
 import { useId, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Cormorant_Garamond } from "next/font/google";
 import {
   ArrowUpRight,
   BadgeCheck,
@@ -84,11 +83,7 @@ import {
   isFreshSnap,
   snapState,
 } from "./_components/TrustSignals";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "latin-ext", "cyrillic"],
-  weight: ["500", "600"],
-});
+import { cormorant } from "@/app/components/profile/fonts";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПЕРЕВОДЫ

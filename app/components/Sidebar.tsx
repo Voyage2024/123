@@ -48,18 +48,13 @@ import {
   ChevronDown,
   type LucideIcon,
 } from "lucide-react";
-import { Cormorant_Garamond } from "next/font/google";
 import { useAuth, type Role } from "@/app/context/AuthContext";
 import { useLanguage } from "@/app/context/LanguageContext";
 import UserAvatar from "@/app/components/UserAvatar";
+import { cormorant } from "@/app/components/profile/fonts";
 import { supabase } from "@/lib/supabase";
 import { isClubAdmin } from "@/lib/access";
 import { useMobileMenu, useRegisterSidebar, useScrollLock } from "@/app/context/MobileMenuContext";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "latin-ext", "cyrillic"],
-  weight: ["500", "600"],
-});
 
 type NavKey =
   | "myVoyage"

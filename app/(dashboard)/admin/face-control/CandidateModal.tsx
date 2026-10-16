@@ -16,14 +16,9 @@ import {
   Cigarette,
   Wine,
 } from "lucide-react";
-import { Cormorant_Garamond } from "next/font/google";
 import type { Application } from "./FaceControlList";
 import { resolvePhotoUrls } from "./photoUrl";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "cyrillic"],
-  weight: ["500", "600"],
-});
+import { cormorant } from "@/app/components/profile/fonts";
 
 type Props = {
   application: Application;

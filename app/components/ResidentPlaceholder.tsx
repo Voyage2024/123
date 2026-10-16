@@ -1,10 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Cormorant_Garamond } from "next/font/google";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "cyrillic"],
-  weight: ["500", "600"],
-});
+import { cormorant } from "@/app/components/profile/fonts";
 
 /* ──────────────────────────────────────────────────────────────────────
  * RESIDENT PLACEHOLDER — единый шаблон «раздел в разработке».

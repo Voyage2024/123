@@ -37,7 +37,6 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { Cormorant_Garamond } from "next/font/google";
 import {
   CalendarDays,
   Check,
@@ -72,12 +71,7 @@ import {
   inviteUrl,
   type Milestone,
 } from "@/lib/patronage";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "cyrillic"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-});
+import { cormorant } from "@/app/components/profile/fonts";
 
 /* ══════════════════════════════════════════════════════════════════
  * КОНТРАКТ ДАННЫХ

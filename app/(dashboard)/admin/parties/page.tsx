@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Cormorant_Garamond } from 'next/font/google';
 import {
   GlassWater,
   Plus,
@@ -19,11 +18,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/app/context/LanguageContext';
-
-const cormorant = Cormorant_Garamond({
-  subsets: ['latin', 'cyrillic'],
-  weight: ['400', '500', '600', '700'],
-});
+import { cormorant } from "@/app/components/profile/fonts";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */

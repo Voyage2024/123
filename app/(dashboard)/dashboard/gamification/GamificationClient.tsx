@@ -37,7 +37,6 @@ import {
   type ReactNode,
   type TouchEvent as ReactTouchEvent,
 } from "react";
-import { Cormorant_Garamond } from "next/font/google";
 import {
   Anchor,
   Check,
@@ -91,12 +90,7 @@ import {
   type StampInput,
   type Tier,
 } from "@/lib/gamification";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "cyrillic"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-});
+import { cormorant } from "@/app/components/profile/fonts";
 
 /* ── Текстура: SVG-шум как data URI, без внешних файлов ──────────── */
 

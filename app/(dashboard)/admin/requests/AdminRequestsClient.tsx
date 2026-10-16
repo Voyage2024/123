@@ -16,7 +16,6 @@
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Cormorant_Garamond } from "next/font/google";
 import {
   AlertTriangle,
   AtSign,
@@ -38,13 +37,9 @@ import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { normalizeLang, type Lang } from "@/lib/gamification";
 import { contactLinks, hostOf, instagramUrl, type ApplicationStatus, type GuestApplication } from "@/lib/guestApplications";
+import { cormorant } from "@/app/components/profile/fonts";
 
-// Шрифт объявлен один раз и экспортируется — page.tsx берёт его отсюда.
-export const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "cyrillic"],
-  weight: ["500", "600"],
-  style: ["normal", "italic"],
-});
+export { cormorant };
 
 /* ══════════════════════════════════════════════════════════════════
  * i18n

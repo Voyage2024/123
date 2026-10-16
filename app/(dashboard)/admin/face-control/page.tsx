@@ -1,18 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Cormorant_Garamond } from "next/font/google";
 import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/app/context/AuthContext";
 import FaceControlList, { type Application } from "./FaceControlList";
 import { approveProfile } from "@/app/actions/approve-profile";
 import { declineApplication } from "./actions";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "cyrillic"],
-  weight: ["500", "600"],
-});
+import { cormorant } from "@/app/components/profile/fonts";
 
 /* ──────────────────────────────────────────────────────────────────────
  * FACE CONTROL — очередь заявок с полной анкетой в модалке.

@@ -22,7 +22,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Cormorant_Garamond } from "next/font/google";
 import {
   ArrowLeft,
   Check,
@@ -44,12 +43,7 @@ import { notifyCurrentReferralRegistration } from "@/app/actions/referral-notifi
 import { useLanguage } from "@/app/context/LanguageContext";
 import { LANGS, normalizeCircleKey, normalizeLang, type CircleKey, type Lang } from "@/lib/gamification";
 import { KEY_TTL_DAYS, inviteErrorCode, normalizeInviteCode, type InvitePreviewRow } from "@/lib/patronage";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "cyrillic"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-});
+import { cormorant } from "@/app/components/profile/fonts";
 
 /* ══════════════════════════════════════════════════════════════════
  * СЛОВАРЬ

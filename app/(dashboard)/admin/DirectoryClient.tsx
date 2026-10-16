@@ -26,7 +26,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Cormorant_Garamond } from "next/font/google";
+import { cormorant } from "@/app/components/profile/fonts";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -63,10 +63,7 @@ import {
   type KycSubmission,
 } from "./KycVault";
 
-export const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "latin-ext", "cyrillic"],
-  weight: ["400", "500", "600"],
-});
+export { cormorant };
 
 /* ── Данные ───────────────────────────────────────────────────────── */
 

@@ -3,16 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
-import { Cormorant_Garamond } from "next/font/google";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import { isRole, useAuth } from "@/app/context/AuthContext";
 import { useLanguage } from "@/app/context/LanguageContext";
+import { cormorant } from "@/app/components/profile/fonts";
 import { supabase } from "@/lib/supabase";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "latin-ext", "cyrillic"],
-  weight: ["500", "600"],
-});
 
 // ---------------------------------------------------------------------------
 // Вход по никнейму: "admin1" -> "admin1@voyage-models.com"

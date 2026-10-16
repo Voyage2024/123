@@ -23,7 +23,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Cormorant_Garamond } from "next/font/google";
 import {
   BadgeCheck,
   Check,
@@ -67,11 +66,7 @@ import { cityLabel } from "../../../_lib/cities";
 import { ContractSeal, LiveSnapBadge, TrustBadge } from "../../../_components/TrustSignals";
 import { TelegramAction } from "../../../_components/TelegramAction";
 import { ContractEditor } from "../../../_components/ContractEditor";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "latin-ext", "cyrillic"],
-  weight: ["500", "600"],
-});
+import { cormorant } from "@/app/components/profile/fonts";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПЕРЕВОДЫ

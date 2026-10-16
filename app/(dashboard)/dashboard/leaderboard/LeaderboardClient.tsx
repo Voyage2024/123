@@ -17,17 +17,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Cormorant_Garamond } from "next/font/google";
 import { ArrowUpRight, Crown, Gem, KeyRound, LocateFixed, Plane, RefreshCw, Stamp, type LucideIcon } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
+import { cormorant } from "@/app/components/profile/fonts";
 import { fmtPoints, normalizeLang, type CircleKey, type Lang } from "@/lib/gamification";
 import { initials } from "@/lib/memberCards";
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "latin-ext", "cyrillic"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-});
 
 /* ── Данные ───────────────────────────────────────────────────────── */
 
