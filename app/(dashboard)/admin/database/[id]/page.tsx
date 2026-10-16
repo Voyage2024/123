@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarClock, CircleUserRound, ShieldCheck } from "lucide-react";
 import ResidentProfileManagement from "./ResidentProfileManagement";
+import DeleteResidentDangerZone from "./DeleteResidentDangerZone";
 import { createClient } from "@/lib/supabase/server";
 
 function isUuid(value: string) {
@@ -87,5 +88,7 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
     />}
 
     <section className="rounded-2xl border border-zinc-800/80 bg-zinc-900/25 p-5"><h2 className="font-serif text-xl text-zinc-100">О себе</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-400">{profile.about?.trim() || "Описание не заполнено."}</p></section>
+
+    {actor.role === "owner" && profile.role === "resident" && <DeleteResidentDangerZone profileId={profile.id} fullName={name} />}
   </div>;
 }
