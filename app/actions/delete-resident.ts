@@ -2,16 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient as createSupabaseClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient as createSessionClient } from "@/lib/supabase/server";
-
-const CONFIRMATION_PHRASE = "Я ТРЕЗВ, ЭТО НЕ ТЕСТОВАЯ БАЗА";
+import type { Lang } from "@/lib/gamification";
+import { DELETE_RESIDENT_PHRASES } from "@/lib/i18n/resident-deletion";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type DeleteResult =
   | { ok: false; reason: "invalid" | "unauthenticated" | "forbidden" | "not_found" | "not_resident" | "server_error" };
-
-type AdminClient = SupabaseClient;
 
 type ProfileForDeletion = {
   id: string;
@@ -64,7 +62,7 @@ function toStoragePath(value: unknown, bucket: string): string | null {
 }
 
 async function listStorageFilesRecursively(
-  admin: AdminClient,
+  admin: ReturnType<typeof createSupabaseClient>,
   bucket: string,
   prefix: string,
   files: Set<string>,
@@ -88,7 +86,7 @@ async function listStorageFilesRecursively(
 }
 
 async function removeStorageFiles(
-  admin: AdminClient,
+  admin: ReturnType<typeof createSupabaseClient>,
   bucket: string,
   paths: Set<string>,
 ): Promise<void> {
@@ -101,7 +99,7 @@ async function removeStorageFiles(
 }
 
 async function deleteResidentStorage(
-  admin: AdminClient,
+  admin: ReturnType<typeof createSupabaseClient>,
   profile: ProfileForDeletion,
   kycPaths: string[],
 ): Promise<void> {
@@ -130,7 +128,7 @@ async function deleteResidentStorage(
 }
 
 async function deleteProfileBlockingRelations(
-  admin: AdminClient,
+  admin: ReturnType<typeof createSupabaseClient>,
   profileId: string,
 ): Promise<void> {
   // Nullable foreign keys without ON DELETE SET NULL must be cleared explicitly.
@@ -144,7 +142,7 @@ async function deleteProfileBlockingRelations(
   ];
 
   for (const reference of nullableReferences) {
-    const { error } = await admin
+    const { error } = await (admin as any)
       .from(reference.table)
       .update({ [reference.column]: null })
       .eq(reference.column, profileId);
@@ -269,8 +267,20 @@ async function deleteProfileBlockingRelations(
 export async function deleteResidentCompletely(
   profileId: string,
   typedConfirmationPhrase: string,
+  locale: Lang,
 ): Promise<DeleteResult> {
-  if (!UUID_RE.test(profileId) || typedConfirmationPhrase?.trim() !== CONFIRMATION_PHRASE) {
+  // The locale and phrase both come from the client, so whitelist the locale and
+  // validate the exact phrase again on the server before doing any destructive work.
+  const expectedPhrase = typeof locale === "string" &&
+    Object.prototype.hasOwnProperty.call(DELETE_RESIDENT_PHRASES, locale)
+    ? DELETE_RESIDENT_PHRASES[locale as Lang]
+    : null;
+  if (
+    !UUID_RE.test(profileId) ||
+    !expectedPhrase ||
+    typeof typedConfirmationPhrase !== "string" ||
+    typedConfirmationPhrase.trim() !== expectedPhrase
+  ) {
     return { ok: false, reason: "invalid" };
   }
 
@@ -337,7 +347,7 @@ export async function deleteResidentCompletely(
     const kycPaths = (kycRows ?? []).map((row: { file_path: string }) => row.file_path).filter(Boolean);
 
     // Remove original KYC and portfolio objects, including orphan uploads, before deleting metadata.
-    await deleteResidentStorage(admin, profile, kycPaths);
+    await deleteResidentStorage(admin as any, profile, kycPaths);
 
     // Telegram registration must start from a genuinely clean state on /start.
     if (telegramId) {
@@ -355,7 +365,7 @@ export async function deleteResidentCompletely(
     throwOnError(guestByProfileError, "delete_linked_guest_applications");
 
     // Handle every NO ACTION / RESTRICT relationship found in the supplied SQL dump.
-    await deleteProfileBlockingRelations(admin, profileId);
+    await deleteProfileBlockingRelations(admin as any, profileId);
 
     // profile_id / resident_id cascades now remove KYC rows, stamps, score events,
     // achievements, metrics, resident requests, history, and Telegram delivery records.
