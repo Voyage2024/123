@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createClient as createSupabaseClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createClient as createSessionClient } from "@/lib/supabase/server";
 
 const CONFIRMATION_PHRASE = "Я ТРЕЗВ, ЭТО НЕ ТЕСТОВАЯ БАЗА";
@@ -10,6 +10,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 type DeleteResult =
   | { ok: false; reason: "invalid" | "unauthenticated" | "forbidden" | "not_found" | "not_resident" | "server_error" };
+
+type AdminClient = SupabaseClient;
 
 type ProfileForDeletion = {
   id: string;
@@ -62,7 +64,7 @@ function toStoragePath(value: unknown, bucket: string): string | null {
 }
 
 async function listStorageFilesRecursively(
-  admin: ReturnType<typeof createSupabaseClient>,
+  admin: AdminClient,
   bucket: string,
   prefix: string,
   files: Set<string>,
@@ -86,7 +88,7 @@ async function listStorageFilesRecursively(
 }
 
 async function removeStorageFiles(
-  admin: ReturnType<typeof createSupabaseClient>,
+  admin: AdminClient,
   bucket: string,
   paths: Set<string>,
 ): Promise<void> {
@@ -99,7 +101,7 @@ async function removeStorageFiles(
 }
 
 async function deleteResidentStorage(
-  admin: ReturnType<typeof createSupabaseClient>,
+  admin: AdminClient,
   profile: ProfileForDeletion,
   kycPaths: string[],
 ): Promise<void> {
@@ -128,7 +130,7 @@ async function deleteResidentStorage(
 }
 
 async function deleteProfileBlockingRelations(
-  admin: ReturnType<typeof createSupabaseClient>,
+  admin: AdminClient,
   profileId: string,
 ): Promise<void> {
   // Nullable foreign keys without ON DELETE SET NULL must be cleared explicitly.
