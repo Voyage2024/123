@@ -32,6 +32,7 @@ import {
 import { useAuth } from "@/app/context/AuthContext";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
+import { updateResidentLifestylePreference } from "@/app/actions/map-locations";
 import { fmtPoints, type CircleConfig, type CircleKey } from "@/lib/gamification";
 
 import { cormorant } from "@/app/components/profile/fonts";
@@ -1039,6 +1040,31 @@ export default function ResidentProfilePage() {
     };
   }, [user, resolvePhotos]);
 
+  // Lifestyle toggles use a narrow server action so failed writes can be rolled back
+  // and cannot be obscured by a broad profile upsert.
+  const updateLifestyle = useCallback(async (patch: { smoking?: boolean; alcohol?: boolean }) => {
+    if (!user || !profile) return;
+    const before = { smoking: profile.smoking, alcohol: profile.alcohol };
+    setProfile((current) => current ? { ...current, ...patch } : current);
+    setSaving(true);
+    const result = await updateResidentLifestylePreference(patch);
+    setSaving(false);
+    if (!result.ok) {
+      const rollback = {
+        ...(patch.smoking !== undefined ? { smoking: before.smoking } : {}),
+        ...(patch.alcohol !== undefined ? { alcohol: before.alcohol } : {}),
+      };
+      setProfile((current) => current ? { ...current, ...rollback } : current);
+      console.error("Could not save lifestyle preference:", result.reason);
+      return;
+    }
+    const savedPatch = {
+      ...(patch.smoking !== undefined ? { smoking: result.smoking } : {}),
+      ...(patch.alcohol !== undefined ? { alcohol: result.alcohol } : {}),
+    };
+    setProfile((current) => current ? { ...current, ...savedPatch } : current);
+  }, [user, profile]);
+
   // ── Универсальное сохранение (optimistic + upsert) ──────────────────
   const updateProfile = useCallback(
     async (patch: Partial<Profile>) => {
@@ -1498,15 +1524,15 @@ export default function ResidentProfilePage() {
                     label={t.smoking}
                     icon={<Cigarette className="w-4 h-4" />}
                     checked={profile.smoking}
-                    disabled={!canEditOwn}
-                    onChange={(v) => updateProfile({ smoking: v })}
+                    disabled={!canEditOwn || saving}
+                    onChange={(v) => void updateLifestyle({ smoking: v })}
                   />
                   <ToggleSwitch
                     label={t.alcohol}
                     icon={<Wine className="w-4 h-4" />}
                     checked={profile.alcohol}
-                    disabled={!canEditOwn}
-                    onChange={(v) => updateProfile({ alcohol: v })}
+                    disabled={!canEditOwn || saving}
+                    onChange={(v) => void updateLifestyle({ alcohol: v })}
                   />
                 </div>
               </div>

@@ -20,6 +20,7 @@ import Image from "next/image";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { submitMapHubApplication } from "@/app/actions/map-locations";
 
 type Lang = "EN" | "RU" | "ES" | "PT";
 
@@ -250,14 +251,13 @@ export default function AmericasPage() {
     setApplicationError(null);
     setApplicationErrorType(null);
 
-    const { error } = await supabase.from("applications").insert({
-      user_id: user.id,
-      hub_id: selected.id,
-      status: "pending",
-    });
-
-    if (error) {
-      setApplicationError(error.message);
+    const result = await submitMapHubApplication(selected.id);
+    if (!result.ok) {
+      if (result.reason === "duplicate") {
+        setApplicationStatus("active");
+        return;
+      }
+      setApplicationError(t.submitError[currentLang]);
       setApplicationErrorType("submit");
       setApplicationStatus("idle");
       return;

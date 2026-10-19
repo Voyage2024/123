@@ -20,6 +20,7 @@ import Image from "next/image";
 import { useAuth } from "@/app/context/AuthContext";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
+import { submitMapHubApplication } from "@/app/actions/map-locations";
 
 type Lang = "EN" | "RU" | "ES" | "PT";
 
@@ -454,11 +455,10 @@ export default function EuropePage() {
     setApplicationSubmitting(true);
     setApplicationError(false);
 
-    const { error } = await supabase.from("applications").insert({
-      user_id: user.id,
-      hub_id: selected.id,
-      status: "pending",
-    });
+    const submitResult = await submitMapHubApplication(selected.id);
+    const error = submitResult.ok ? null : {
+      message: submitResult.reason === "duplicate" ? "duplicate active application" : t.applicationError[currentLang],
+    };
 
     if (error) {
       console.error("Application submit failed:", error);

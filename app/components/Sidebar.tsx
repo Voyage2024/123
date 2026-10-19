@@ -815,17 +815,23 @@ export default function Sidebar() {
           mobile ? "px-5 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))]" : "px-8 py-8"
         }`}
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-200/30">
-          <span className={`${cormorant.className} text-lg font-medium text-amber-200/90`}>V</span>
-        </div>
-        <div className="min-w-0">
-          <p className={`${cormorant.className} text-xl font-medium tracking-[0.2em] text-zinc-50`}>
-            VOYAGE
-          </p>
-          <p className="truncate text-[10px] uppercase tracking-[0.3em] text-zinc-500">
-            {role ? t.subtitle[role] : " "}
-          </p>
-        </div>
+        <Link
+          href="/"
+          aria-label="VOYAGE - Home"
+          className="flex min-w-0 items-center gap-3 rounded-xl outline-none transition-opacity hover:opacity-90 focus-visible:ring-1 focus-visible:ring-amber-200/40"
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-200/30">
+            <span className={`${cormorant.className} text-lg font-medium text-amber-200/90`}>V</span>
+          </div>
+          <div className="min-w-0">
+            <p className={`${cormorant.className} text-xl font-medium tracking-[0.2em] text-zinc-50`}>
+              VOYAGE
+            </p>
+            <p className="truncate text-[10px] uppercase tracking-[0.3em] text-zinc-500">
+              {role ? t.subtitle[role] : " "}
+            </p>
+          </div>
+        </Link>
         {mobile && (
           <button
             ref={closeBtnRef}

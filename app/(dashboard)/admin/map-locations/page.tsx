@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Check,
   ChevronDown,
+  Users,
   Globe2,
   Loader2,
   MapPin,
@@ -17,7 +18,9 @@ import {
 } from "lucide-react";
 
 import { useLanguage } from "@/app/context/LanguageContext";
+import { useAuth } from "@/app/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import LocationManagementPanel from "./LocationManagementPanel";
 
 type Lang = "EN" | "RU" | "ES" | "PT";
 type Localized = Record<Lang, string>;
@@ -132,6 +135,9 @@ const T: Record<
     saving: string;
     deleting: string;
     close: string;
+    applications: string;
+    expand: string;
+    collapse: string;
   }
 > = {
   EN: {
@@ -185,6 +191,9 @@ const T: Record<
     saving: "Saving...",
     deleting: "Deleting...",
     close: "Close",
+    applications: "Applications & responsible staff",
+    expand: "Open applications",
+    collapse: "Hide applications",
   },
   RU: {
     title: "Локации карты",
@@ -237,6 +246,9 @@ const T: Record<
     saving: "Сохранение...",
     deleting: "Удаление...",
     close: "Закрыть",
+    applications: "Отклики и ответственные",
+    expand: "Открыть отклики",
+    collapse: "Скрыть отклики",
   },
   ES: {
     title: "Ubicaciones del mapa",
@@ -289,6 +301,9 @@ const T: Record<
     saving: "Guardando...",
     deleting: "Eliminando...",
     close: "Cerrar",
+    applications: "Solicitudes y responsables",
+    expand: "Abrir solicitudes",
+    collapse: "Ocultar solicitudes",
   },
   PT: {
     title: "Localizações do mapa",
@@ -341,6 +356,9 @@ const T: Record<
     saving: "Salvando...",
     deleting: "Excluindo...",
     close: "Fechar",
+    applications: "Candidaturas e responsáveis",
+    expand: "Abrir candidaturas",
+    collapse: "Ocultar candidaturas",
   },
 };
 
@@ -424,6 +442,8 @@ function normalizeHub(value: unknown): MapHub {
 
 export default function MapLocationsPage() {
   const { lang: rawLang } = useLanguage();
+  const { hasRole } = useAuth();
+  const isOwner = hasRole(["owner"]);
 
   const normalizeLang = (l: any): Lang => {
     const v = String(l || "").toUpperCase();
@@ -437,6 +457,7 @@ export default function MapLocationsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [expandedHubId, setExpandedHubId] = useState<string | null>(null);
 
   const [regionFilter, setRegionFilter] =
     useState<RegionFilter>("all");
@@ -895,7 +916,16 @@ export default function MapLocationsPage() {
                     </div>
                   </div>
 
-                  <div className="mt-5 flex gap-2 border-t border-zinc-800/50 pt-4">
+                  <div className="mt-5 flex flex-wrap gap-2 border-t border-zinc-800/50 pt-4">
+                    <button
+                      type="button"
+                      aria-expanded={expandedHubId === hub.id}
+                      onClick={() => setExpandedHubId((current) => current === hub.id ? null : hub.id)}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-amber-200/15 bg-amber-200/[0.035] px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-100/85 transition-all duration-200 hover:border-amber-200/30 hover:bg-amber-200/[0.07]"
+                    >
+                      {expandedHubId === hub.id ? <ChevronDown className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
+                      {expandedHubId === hub.id ? t.collapse : t.expand}
+                    </button>
                     <button
                       type="button"
                       onClick={() =>
@@ -925,6 +955,9 @@ export default function MapLocationsPage() {
                       )}
                     </button>
                   </div>
+                  {expandedHubId === hub.id ? (
+                    <LocationManagementPanel hubId={hub.id} lang={lang} isOwner={isOwner} />
+                  ) : null}
                 </div>
               </div>
             ))}

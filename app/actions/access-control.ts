@@ -16,7 +16,7 @@ export type StaffRecord = {
   id: string;
   full_name: string | null;
   email: string | null;
-  role: "admin" | "manager";
+  role: "owner" | "admin" | "manager";
   status: string | null;
   banned_until: string | null;
   ban_reason: string | null;
@@ -100,7 +100,7 @@ export async function getStaffUsers(): Promise<
   const { data, error } = await actor.supabase
     .from("profiles")
     .select("id, full_name, email, role, status, banned_until, ban_reason, ban_permanent, ban_set_at, last_seen_at")
-    .in("role", ["admin", "manager"])
+    .in("role", ["owner", "admin", "manager"])
     .order("role", { ascending: true })
     .order("full_name", { ascending: true });
 
