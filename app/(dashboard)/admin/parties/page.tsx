@@ -15,10 +15,16 @@ import {
   CheckCircle2,
   AlertCircle,
   Save,
+  Users,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/app/context/LanguageContext';
 import { cormorant } from "@/app/components/profile/fonts";
+import PartyApplicationsDialog from "./PartyApplicationsDialog";
+import {
+  getEventApplicationSummaries,
+  type PartyApplicationSummary,
+} from "./actions";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -57,6 +63,14 @@ type FormState = {
 type Toast = { type: 'success' | 'error'; message: string } | null;
 
 type StatusFilter = 'all' | 'active' | 'inactive';
+
+const EMPTY_APPLICATION_SUMMARY: PartyApplicationSummary = { total: 0, pending: 0, approved: 0, rejected: 0, completed: 0 };
+const APPLICATION_LABEL: Record<Lang, string> = {
+  en: 'Applications', ru: 'Отклики', es: 'Solicitudes', pt: 'Inscrições',
+};
+const APPROVED_LABEL: Record<Lang, string> = {
+  en: 'approved', ru: 'одобрено', es: 'aprobadas', pt: 'aprovadas',
+};
 
 const EMPTY_FORM: FormState = {
   title: '',
@@ -368,6 +382,8 @@ export default function PartiesAdminPage() {
   const t = T[lang];
 
   const [events, setEvents] = useState<GlobalEvent[]>([]);
+  const [applicationSummaries, setApplicationSummaries] = useState<Record<string, PartyApplicationSummary>>({});
+  const [selectedForApplications, setSelectedForApplications] = useState<GlobalEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -424,7 +440,15 @@ export default function PartiesAdminPage() {
       console.error(error);
       showToast('error', t.errorLoad);
     } else {
-      setEvents((data as GlobalEvent[]) ?? []);
+      const loadedEvents = (data as GlobalEvent[]) ?? [];
+      setEvents(loadedEvents);
+      const summaries = await getEventApplicationSummaries(loadedEvents.map((event) => event.id));
+      if (summaries.ok) {
+        setApplicationSummaries(summaries.data);
+      } else {
+        console.error("[Admin Parties] Could not load application counts:", summaries.error);
+        setApplicationSummaries(Object.fromEntries(loadedEvents.map((event) => [event.id, { ...EMPTY_APPLICATION_SUMMARY }])));
+      }
     }
     setLoading(false);
   }, [showToast, t]);
@@ -551,6 +575,7 @@ export default function PartiesAdminPage() {
         showToast('error', errorMessage(t.errorSave, error));
       } else {
         setEvents((prev) => [data as GlobalEvent, ...prev]);
+        setApplicationSummaries((prev) => ({ ...prev, [(data as GlobalEvent).id]: { ...EMPTY_APPLICATION_SUMMARY } }));
         showToast('success', t.successCreate);
         setModalOpen(false);
       }
@@ -573,6 +598,7 @@ export default function PartiesAdminPage() {
       showToast('error', error ? errorMessage(t.errorDelete, error) : t.errorPermission);
     } else {
       setEvents((prev) => prev.filter((x) => x.id !== ev.id));
+      setApplicationSummaries((prev) => { const next = { ...prev }; delete next[ev.id]; return next; });
       showToast('success', t.successDelete);
     }
     setBusyId(null);
@@ -598,6 +624,10 @@ export default function PartiesAdminPage() {
     }
     setBusyId(null);
   };
+
+  const handleApplicationCountsChanged = useCallback((eventId: string, summary: PartyApplicationSummary) => {
+    setApplicationSummaries((prev) => ({ ...prev, [eventId]: summary }));
+  }, []);
 
   /* ---------- render ---------- */
 
@@ -743,45 +773,63 @@ export default function PartiesAdminPage() {
                   </div>
                 )}
 
-                <div className="mt-auto flex items-center justify-between border-t border-neutral-800/80 pt-4">
+                <div className="mt-auto flex flex-col gap-3 border-t border-neutral-800/80 pt-4 sm:flex-row sm:items-center sm:justify-between">
                   <span className="text-xs text-neutral-600">
                     {t.createdAt}: {formatDate(ev.created_at)}
                   </span>
 
-                  <div className="flex items-center gap-1">
-                    {busyId === ev.id ? (
-                      <Loader2 className="m-2 h-4 w-4 animate-spin text-amber-200" />
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => handleToggle(ev)}
-                          title={ev.is_active ? t.hide : t.show}
-                          aria-label={ev.is_active ? t.hide : t.show}
-                          className="rounded-lg p-2 text-neutral-500 transition hover:bg-neutral-800 hover:text-amber-200"
-                        >
-                          {ev.is_active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEdit(ev)}
-                          title={t.edit}
-                          aria-label={t.edit}
-                          className="rounded-lg p-2 text-neutral-500 transition hover:bg-neutral-800 hover:text-amber-200"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(ev)}
-                          title={t.delete}
-                          aria-label={t.delete}
-                          className="rounded-lg p-2 text-neutral-500 transition hover:bg-red-500/10 hover:text-red-400"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </>
-                    )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedForApplications(ev)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-amber-200/20 bg-amber-200/[0.04] px-3 py-2 text-xs text-amber-100/90 transition hover:border-amber-200/40 hover:bg-amber-200/[0.08]"
+                      aria-label={`${APPLICATION_LABEL[lang]}: ${ev.title}`}
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      {APPLICATION_LABEL[lang]}
+                      <span className="rounded-md border border-zinc-700 bg-zinc-950/80 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
+                        {(applicationSummaries[ev.id] ?? EMPTY_APPLICATION_SUMMARY).total}
+                      </span>
+                      <span className="text-[10px] text-emerald-200/80">
+                        {(applicationSummaries[ev.id] ?? EMPTY_APPLICATION_SUMMARY).approved} {APPROVED_LABEL[lang]}
+                      </span>
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {busyId === ev.id ? (
+                        <Loader2 className="m-2 h-4 w-4 animate-spin text-amber-200" />
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle(ev)}
+                            title={ev.is_active ? t.hide : t.show}
+                            aria-label={ev.is_active ? t.hide : t.show}
+                            className="rounded-lg p-2 text-neutral-500 transition hover:bg-neutral-800 hover:text-amber-200"
+                          >
+                            {ev.is_active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openEdit(ev)}
+                            title={t.edit}
+                            aria-label={t.edit}
+                            className="rounded-lg p-2 text-neutral-500 transition hover:bg-neutral-800 hover:text-amber-200"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(ev)}
+                            title={t.delete}
+                            aria-label={t.delete}
+                            className="rounded-lg p-2 text-neutral-500 transition hover:bg-red-500/10 hover:text-red-400"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </article>
@@ -978,6 +1026,16 @@ export default function PartiesAdminPage() {
             </div>
           </form>
         </div>
+      )}
+
+      {selectedForApplications && (
+        <PartyApplicationsDialog
+          eventId={selectedForApplications.id}
+          eventTitle={selectedForApplications.title}
+          lang={lang}
+          onClose={() => setSelectedForApplications(null)}
+          onCountsChanged={handleApplicationCountsChanged}
+        />
       )}
 
       {/* Toast */}

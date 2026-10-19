@@ -10,19 +10,20 @@
  *   3. Комбо       — 9 легендарных кампаний: маршрут, требование, бонус
  *   4. Circle      — пороги Индекса для уровней 1–6
  *
- * Правки сохраняются автоматически (debounce ~0,7 с) прямыми update под
- * сессией персонала. Права проверяет RLS (game_is_staff() из миграции
- * gamification_v2). Индекс и Circle пересчитывает вью v_global_leaderboard,
- * поэтому новые веса сразу действуют во всех расчётах.
+ * Настройки направлений, комбо и Circle сохраняются автоматически (debounce ~0,7 с)
+ * под сессией персонала. Выдача и аннулирование штампов/достижений идут через
+ * Server Actions с точной проверкой ролей admin/owner и защищённые PostgreSQL RPC.
+ * Индекс и Circle пересчитывает v_global_leaderboard.
  *
  * Каталог, названия, регионы и формула — из lib/gamification.ts, общего
  * со страницей резидента.
  * ──────────────────────────────────────────────────────────────────── */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   AlertTriangle,
   Anchor,
+  Award,
   Check,
   ChevronDown,
   Coins,
@@ -41,6 +42,7 @@ import {
   Sparkles,
   Stamp as StampIcon,
   Sun,
+  Trash2,
   Trophy,
   Users,
   Waves,
@@ -48,6 +50,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import {
+  issueGameStamp,
+  revokeGameStamp,
+  issueResidentAchievement,
+  revokeResidentAchievement,
+} from "./actions";
 import { useLanguage } from "@/app/context/LanguageContext";
 import {
   COMBO_LORE,
@@ -457,6 +465,26 @@ export function useAdminI18n() {
  * Типы
  * ══════════════════════════════════════════════════════════════════ */
 
+export type AdminGameStamp = {
+  id: string;
+  profile_id: string;
+  destination_id: string;
+  visited_at: string;
+  visit_number: number | null;
+  points: number | null;
+  multiplier: number | null;
+  stamped_at: string;
+};
+
+export type AdminAchievement = {
+  id: string;
+  profile_id: string;
+  achievement_key: string;
+  title: string;
+  points_awarded: number | string;
+  earned_at: string;
+};
+
 export type AdminResident = {
   profileId: string;
   /** Уже разрешённое имя: full_name → имя+фамилия → ник → почта */
@@ -472,6 +500,8 @@ export type AdminResident = {
   destinationsCount: number;
   combosCompleted: number;
   position: number | null;
+  stamps: AdminGameStamp[];
+  achievements: AdminAchievement[];
 };
 
 /** Направление из БД, которого нет в общем каталоге */
@@ -1093,11 +1123,59 @@ function DestinationPicker({
  * 1 · Резиденты
  * ══════════════════════════════════════════════════════════════════ */
 
-// Тост хранит ДАННЫЕ, а не текст: переводится «на лету» при смене языка.
+// Toast stores data rather than translated text so language changes stay live.
 type Toast =
   | { kind: "ok"; destination: DestId; visit: number; value: number }
+  | { kind: "message"; message: string; success?: boolean }
   | { kind: "err"; reason: "rls" | "generic" | "weight"; message?: string }
   | null;
+
+const MANAGEMENT_COPY: Record<Lang, {
+  manage: string; achievements: string; achievementStatus: string; earned: string; notEarned: string;
+  prepareAward: string; issueAchievement: string; key: string; title: string; points: string;
+  saveAchievement: string; stamps: string; noStamps: string; removeStamp: string; revokeAchievement: string;
+  confirmRemoveStamp: string; confirmRemoveAchievement: string; stampRemoved: string; achievementIssued: string;
+  achievementRemoved: string; dateUnknown: string; visit: string; close: string; validation: string;
+  permissionError: string; duplicateError: string; notFoundError: string; genericError: string;
+}> = {
+  en: { manage: "Stamps & achievements", achievements: "Achievement status", achievementStatus: "Status", earned: "Awarded", notEarned: "Not awarded", prepareAward: "Prepare award", issueAchievement: "Issue achievement", key: "Achievement key", title: "Title", points: "Points", saveAchievement: "Award", stamps: "Passport stamps", noStamps: "No destination stamps yet.", removeStamp: "Revoke stamp", revokeAchievement: "Revoke achievement", confirmRemoveStamp: "Revoke this passport stamp? The score ledger will receive a compensating adjustment.", confirmRemoveAchievement: "Revoke this achievement? The score ledger will receive a compensating adjustment.", stampRemoved: "Stamp revoked.", achievementIssued: "Achievement awarded.", achievementRemoved: "Achievement revoked.", dateUnknown: "Date unavailable", visit: "Visit", close: "Close", validation: "Enter a key, a title and a whole number of points from 0 to 1,000,000.", permissionError: "Only admin and owner can perform this action.", duplicateError: "An achievement with this key already exists.", notFoundError: "The resident or record could not be found.", genericError: "The action failed. Check the data and try again." },
+  ru: { manage: "Штампы и достижения", achievements: "Статусы достижений", achievementStatus: "Статус", earned: "Выдано", notEarned: "Не выдано", prepareAward: "Подготовить выдачу", issueAchievement: "Выдать достижение", key: "Ключ достижения", title: "Название", points: "Баллы", saveAchievement: "Выдать", stamps: "Штампы паспорта", noStamps: "Штампов направлений пока нет.", removeStamp: "Забрать штамп", revokeAchievement: "Аннулировать достижение", confirmRemoveStamp: "Забрать этот штамп? В журнал баллов будет добавлена компенсирующая корректировка.", confirmRemoveAchievement: "Аннулировать это достижение? В журнал баллов будет добавлена компенсирующая корректировка.", stampRemoved: "Штамп аннулирован.", achievementIssued: "Достижение выдано.", achievementRemoved: "Достижение аннулировано.", dateUnknown: "Дата недоступна", visit: "Визит", close: "Свернуть", validation: "Укажите ключ, название и целое число баллов от 0 до 1 000 000.", permissionError: "Действие доступно только ролям admin и owner.", duplicateError: "Достижение с таким ключом уже существует.", notFoundError: "Резидент или запись не найдены.", genericError: "Не удалось выполнить действие. Проверьте данные и повторите попытку." },
+  es: { manage: "Sellos y logros", achievements: "Estado de los logros", achievementStatus: "Estado", earned: "Otorgado", notEarned: "No otorgado", prepareAward: "Preparar concesión", issueAchievement: "Otorgar logro", key: "Clave del logro", title: "Título", points: "Puntos", saveAchievement: "Otorgar", stamps: "Sellos del pasaporte", noStamps: "Todavía no hay sellos de destinos.", removeStamp: "Retirar sello", revokeAchievement: "Retirar logro", confirmRemoveStamp: "¿Retirar este sello? Se añadirá un ajuste compensatorio al registro de puntos.", confirmRemoveAchievement: "¿Retirar este logro? Se añadirá un ajuste compensatorio al registro de puntos.", stampRemoved: "Sello retirado.", achievementIssued: "Logro otorgado.", achievementRemoved: "Logro retirado.", dateUnknown: "Fecha no disponible", visit: "Visita", close: "Cerrar", validation: "Introduzca una clave, un título y puntos enteros entre 0 y 1.000.000.", permissionError: "Solo admin y owner pueden realizar esta acción.", duplicateError: "Ya existe un logro con esta clave.", notFoundError: "No se encontró el residente o el registro.", genericError: "No se pudo completar la acción. Compruebe los datos e inténtelo de nuevo." },
+  pt: { manage: "Carimbos e conquistas", achievements: "Status das conquistas", achievementStatus: "Status", earned: "Concedida", notEarned: "Não concedida", prepareAward: "Preparar concessão", issueAchievement: "Conceder conquista", key: "Chave da conquista", title: "Título", points: "Pontos", saveAchievement: "Conceder", stamps: "Carimbos do passaporte", noStamps: "Ainda não há carimbos de destinos.", removeStamp: "Revogar carimbo", revokeAchievement: "Revogar conquista", confirmRemoveStamp: "Revogar este carimbo? Será adicionado um ajuste compensatório ao registro de pontos.", confirmRemoveAchievement: "Revogar esta conquista? Será adicionado um ajuste compensatório ao registro de pontos.", stampRemoved: "Carimbo revogado.", achievementIssued: "Conquista concedida.", achievementRemoved: "Conquista revogada.", dateUnknown: "Data indisponível", visit: "Visita", close: "Fechar", validation: "Informe uma chave, um título e pontos inteiros entre 0 e 1.000.000.", permissionError: "Somente admin e owner podem executar esta ação.", duplicateError: "Já existe uma conquista com esta chave.", notFoundError: "O residente ou o registro não foi encontrado.", genericError: "Não foi possível concluir a ação. Confira os dados e tente novamente." },
+};
+
+type ManagementCopy = (typeof MANAGEMENT_COPY)[Lang];
+
+function localizeGamificationError(raw: string, copy: ManagementCopy, fallback: string): string {
+  if (/admin_only|permission|owner|admin|роль|прав|42501/i.test(raw)) return copy.permissionError;
+  if (/achievement_already_exists|already exists|существует|23505/i.test(raw)) return copy.duplicateError;
+  if (/not_found|not found|не найд|P0002/i.test(raw)) return copy.notFoundError;
+  if (/invalid_|destination_required|invalid|некоррект|проверьте|укажите|22023/i.test(raw)) return copy.validation;
+  return fallback || copy.genericError;
+}
+
+const BASIC_ACHIEVEMENTS: Record<Lang, Array<{ key: string; title: string; description: string }>> = {
+  en: [
+    { key: "first_completed_activity", title: "First completed activity", description: "Complete a club tour or event." },
+    { key: "first_country_stamp", title: "First passport stamp", description: "Receive your first country stamp." },
+    { key: "five_countries", title: "Five countries", description: "Collect passport stamps from five countries." },
+  ],
+  ru: [
+    { key: "first_completed_activity", title: "Первая завершённая активность", description: "Завершите тур или мероприятие клуба." },
+    { key: "first_country_stamp", title: "Первый штамп паспорта", description: "Получите первый штамп страны." },
+    { key: "five_countries", title: "Пять стран", description: "Соберите штампы пяти стран." },
+  ],
+  es: [
+    { key: "first_completed_activity", title: "Primera actividad completada", description: "Complete un tour o evento del club." },
+    { key: "first_country_stamp", title: "Primer sello del pasaporte", description: "Reciba su primer sello de país." },
+    { key: "five_countries", title: "Cinco países", description: "Reúna sellos de cinco países." },
+  ],
+  pt: [
+    { key: "first_completed_activity", title: "Primeira atividade concluída", description: "Conclua um tour ou evento do clube." },
+    { key: "first_country_stamp", title: "Primeiro carimbo do passaporte", description: "Receba seu primeiro carimbo de país." },
+    { key: "five_countries", title: "Cinco países", description: "Reúna carimbos de cinco países." },
+  ],
+};
 
 const ResidentRow = memo(function ResidentRow({
   resident,
@@ -1111,23 +1189,26 @@ const ResidentRow = memo(function ResidentRow({
   onStamped?: (profileId: string) => void;
 }) {
   const { t, nf, lang } = useAdminI18n();
+  const copy = MANAGEMENT_COPY[lang];
   const [selected, setSelected] = useState<DestinationConfig | null>(null);
   const [weight, setWeight] = useState("");
   const [pending, setPending] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [managementOpen, setManagementOpen] = useState(false);
+  const [achievementKey, setAchievementKey] = useState("");
+  const [achievementTitle, setAchievementTitle] = useState("");
+  const [achievementPoints, setAchievementPoints] = useState("0");
 
-  const inFlight = useRef(false); // замок от двойного клика
+  const inFlight = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-    },
-    [],
-  );
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
-  // выбранное направление могли выключить или перевзвесить — держим свежую версию
   const current = selected ? (destinations.find((d) => d.id === selected.id) ?? null) : null;
+  const presets = BASIC_ACHIEVEMENTS[lang];
+  const presetKeys = new Set(presets.map((item) => item.key));
+  const earnedByKey = new Map(resident.achievements.map((item) => [item.achievement_key, item]));
+  const extraAchievements = resident.achievements.filter((item) => !presetKeys.has(item.achievement_key));
 
   const showToast = useCallback((next: NonNullable<Toast>) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -1137,60 +1218,89 @@ const ResidentRow = memo(function ResidentRow({
 
   async function onStamp() {
     if (!current || inFlight.current) return;
-
     const custom = weight.trim() === "" ? null : parseIntInput(weight);
-    if (weight.trim() !== "" && custom === null) {
-      showToast({ kind: "err", reason: "weight" });
-      return;
-    }
-
+    if (weight.trim() !== "" && custom === null) { showToast({ kind: "err", reason: "weight" }); return; }
     inFlight.current = true;
     setPending(true);
     setToast(null);
     const destination = current;
-
     try {
-      const payload: Record<string, unknown> = {
-        profile_id: resident.profileId,
-        destination_id: destination.id,
-      };
-      if (custom !== null) payload.points = custom;
-
-      const { data, error } = await supabase
-        .from("game_attendance")
-        .insert(payload)
-        .select("id, visit_number")
-        .single<{ id: string; visit_number: number | null }>();
-      if (error) throw error;
-      if (!data) throw new Error("Stamp insert returned no row");
-
-      const n = Number(data.visit_number ?? 1);
-      // The database AFTER INSERT trigger writes the authoritative award to the append-only ledger.
-      // Never reproduce the scoring formula in the browser.
-      const { data: scoreRow, error: scoreError } = await supabase
-        .from("resident_score_events")
-        .select("points")
-        .eq("event_key", `game-attendance:${data.id}`)
-        .maybeSingle<{ points: number | string }>();
-      if (scoreError) console.error("[Gamification] Stamp was saved, but score confirmation failed:", scoreError);
-      showToast({
-        kind: "ok",
-        destination: destination.id,
-        visit: n,
-        value: Math.max(0, Number(scoreRow?.points ?? 0)),
-      });
+      const result = await issueGameStamp({ profileId: resident.profileId, destinationId: destination.id, points: custom });
+      if (!result.ok) throw new Error(result.error);
+      const visit = Number(result.data?.visit_number ?? 1);
+      const points = Number(result.data?.points_awarded ?? 0);
+      showToast({ kind: "ok", destination: destination.id, visit, value: Math.max(0, points) });
       setSelected(null);
       setWeight("");
       onStamped?.(resident.profileId);
-    } catch (e) {
-      const err = e as { message?: string; code?: string };
-      showToast(
-        err?.code === "42501"
-          ? { kind: "err", reason: "rls" }
-          : { kind: "err", reason: "generic", message: err?.message },
-      );
+    } catch (error) {
+      showToast({ kind: "err", reason: "generic", message: localizeGamificationError(error instanceof Error ? error.message : "", copy, t.errGeneric) });
     } finally {
       inFlight.current = false;
+      setPending(false);
+    }
+  }
+
+  async function onRevokeStamp(stamp: AdminGameStamp) {
+    const destinationName = destinations.find((item) => item.id === stamp.destination_id)?.name ?? stamp.destination_id;
+    if (!window.confirm(`${copy.confirmRemoveStamp}\n\n${destinationName}`)) return;
+    setPending(true);
+    setToast(null);
+    try {
+      const result = await revokeGameStamp(stamp.id);
+      if (!result.ok) {
+        showToast({ kind: "err", reason: "generic", message: localizeGamificationError(result.error, copy, t.errGeneric) });
+      } else {
+        showToast({ kind: "message", message: copy.stampRemoved, success: true });
+        onStamped?.(resident.profileId);
+      }
+    } catch (error) {
+      showToast({ kind: "err", reason: "generic", message: localizeGamificationError(error instanceof Error ? error.message : "", copy, t.errGeneric) });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function onIssueAchievement(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const points = Number(achievementPoints);
+    if (!achievementKey.trim() || !achievementTitle.trim() || !Number.isInteger(points) || points < 0 || points > 1_000_000) {
+      showToast({ kind: "err", reason: "generic", message: copy.validation });
+      return;
+    }
+    setPending(true);
+    try {
+      const result = await issueResidentAchievement({ profileId: resident.profileId, achievementKey: achievementKey.trim(), title: achievementTitle.trim(), points });
+      if (!result.ok) {
+        showToast({ kind: "err", reason: "generic", message: localizeGamificationError(result.error, copy, t.errGeneric) });
+      } else {
+        showToast({ kind: "message", message: copy.achievementIssued, success: true });
+        setAchievementKey("");
+        setAchievementTitle("");
+        setAchievementPoints("0");
+        onStamped?.(resident.profileId);
+      }
+    } catch (error) {
+      showToast({ kind: "err", reason: "generic", message: localizeGamificationError(error instanceof Error ? error.message : "", copy, t.errGeneric) });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function onRevokeAchievement(achievement: AdminAchievement) {
+    if (!window.confirm(`${copy.confirmRemoveAchievement}\n\n${achievement.title}`)) return;
+    setPending(true);
+    try {
+      const result = await revokeResidentAchievement(achievement.id);
+      if (!result.ok) {
+        showToast({ kind: "err", reason: "generic", message: localizeGamificationError(result.error, copy, t.errGeneric) });
+      } else {
+        showToast({ kind: "message", message: copy.achievementRemoved, success: true });
+        onStamped?.(resident.profileId);
+      }
+    } catch (error) {
+      showToast({ kind: "err", reason: "generic", message: localizeGamificationError(error instanceof Error ? error.message : "", copy, t.errGeneric) });
+    } finally {
       setPending(false);
     }
   }
@@ -1199,132 +1309,102 @@ const ResidentRow = memo(function ResidentRow({
   const next = nextCircle(resident.influence, circles);
   const span = next ? next.min - circle.min : 0;
   const progress = next && span > 0 ? Math.min(1, Math.max(0, (resident.influence - circle.min) / span)) : 1;
-
-  const approvalLabel =
-    resident.approval && resident.approval !== "approved"
-      ? (t.status[resident.approval] ?? resident.approval)
-      : null;
-
-  const toastText =
-    toast?.kind === "ok"
-      ? `${nameOf(lang, toast.destination)}: ${t.visit(toast.visit)} · ${visitFactorLabel(toast.visit, t)} · +${nf.format(toast.value)}`
-      : toast?.kind === "err"
-        ? toast.reason === "rls"
-          ? t.errRls
-          : toast.reason === "weight"
-            ? t.errWeight
-            : toast.message || t.errGeneric
+  const approvalLabel = resident.approval && resident.approval !== "approved" ? (t.status[resident.approval] ?? resident.approval) : null;
+  const toastText = toast?.kind === "ok"
+    ? `${nameOf(lang, toast.destination)}: ${t.visit(toast.visit)} · ${visitFactorLabel(toast.visit, t)} · +${nf.format(toast.value)}`
+    : toast?.kind === "message" ? toast.message
+      : toast?.kind === "err" ? toast.reason === "rls" ? t.errRls : toast.reason === "weight" ? t.errWeight : toast.message || t.errGeneric
         : "";
 
   return (
-    <li
-      className={`relative rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 transition-colors hover:border-zinc-700/80 sm:p-5 ${
-        menuOpen ? "z-20" : ""
-      }`}
-    >
+    <li className={`relative rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 transition-colors hover:border-zinc-700/80 sm:p-5 ${menuOpen ? "z-20" : ""}`}>
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-4">
           <Avatar key={resident.avatarUrl ?? "none"} src={resident.avatarUrl} name={resident.fullName} ring={CIRCLE_STYLE[circle.key].ring} />
-
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-baseline gap-2">
-              {resident.position !== null && (
-                <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-600">
-                  #{resident.position}
-                </span>
-              )}
-              <p className={`${cormorant.className} truncate text-xl font-medium text-zinc-100`} title={resident.email ?? undefined}>
-                {resident.fullName}
-              </p>
-              {approvalLabel && (
-                <span className="shrink-0 rounded-full border border-zinc-700 bg-zinc-800/70 px-2 py-0.5 text-[10px] uppercase tracking-wider text-zinc-400">
-                  {approvalLabel}
-                </span>
-              )}
+              {resident.position !== null && <span className="shrink-0 font-mono text-[11px] tabular-nums text-zinc-600">#{resident.position}</span>}
+              <p className={`${cormorant.className} truncate text-xl font-medium text-zinc-100`} title={resident.email ?? undefined}>{resident.fullName}</p>
+              {approvalLabel && <span className="shrink-0 rounded-full border border-zinc-700 bg-zinc-800/70 px-2 py-0.5 text-[10px] uppercase tracking-wider text-zinc-400">{approvalLabel}</span>}
             </div>
-
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
               <CircleBadge circle={circle} />
-              <span className="font-mono tabular-nums text-amber-200">
-                {nf.format(resident.influence)}
-                <span className="ml-1 font-sans text-zinc-600">{t.influence}</span>
-              </span>
+              <span className="font-mono tabular-nums text-amber-200">{nf.format(resident.influence)}<span className="ml-1 font-sans text-zinc-600">{t.influence}</span></span>
               <span className="flex items-center gap-3 text-zinc-500">
-                <span className="inline-flex items-center gap-1" title={t.statStamps}>
-                  <StampIcon size={12} strokeWidth={1.6} />
-                  {nf.format(resident.stampsCount)}
-                </span>
-                <span className="inline-flex items-center gap-1" title={t.tabDestinations}>
-                  <MapPin size={12} strokeWidth={1.6} />
-                  {nf.format(resident.destinationsCount)}
-                </span>
-                <span className="inline-flex items-center gap-1" title={t.tabCombos}>
-                  <Trophy size={12} strokeWidth={1.6} />
-                  {nf.format(resident.combosCompleted)}
-                </span>
+                <span className="inline-flex items-center gap-1" title={t.statStamps}><StampIcon size={12} strokeWidth={1.6} />{nf.format(resident.stampsCount)}</span>
+                <span className="inline-flex items-center gap-1" title={t.tabDestinations}><MapPin size={12} strokeWidth={1.6} />{nf.format(resident.destinationsCount)}</span>
+                <span className="inline-flex items-center gap-1" title={t.tabCombos}><Trophy size={12} strokeWidth={1.6} />{nf.format(resident.combosCompleted)}</span>
+                <span className="inline-flex items-center gap-1" title={copy.achievements}><Award size={12} strokeWidth={1.6} />{nf.format(resident.achievements.length)}</span>
               </span>
             </div>
-
             <div className="mt-2.5 max-w-sm">
-              <div className="h-[3px] w-full overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className={`h-full rounded-full transition-[width] duration-700 ${CIRCLE_STYLE[circle.key].bar}`}
-                  style={{ width: `${Math.round(progress * 100)}%` }}
-                />
-              </div>
-              <p className="mt-1 text-[10px] text-zinc-600">
-                {next ? t.toNext(nf.format(next.min - resident.influence), next.title) : t.topLevel}
-              </p>
+              <div className="h-[3px] w-full overflow-hidden rounded-full bg-zinc-800"><div className={`h-full transition-[width] duration-700 ${CIRCLE_STYLE[circle.key].bar}`} style={{ width: `${Math.round(progress * 100)}%` }} /></div>
+              <p className="mt-1 text-[10px] text-zinc-600">{next ? t.toNext(nf.format(next.min - resident.influence), next.title) : t.topLevel}</p>
             </div>
           </div>
         </div>
-
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-          <DestinationPicker
-            destinations={destinations}
-            value={current}
-            onChange={setSelected}
-            disabled={pending}
-            onOpenChange={setMenuOpen}
-          />
-          <NumberInput
-            value={weight}
-            onChange={setWeight}
-            label={t.customWeightAria}
-            placeholder={current ? String(current.points) : t.customWeight}
-            prefix={<Coins size={12} strokeWidth={1.6} />}
-            disabled={pending}
-            className="sm:w-24"
-          />
-          <button
-            type="button"
-            disabled={!current || pending}
-            onClick={onStamp}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-200/40 bg-amber-200/10 px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-200/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {pending ? (
-              <Loader2 size={15} strokeWidth={2} className="animate-spin" />
-            ) : (
-              <StampIcon size={15} strokeWidth={1.75} />
-            )}
-            {t.stamp}
+          <DestinationPicker destinations={destinations} value={current} onChange={setSelected} disabled={pending} onOpenChange={setMenuOpen} />
+          <NumberInput value={weight} onChange={setWeight} label={t.customWeightAria} placeholder={current ? String(current.points) : t.customWeight} prefix={<Coins size={12} strokeWidth={1.6} />} disabled={pending} className="sm:w-24" />
+          <button type="button" disabled={!current || pending} onClick={onStamp} className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-200/40 bg-amber-200/10 px-4 py-2.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-200/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/50 disabled:cursor-not-allowed disabled:opacity-40">
+            {pending ? <Loader2 size={15} strokeWidth={2} className="animate-spin" /> : <StampIcon size={15} strokeWidth={1.75} />}{t.stamp}
           </button>
         </div>
       </div>
 
-      <div aria-live="polite">
-        {toast && (
-          <div
-            className={`mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
-              toast.kind === "ok"
-                ? "border-emerald-500/30 bg-emerald-950/30 text-emerald-300"
-                : "border-red-500/30 bg-red-950/30 text-red-300"
-            }`}
-          >
-            {toast.kind === "ok" ? <Check size={14} strokeWidth={2} /> : <X size={14} strokeWidth={2} />}
-            <span>{toastText}</span>
+      <div className="mt-4 border-t border-zinc-800/70 pt-3">
+        <button type="button" onClick={() => setManagementOpen((open) => !open)} aria-expanded={managementOpen} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/45 px-3 py-2 text-xs text-zinc-400 transition hover:border-amber-200/25 hover:text-amber-100">
+          <Award size={13} className="text-amber-200/70" />{copy.manage}<span className="font-mono text-[10px] text-zinc-600">{resident.stamps.length} / {resident.achievements.length}</span><ChevronDown size={13} className={`transition-transform ${managementOpen ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+
+      {managementOpen && <div className="mt-4 space-y-5 rounded-2xl border border-zinc-800/70 bg-zinc-950/35 p-3 sm:p-4">
+        <section>
+          <div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">{copy.stamps}</h3><span className="font-mono text-[10px] text-zinc-600">{resident.stamps.length}</span></div>
+          {resident.stamps.length === 0 ? <p className="rounded-xl border border-dashed border-zinc-800 px-4 py-5 text-xs text-zinc-600">{copy.noStamps}</p> : <div className="grid gap-2 sm:grid-cols-2">
+            {resident.stamps.map((stamp) => {
+              const name = destinations.find((item) => item.id === stamp.destination_id)?.name ?? stamp.destination_id;
+              const date = stamp.stamped_at ? new Date(stamp.stamped_at).toLocaleDateString(LOCALES[lang]) : copy.dateUnknown;
+              return <div key={stamp.id} className="flex items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-3 py-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-200/15 bg-amber-200/[0.04] text-amber-200/70"><StampIcon size={15}/></span>
+                <div className="min-w-0 flex-1"><p className="truncate text-xs text-zinc-200" title={name}>{name}</p><p className="mt-1 text-[10px] text-zinc-600">{date} · {copy.visit} #{stamp.visit_number ?? 1}</p></div>
+                <button type="button" disabled={pending} onClick={() => void onRevokeStamp(stamp)} title={copy.removeStamp} aria-label={`${copy.removeStamp}: ${name}`} className="rounded-lg border border-rose-400/15 p-2 text-rose-200/70 transition hover:bg-rose-400/[0.08] hover:text-rose-100 disabled:opacity-40"><Trash2 size={13}/></button>
+              </div>;
+            })}
+          </div>}
+        </section>
+
+        <section>
+          <div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">{copy.achievements}</h3><span className="font-mono text-[10px] text-zinc-600">{resident.achievements.length}</span></div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {presets.map((preset) => {
+              const earned = earnedByKey.get(preset.key);
+              return <article key={preset.key} className={`rounded-xl border p-3 ${earned ? "border-amber-200/20 bg-amber-200/[0.035]" : "border-zinc-800 bg-zinc-900/25"}`}>
+                <div className="flex items-start justify-between gap-2"><h4 className={`${cormorant.className} text-lg leading-tight ${earned ? "text-amber-100" : "text-zinc-300"}`}>{earned?.title ?? preset.title}</h4><span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] uppercase tracking-wider ${earned ? "border-emerald-400/20 text-emerald-200" : "border-zinc-700 text-zinc-500"}`}>{earned ? copy.earned : copy.notEarned}</span></div>
+                <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">{preset.description}</p>
+                {earned ? <div className="mt-3 flex items-center justify-between gap-2"><span className="font-mono text-[10px] text-amber-200/80">+{nf.format(Number(earned.points_awarded) || 0)}</span><button type="button" disabled={pending} onClick={() => void onRevokeAchievement(earned)} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-400/15 px-2.5 py-1.5 text-[10px] text-rose-200/80 transition hover:bg-rose-400/[0.06] disabled:opacity-40"><Trash2 size={11}/>{copy.revokeAchievement}</button></div> : <button type="button" disabled={pending} onClick={() => { setAchievementKey(preset.key); setAchievementTitle(preset.title); setManagementOpen(true); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-amber-200/15 px-2.5 py-1.5 text-[10px] text-amber-100/80 transition hover:bg-amber-200/[0.05] disabled:opacity-40"><Plus size={11}/>{copy.prepareAward}</button>}
+              </article>;
+            })}
+            {extraAchievements.map((achievement) => <article key={achievement.id} className="rounded-xl border border-amber-200/20 bg-amber-200/[0.035] p-3"><div className="flex items-start justify-between gap-2"><h4 className={`${cormorant.className} text-lg leading-tight text-amber-100`}>{achievement.title}</h4><span className="shrink-0 rounded-full border border-emerald-400/20 px-2 py-0.5 text-[8px] uppercase tracking-wider text-emerald-200">{copy.earned}</span></div><p className="mt-2 break-all font-mono text-[9px] text-zinc-600">{achievement.achievement_key}</p><div className="mt-3 flex items-center justify-between gap-2"><span className="font-mono text-[10px] text-amber-200/80">+{nf.format(Number(achievement.points_awarded) || 0)}</span><button type="button" disabled={pending} onClick={() => void onRevokeAchievement(achievement)} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-400/15 px-2.5 py-1.5 text-[10px] text-rose-200/80 transition hover:bg-rose-400/[0.06] disabled:opacity-40"><Trash2 size={11}/>{copy.revokeAchievement}</button></div></article>)}
           </div>
-        )}
+
+          <form onSubmit={onIssueAchievement} className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/30 p-3 sm:p-4">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">{copy.issueAchievement}</p>
+            <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr_110px_auto] sm:items-end">
+              <label className="block"><span className="mb-1.5 block text-[10px] text-zinc-500">{copy.key}</span><input value={achievementKey} onChange={(event) => setAchievementKey(event.target.value)} maxLength={100} placeholder="custom_achievement" disabled={pending} className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-xs text-zinc-200 outline-none focus:border-amber-200/30 disabled:opacity-50"/></label>
+              <label className="block"><span className="mb-1.5 block text-[10px] text-zinc-500">{copy.title}</span><input value={achievementTitle} onChange={(event) => setAchievementTitle(event.target.value)} maxLength={160} placeholder="Achievement title" disabled={pending} className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-xs text-zinc-200 outline-none focus:border-amber-200/30 disabled:opacity-50"/></label>
+              <label className="block"><span className="mb-1.5 block text-[10px] text-zinc-500">{copy.points}</span><input type="number" min={0} max={1000000} step={1} value={achievementPoints} onChange={(event) => setAchievementPoints(event.target.value)} disabled={pending} className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-xs text-zinc-200 outline-none focus:border-amber-200/30 disabled:opacity-50"/></label>
+              <button type="submit" disabled={pending} className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-200/30 bg-amber-200/10 px-4 py-2.5 text-xs text-amber-100 transition hover:bg-amber-200/[0.16] disabled:opacity-40">{pending ? <Loader2 size={13} className="animate-spin"/> : <Plus size={13} />}{copy.saveAchievement}</button>
+            </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">{copy.validation}</p>
+          </form>
+        </section>
+      </div>}
+
+      <div aria-live="polite">
+        {toast && <div className={`mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${toast.kind === "ok" || (toast.kind === "message" && toast.success) ? "border-emerald-500/30 bg-emerald-950/30 text-emerald-300" : "border-red-500/30 bg-red-950/30 text-red-300"}`}>
+          {toast.kind === "ok" || (toast.kind === "message" && toast.success) ? <Check size={14} strokeWidth={2}/> : <X size={14} strokeWidth={2}/>}<span>{toastText}</span>
+        </div>}
       </div>
     </li>
   );

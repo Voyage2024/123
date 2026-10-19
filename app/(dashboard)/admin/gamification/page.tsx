@@ -11,9 +11,8 @@
  *   game_destinations           — цензы и веса направлений
  *   game_combos / game_circles  — легендарные комбо и пороги Circle
  *
- * Realtime: правки настроек (в том числе от другого админа) и новые
- * штампы приходят по подписке; после них лидерборд перечитывается,
- * так что Индекс и Circle резидентов всегда совпадают с базой.
+ * Realtime: настройки, штампы и достижения перечитываются после внешних
+ * изменений; лидерборд синхронизируется с базой.
  *
  * i18n: строки страницы — в словаре админки (useAdminI18n). В state не
  * кладутся переведённые строки, поэтому смена языка не требует загрузки.
@@ -28,6 +27,8 @@ import GamificationAdminClient, {
   cormorant,
   useAdminI18n,
   type AdminResident,
+  type AdminAchievement,
+  type AdminGameStamp,
   type ExtraDestination,
   type SavedRow,
 } from "./GamificationAdminClient";
@@ -63,9 +64,13 @@ type Raw = {
   destinations: GameDestinationRow[];
   combos: GameComboRow[];
   circles: GameCircleRow[];
+  stamps: AdminGameStamp[];
+  achievements: AdminAchievement[];
 };
 
-const EMPTY: Raw = { profiles: [], leaderboard: [], destinations: [], combos: [], circles: [] };
+const EMPTY: Raw = {
+  profiles: [], leaderboard: [], destinations: [], combos: [], circles: [], stamps: [], achievements: [],
+};
 
 type LoadMode = "initial" | "refresh" | "silent";
 
@@ -105,8 +110,14 @@ function buildResidents(
   profiles: ProfileRow[],
   leaderboard: LeaderboardRow[],
   circles: CircleConfig[],
+  stamps: AdminGameStamp[],
+  achievements: AdminAchievement[],
 ): AdminResident[] {
   const stats = new Map(leaderboard.map((s) => [s.profile_id, s]));
+  const stampsByProfile = new Map<string, AdminGameStamp[]>();
+  const achievementsByProfile = new Map<string, AdminAchievement[]>();
+  for (const stamp of stamps) stampsByProfile.set(stamp.profile_id, [...(stampsByProfile.get(stamp.profile_id) ?? []), stamp]);
+  for (const achievement of achievements) achievementsByProfile.set(achievement.profile_id, [...(achievementsByProfile.get(achievement.profile_id) ?? []), achievement]);
 
   return profiles
     .map((p): AdminResident => {
@@ -130,6 +141,8 @@ function buildResidents(
         destinationsCount: num(s?.destinations_count) ?? 0,
         combosCompleted: num(s?.combos_completed) ?? 0,
         position: num(s?.position) ?? null,
+        stamps: stampsByProfile.get(p.id) ?? [],
+        achievements: achievementsByProfile.get(p.id) ?? [],
       };
     })
     .sort((a, b) => b.influence - a.influence || a.fullName.localeCompare(b.fullName));
@@ -216,18 +229,20 @@ export default function AdminGamificationPage() {
     setError(null);
 
     try {
-      const [profilesRes, statsRes, destRes, comboRes, circleRes] = await Promise.all([
+      const [profilesRes, statsRes, destRes, comboRes, circleRes, stampsRes, achievementsRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("role", "resident").order("full_name", { ascending: true }),
         supabase.from("v_global_leaderboard").select("*"),
         supabase.from("game_destinations").select("*").order("sort_order", { ascending: true }),
         supabase.from("game_combos").select("*").order("sort_order", { ascending: true }),
         supabase.from("game_circles").select("*").order("level", { ascending: true }),
+        supabase.from("game_attendance").select("id,profile_id,destination_id,visited_at,visit_number,points,multiplier,stamped_at").order("stamped_at", { ascending: false }),
+        supabase.from("resident_achievements").select("id,profile_id,achievement_key,title,points_awarded,earned_at").order("earned_at", { ascending: false }),
       ]);
 
       if (!isCurrent()) return;
 
       const firstError =
-        profilesRes.error ?? statsRes.error ?? destRes.error ?? comboRes.error ?? circleRes.error;
+        profilesRes.error ?? statsRes.error ?? destRes.error ?? comboRes.error ?? circleRes.error ?? stampsRes.error ?? achievementsRes.error;
       if (firstError) {
         console.error("[Gamification Admin] Load error:", {
           profiles: profilesRes.error,
@@ -235,6 +250,8 @@ export default function AdminGamificationPage() {
           destinations: destRes.error,
           combos: comboRes.error,
           circles: circleRes.error,
+          stamps: stampsRes.error,
+          achievements: achievementsRes.error,
         });
         setError({ message: firstError.message || null, code: firstError.code || null });
         return; // уже загруженные данные НЕ стираем
@@ -246,6 +263,8 @@ export default function AdminGamificationPage() {
         destinations: (destRes.data ?? []) as GameDestinationRow[],
         combos: (comboRes.data ?? []) as GameComboRow[],
         circles: (circleRes.data ?? []) as GameCircleRow[],
+        stamps: (stampsRes.data ?? []) as AdminGameStamp[],
+        achievements: (achievementsRes.data ?? []) as AdminAchievement[],
       });
       setHasData(true);
     } catch (e) {
@@ -314,6 +333,11 @@ export default function AdminGamificationPage() {
       )
       .on("postgres_changes", { event: "*", schema: "public", table: "game_attendance" }, () => {
         scheduleStandings();
+        void load("silent");
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "resident_achievements" }, () => {
+        void load("silent");
+        scheduleStandings();
       })
       .subscribe((status) => {
         if (mounted.current) setLive(status === "SUBSCRIBED");
@@ -323,7 +347,7 @@ export default function AdminGamificationPage() {
       setLive(false);
       void supabase.removeChannel(channel);
     };
-  }, [authLoading, scheduleStandings]);
+  }, [authLoading, load, scheduleStandings]);
 
   // Собственное сохранение: патчим сразу, не дожидаясь эха из realtime
   const handleSaved = useCallback(
@@ -344,8 +368,9 @@ export default function AdminGamificationPage() {
   );
 
   const handleStamped = useCallback(() => {
+    void load("silent");
     scheduleStandings();
-  }, [scheduleStandings]);
+  }, [load, scheduleStandings]);
 
   /* ── Производные данные ── */
 
@@ -354,8 +379,8 @@ export default function AdminGamificationPage() {
   const combos = useMemo(() => resolveCombos(raw.combos), [raw.combos]);
   const circles = useMemo(() => resolveCircles(raw.circles), [raw.circles]);
   const residents = useMemo(
-    () => buildResidents(raw.profiles, raw.leaderboard, circles),
-    [raw.profiles, raw.leaderboard, circles],
+    () => buildResidents(raw.profiles, raw.leaderboard, circles, raw.stamps, raw.achievements),
+    [raw.profiles, raw.leaderboard, circles, raw.stamps, raw.achievements],
   );
 
   const stats = useMemo(
