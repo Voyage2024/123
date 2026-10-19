@@ -15,7 +15,9 @@ import {
 const LOGIN_PATH = "/login";
 const STAFF_HOME_PATH = ADMIN_HOME_PATH;
 const PROTECTED_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, PARTNER_HOME_PATH, "/profile", "/event", "/events"];
-const ENTRY_ROUTES = ["/", LOGIN_PATH];
+// Only /login redirects authenticated users into their role-specific workspace.
+// The public homepage (/) must remain accessible to every authenticated role.
+const AUTHENTICATED_REDIRECT_ROUTES = [LOGIN_PATH];
 const LEGACY_COOKIE = "voyage_token";
 
 /** Redirect while preserving any refreshed Supabase cookies. */
@@ -60,7 +62,7 @@ export async function proxy(request: NextRequest) {
   if (!user) return isProtected ? redirectTo(request, response, LOGIN_PATH) : response;
 
   const shouldResolveRole =
-    ENTRY_ROUTES.includes(pathname) ||
+    AUTHENTICATED_REDIRECT_ROUTES.includes(pathname) ||
     pathname === RESIDENT_HOME_PATH ||
     matchesPrefix(pathname, STAFF_HOME_PATH) ||
     matchesPrefix(pathname, PARTNER_HOME_PATH);
@@ -87,8 +89,8 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // An already-authenticated user should land in the workspace matching profiles.role.
-  if (ENTRY_ROUTES.includes(pathname)) {
+  // Keep role-based auto-routing on /login only. The public homepage (/) is not an entry redirect.
+  if (AUTHENTICATED_REDIRECT_ROUTES.includes(pathname)) {
     if (!roleResolved || !role) return response;
     return redirectTo(request, response, getRoleHomePath(role));
   }
