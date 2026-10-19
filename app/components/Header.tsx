@@ -23,7 +23,20 @@ export default function Header() {
 
   return (
     <header className="fixed top-0 w-full p-6 flex justify-between items-center z-40 bg-zinc-950/50 backdrop-blur-md">
-      <Link href="/" aria-label="VOYAGE - Home" className="font-serif text-xl tracking-[0.2em] text-amber-200/90 transition-colors hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/70">VOYAGE</Link>
+      <Link 
+  href="/" 
+  onClick={(e) => {
+    // Если мы уже на публичной главной, просто скроллим вверх или обновляем
+    if (window.location.pathname === "/") {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }}
+  aria-label="VOYAGE - Home" 
+  className="font-serif text-xl tracking-[0.2em] text-amber-200/90 transition-colors hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/70"
+>
+  VOYAGE
+</Link>
 
       {user ? (
         <div className="relative">
