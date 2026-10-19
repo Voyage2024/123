@@ -1242,8 +1242,7 @@ const ResidentRow = memo(function ResidentRow({
   }
 
   async function onRevokeStamp(stamp: AdminGameStamp) {
-    const destinationName = destinations.find((item) => item.id === stamp.destination_id)?.name ?? stamp.destination_id;
-    if (!window.confirm(`${copy.confirmRemoveStamp}\n\n${destinationName}`)) return;
+const destinationName = (destinations.find((item) => item.id === stamp.destination_id) as any)?.name ?? (destinations.find((item) => item.id === stamp.destination_id) as any)?.title ?? (destinations.find((item) => item.id === stamp.destination_id) as any)?.label ?? stamp.destination_id;    if (!window.confirm(`${copy.confirmRemoveStamp}\n\n${destinationName}`)) return;
     setPending(true);
     setToast(null);
     try {
@@ -1363,7 +1362,7 @@ const ResidentRow = memo(function ResidentRow({
           <div className="mb-3 flex items-center justify-between gap-3"><h3 className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">{copy.stamps}</h3><span className="font-mono text-[10px] text-zinc-600">{resident.stamps.length}</span></div>
           {resident.stamps.length === 0 ? <p className="rounded-xl border border-dashed border-zinc-800 px-4 py-5 text-xs text-zinc-600">{copy.noStamps}</p> : <div className="grid gap-2 sm:grid-cols-2">
             {resident.stamps.map((stamp) => {
-              const name = destinations.find((item) => item.id === stamp.destination_id)?.name ?? stamp.destination_id;
+              const name = (destinations.find((item) => item.id === stamp.destination_id) as any)?.name ?? (destinations.find((item) => item.id === stamp.destination_id) as any)?.title ?? (destinations.find((item) => item.id === stamp.destination_id) as any)?.label ?? stamp.destination_id;
               const date = stamp.stamped_at ? new Date(stamp.stamped_at).toLocaleDateString(LOCALES[lang]) : copy.dateUnknown;
               return <div key={stamp.id} className="flex items-center gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-3 py-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-200/15 bg-amber-200/[0.04] text-amber-200/70"><StampIcon size={15}/></span>
