@@ -361,7 +361,7 @@ export const time = (v: unknown): number | null => {
   return Number.isNaN(ms) ? null : ms;
 };
 /** «2026-10-20» → локальная полночь (Date.parse считал бы её UTC и сдвигал день к западу от Гринвича) */
-const day = (v: unknown): number | null => {
+export const day = (v: unknown): number | null => {
   const m = typeof v === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(v) : null;
   return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : null;
 };
@@ -369,12 +369,12 @@ export const oneOf = <T extends string>(v: unknown, allowed: readonly T[]): T | 
   typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : null;
 
 export const PROJECTS = ["shoot", "show", "campaign", "event"] as const;
-const TIERS = ["silver", "gold", "platinum"] as const;
+export const TIERS = ["silver", "gold", "platinum"] as const;
 export const PAYERS = ["manager", "participant", "split"] as const;
 const ALERT_KINDS = ["option", "contract", "docs", "replacement", "responses"] as const;
 const FLIGHT_STATUSES = ["confirmed", "contract", "docs", "replacement"] as const;
-const BLACKLIST_REASON: Record<string, BlacklistReason> = { no_show: "noShow", fake_photos: "fakePhotos", fraud: "fraud" };
-const REVIEW_TAG: Record<string, ReviewTag> = {
+export const BLACKLIST_REASON: Record<string, BlacklistReason> = { no_show: "noShow", fake_photos: "fakePhotos", fraud: "fraud" };
+export const REVIEW_TAG: Record<string, ReviewTag> = {
   punctual: "punctual",
   professional: "professional",
   matches_snaps: "matchesSnaps",
@@ -428,7 +428,7 @@ export function termsToDb(t: ContractTerms) {
   };
 }
 
-function parseContract(v: unknown): Contract | null {
+export function parseContract(v: unknown): Contract | null {
   if (!v || typeof v !== "object") return null;
   const r = obj(v);
   const terms = parseTerms(r.terms);
@@ -443,11 +443,10 @@ function parseContract(v: unknown): Contract | null {
   };
 }
 
-export function parseSnapshot(raw: unknown): CommandData {
-  const root = obj(raw);
-  const m = obj(root.manager);
-
-  const manager: ManagerSnapshot = {
+/** Ключ и показатели менеджера — partner_manager_stats() */
+export function parseManager(v: unknown): ManagerSnapshot {
+  const m = obj(v);
+  return {
     tier: oneOf(m.tier, TIERS) ?? "silver",
     nextTier: oneOf(m.next_tier, TIERS),
     toursDone: num(m.tours_done) ?? 0,
@@ -457,6 +456,28 @@ export function parseSnapshot(raw: unknown): CommandData {
     rating: num(m.rating),
     reviews: num(m.reviews) ?? 0,
   };
+}
+
+export function parseResponder(x: Raw): Responder | null {
+  const code = str(x.code);
+  if (!code) return null;
+  return {
+    code,
+    handshake: x.handshake === true,
+    residentId: str(x.resident_id),
+    name: str(x.name),
+    snapAt: time(x.snap_at),
+    trusted: x.trusted === true,
+  };
+}
+
+export function parseCrewMember(x: Raw): CrewMember {
+  return { id: str(x.id), name: str(x.name) ?? "—", docs: x.docs === true, signed: x.signed === true };
+}
+
+export function parseSnapshot(raw: unknown): CommandData {
+  const root = obj(raw);
+  const manager = parseManager(root.manager);
 
   const alerts = list<AlertItem>(root.alerts, (r) => {
     const id = str(r.id);
@@ -496,18 +517,7 @@ export function parseSnapshot(raw: unknown): CommandData {
       fresh: num(r.fresh) ?? 0,
       closesAt,
       stage: oneOf(r.stage, ["open", "shortlist"] as const) ?? "open",
-      responders: list<Responder>(r.responders, (x) => {
-        const code = str(x.code);
-        if (!code) return null;
-        return {
-          code,
-          handshake: x.handshake === true,
-          residentId: str(x.resident_id),
-          name: str(x.name),
-          snapAt: time(x.snap_at),
-          trusted: x.trusted === true,
-        };
-      }),
+      responders: list<Responder>(r.responders, parseResponder),
     };
   });
 
@@ -524,12 +534,7 @@ export function parseSnapshot(raw: unknown): CommandData {
       flightNo: str(r.flight_no),
       departsAt,
       status: oneOf(r.status, FLIGHT_STATUSES) ?? "confirmed",
-      crew: list<CrewMember>(r.crew, (x) => ({
-        id: str(x.id),
-        name: str(x.name) ?? "—",
-        docs: x.docs === true,
-        signed: x.signed === true,
-      })),
+      crew: list<CrewMember>(r.crew, parseCrewMember),
       replacement: str(r.replacement),
       replacementId: str(r.replacement_id),
       contract: parseContract(r.contract),

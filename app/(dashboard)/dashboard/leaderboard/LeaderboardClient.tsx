@@ -44,6 +44,8 @@ export type LeaderboardEntry = {
   proteges: number;
   /** баллы всех туров (уже в очках Индекса) */
   tourPoints?: number;
+  /** резидентка скрыла цифры: место есть, баллов и надёжности нет */
+  hidden?: boolean;
 };
 
 export type LeaderboardData = {
@@ -67,6 +69,7 @@ type Text = {
   updated: (time: string) => string;
   refresh: string;
   you: string;
+  hidden: string;
   yourStanding: string;
   of: (n: number) => string;
   leading: string;
@@ -110,6 +113,7 @@ const TEXT: Record<Lang, Text> = {
     updated: (time) => `Updated ${time}`,
     refresh: "Refresh",
     you: "You",
+    hidden: "Hidden",
     yourStanding: "Your standing",
     of: (n) => `of ${n}`,
     leading: "You lead the club",
@@ -152,6 +156,7 @@ const TEXT: Record<Lang, Text> = {
     updated: (time) => `Обновлено в ${time}`,
     refresh: "Обновить",
     you: "Вы",
+    hidden: "Скрыто",
     yourStanding: "Ваше место",
     of: (n) => `из ${n}`,
     leading: "Вы возглавляете клуб",
@@ -194,6 +199,7 @@ const TEXT: Record<Lang, Text> = {
     updated: (time) => `Actualizado a las ${time}`,
     refresh: "Actualizar",
     you: "Usted",
+    hidden: "Oculto",
     yourStanding: "Su posición",
     of: (n) => `de ${n}`,
     leading: "Usted encabeza el club",
@@ -236,6 +242,7 @@ const TEXT: Record<Lang, Text> = {
     updated: (time) => `Atualizado às ${time}`,
     refresh: "Atualizar",
     you: "Você",
+    hidden: "Oculto",
     yourStanding: "Sua posição",
     of: (n) => `de ${n}`,
     leading: "Você lidera o clube",
@@ -477,12 +484,14 @@ function Stat({ icon: Icon, value, label }: { icon: LucideIcon; value: number | 
 
 function Standing({ me, ranked, t }: { me: LeaderboardEntry; ranked: LeaderboardEntry[]; t: Text }) {
   const isRanked = me.influence > 0;
-  const tenth = ranked.length >= TOP ? ranked[TOP - 1] : null;
+  const tenth = ranked.length >= TOP && !ranked[TOP - 1].hidden ? ranked[TOP - 1] : null;
   const inTop = isRanked && me.position <= TOP;
 
   // ближайшая соседка выше (строго больше Индекс) и ниже
-  const above = [...ranked].reverse().find((e) => e.influence > me.influence) ?? null;
-  const below = ranked.find((e) => e.influence < me.influence) ?? null;
+  // соседки со скрытыми баллами в расчёт разрыва не идут
+  const visible = ranked.filter((e) => !e.hidden || e.profileId === me.profileId);
+  const above = [...visible].reverse().find((e) => e.influence > me.influence) ?? null;
+  const below = visible.find((e) => e.influence < me.influence) ?? null;
   const sharesFirst = isRanked && me.position === 1 && ranked.some((e) => e.profileId !== me.profileId && e.influence === me.influence);
 
   let headline: string;
@@ -585,10 +594,12 @@ function PodiumCard({ e, slot, me, t }: { e: LeaderboardEntry; slot: 1 | 2 | 3; 
           <span className="rounded-full border border-zinc-800/80 px-2 py-0.5 text-[9px] uppercase tracking-[0.12em] text-zinc-400">Level {e.level}</span>
           {me && <YouTag label={t.you} />}
         </span>
-        <span className={`text-[10px] ${e.reliability >= 90 ? "text-emerald-300" : e.reliability >= 70 ? "text-amber-200" : "text-red-300"}`}>Reliability {e.reliability}%</span>
+        {!e.hidden && (
+          <span className={`text-[10px] ${e.reliability >= 90 ? "text-emerald-300" : e.reliability >= 70 ? "text-amber-200" : "text-red-300"}`}>Reliability {e.reliability}%</span>
+        )}
         <span className="lb-pod-score mt-1">
           <span className={`${cormorant.className} lb-pod-value font-medium lining-nums tabular-nums text-zinc-50`}>
-            {fmtPoints(e.influence)}
+            {e.hidden ? <HiddenValue label={t.hidden} /> : fmtPoints(e.influence)}
           </span>
           <span className="mt-1 text-[9px] uppercase tracking-[0.26em] text-zinc-500">Influence Index</span>
         </span>
@@ -626,10 +637,12 @@ function RankRow({ e, me, elite, t }: { e: LeaderboardEntry; me: boolean; elite:
       <span className="lb-row-badge flex flex-wrap items-center gap-1.5">
         <CircleBadge circleKey={e.circleKey} title={e.circleTitle} compact />
         <span className="rounded-full border border-zinc-800/80 px-2 py-0.5 text-[9px] uppercase tracking-[0.1em] text-zinc-500">Level {e.level}</span>
-        <span className={`text-[9px] ${e.reliability >= 90 ? "text-emerald-300" : e.reliability >= 70 ? "text-amber-200" : "text-red-300"}`}>{e.reliability}%</span>
+        {!e.hidden && (
+          <span className={`text-[9px] ${e.reliability >= 90 ? "text-emerald-300" : e.reliability >= 70 ? "text-amber-200" : "text-red-300"}`}>{e.reliability}%</span>
+        )}
       </span>
       <span className="lb-row-stats items-center">
-        <Stat icon={Stamp} value={e.stamps} label={t.stamps} />
+        {e.hidden ? <span aria-hidden /> : <Stat icon={Stamp} value={e.stamps} label={t.stamps} />}
         {e.tourPoints ? <Stat icon={Plane} value={fmtPoints(e.tourPoints)} label={t.tourPoints} /> : <span aria-hidden />}
         {e.proteges > 0 ? <Stat icon={KeyRound} value={e.proteges} label={t.proteges} /> : <span aria-hidden />}
       </span>
@@ -637,11 +650,16 @@ function RankRow({ e, me, elite, t }: { e: LeaderboardEntry; me: boolean; elite:
         <span
           className={`${cormorant.className} block text-xl font-medium leading-none lining-nums tabular-nums ${elite ? "text-zinc-50" : "text-zinc-300"}`}
         >
-          {fmtPoints(e.influence)}
+          {e.hidden ? <HiddenValue label={t.hidden} /> : fmtPoints(e.influence)}
         </span>
       </span>
     </li>
   );
+}
+
+/** Вместо цифр у резидентки, скрывшей баллы */
+function HiddenValue({ label }: { label: string }) {
+  return <span className="text-[11px] not-italic uppercase tracking-[0.2em] text-zinc-500">{label}</span>;
 }
 
 /* ── Страница ─────────────────────────────────────────────────────── */
@@ -674,7 +692,7 @@ export default function LeaderboardClient({
   );
 
   const { ranked, podium, ten, rest, me, unranked, threshold } = useMemo(() => {
-    const ranked = segmentEntries.filter((e) => e.influence > 0);
+    const ranked = segmentEntries.filter((e) => e.influence > 0 || e.hidden);
     const elite = ranked.filter((e) => e.position <= TOP);
     const podium = elite.filter((e) => e.position <= PODIUM).slice(0, PODIUM);
     const podiumIds = new Set(podium.map((e) => e.profileId));
@@ -685,7 +703,7 @@ export default function LeaderboardClient({
       rest: ranked.filter((e) => e.position > TOP),
       me: data.meId ? (segmentEntries.find((e) => e.profileId === data.meId) ?? null) : null,
       unranked: segmentEntries.length - ranked.length,
-      threshold: elite.length ? elite[elite.length - 1].influence : null,
+      threshold: elite.length && !elite[elite.length - 1].hidden ? elite[elite.length - 1].influence : null,
     };
   }, [data.meId, segmentEntries]);
   const meRestIndex = me ? rest.findIndex((e) => e.profileId === me.profileId) : -1;

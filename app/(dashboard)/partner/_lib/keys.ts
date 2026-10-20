@@ -7,12 +7,23 @@
  *   Gold      ≥ 3 закрытых тура за всё время и оценка резиденток ≥ 4,5
  *   Platinum  ≥ 10 закрытых туров с вылетом за последние 12 месяцев и ≥ 4,5
  *
- * Демо собрано из тех же туров, что Манифест: 7 туров в зачёте, 9 всего.
+ * Данные: RPC public.partner_keys() — тот же расчёт, что в Штабе.
  * ──────────────────────────────────────────────────────────────────── */
 
 import { DAY } from "./clock";
-import type { KeyTier, ManagerSnapshot, ProjectKey } from "./command";
-import { buildManifestMock } from "./manifest";
+import {
+  PROJECTS,
+  list,
+  num,
+  obj,
+  oneOf,
+  parseManager,
+  str,
+  time,
+  type KeyTier,
+  type ManagerSnapshot,
+  type ProjectKey,
+} from "./command";
 
 export type TierRule = {
   tier: KeyTier;
@@ -43,28 +54,21 @@ export type KeysData = {
 
 export const YEAR = 365 * DAY;
 
-export function buildKeysMock(): KeysData {
-  const t = Date.now();
-  const closed = buildManifestMock().tours.filter((r) => r.status === "closed");
-  const counted = closed
-    .filter((r) => r.departsAt > t - YEAR)
-    .map((r) => ({ id: r.id, city: r.city, project: r.project, departsAt: r.departsAt, expiresAt: r.departsAt + YEAR }))
-    .sort((a, b) => a.expiresAt - b.expiresAt);
-
+/** Разбор public.partner_keys() — миграция 20261020094000_partner_live_pages.sql */
+export function parseKeys(raw: unknown): KeysData {
+  const root = obj(raw);
+  const counted = list<CountedTour>(root.counted, (r) => {
+    const id = str(r.id);
+    const project = oneOf(r.project, PROJECTS);
+    const departsAt = time(r.departs_at);
+    if (!id || !project || departsAt === null) return null;
+    return { id, city: str(r.city) ?? "—", project, departsAt, expiresAt: time(r.expires_at) ?? departsAt + YEAR };
+  }).sort((a, b) => a.expiresAt - b.expiresAt);
   return {
-    generatedAt: t,
-    manager: {
-      tier: "gold",
-      nextTier: "platinum",
-      toursDone: counted.length,
-      toursForNext: 10,
-      flown: 23,
-      confirmed: 24,
-      rating: 4.8,
-      reviews: 19,
-    },
-    closedTotal: closed.length,
-    closedYear: counted.length,
+    generatedAt: time(root.generated_at) ?? Date.now(),
+    manager: parseManager(root.manager),
+    closedTotal: num(root.closed_total) ?? 0,
+    closedYear: num(root.closed_year) ?? counted.length,
     counted,
   };
 }

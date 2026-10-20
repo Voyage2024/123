@@ -149,8 +149,18 @@ async function notifyHubResponsibles(hubId: string, modelName: string | null, te
       .in("id", profileIds);
     if (profileError) throw profileError;
 
+    // Тумблер «Новые заявки на мои локации» в настройках менеджера (member_preferences)
+    const optedOut = new Set<string>();
+    if (!test) {
+      const { data: prefs } = await db.from("member_preferences")
+        .select("profile_id,notify_map_applications")
+        .in("profile_id", profileIds);
+      for (const pref of prefs ?? []) if (pref.notify_map_applications === false) optedOut.add(String(pref.profile_id));
+    }
+
     const eligible = (profiles ?? []).filter((profile) =>
       ["owner", "admin", "manager"].includes(String(profile.role)) &&
+      !optedOut.has(String(profile.id)) &&
       typeof profile.telegram_id === "string" && /^\d{4,20}$/.test(profile.telegram_id),
     );
     const chatIds = Array.from(new Set(eligible.map((profile) => String(profile.telegram_id))));
@@ -323,13 +333,17 @@ export async function getMapHubManagementData(hubIdInput: string): Promise<MapHu
 
 export async function updateMapHubApplicationStatus(
   applicationId: string,
-  status: "approved" | "rejected",
+  status: "approved" | "rejected" | "completed",
 ): Promise<{ ok: true } | { ok: false; reason: ActionError }> {
   const actor = await getActor(["owner", "admin"]);
   if (!actor.ok) return actor;
-  if (!/^[0-9a-f-]{36}$/i.test(applicationId) || !["approved", "rejected"].includes(status)) return { ok: false, reason: "invalid" };
+  if (!/^[0-9a-f-]{36}$/i.test(applicationId) || !["approved", "rejected", "completed"].includes(status)) return { ok: false, reason: "invalid" };
   const db = getTelegramServiceClient();
-  const { data, error } = await db.from("applications").update({ status }).eq("id", applicationId).select("id,hub_id").maybeSingle();
+  // completed → триггер resident_process_completed_application начисляет баллы, штамп и уровень.
+  // Завершить можно только одобренную заявку (resident_guard_completion_fields).
+  let query = db.from("applications").update({ status }).eq("id", applicationId);
+  if (status === "completed") query = query.eq("status", "approved");
+  const { data, error } = await query.select("id,hub_id").maybeSingle();
   if (error || !data) return { ok: false, reason: error ? "server_error" : "not_found" };
   revalidatePath("/admin/map-locations");
   revalidatePath("/admin/applications");

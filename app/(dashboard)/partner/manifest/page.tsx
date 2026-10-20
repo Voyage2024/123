@@ -13,7 +13,7 @@
  * Строка ведёт в Комнату тура (рабочее место тура). Имена участниц —
  * ссылки на профиль, поверх строки. ≥ xl — таблица, ниже — карточки.
  *
- * Данные: _lib/manifest.ts (демо).
+ * Данные: RPC public.partner_manifest() через usePartnerFeed.
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useMemo, useState } from "react";
@@ -38,13 +38,16 @@ import { DAY } from "../_lib/clock";
 import { ROUTES } from "../_lib/routes";
 import type { Contract, FlightStatus } from "../_lib/command";
 import { pl, ru, usePartnerFormat, type Common, type Fmt } from "../_lib/format";
-import { buildManifestMock, type TourRow, type TourStatus } from "../_lib/manifest";
+import { parseManifest,
+  type ManifestData, type TourRow, type TourStatus } from "../_lib/manifest";
+import { usePartnerFeed } from "../_lib/usePartnerFeed";
 import { isSealed } from "../_components/TrustSignals";
 import {
   EDGE,
   EmptyFilter,
   FilterTabs,
   OVERLAY_LINK,
+  FeedGate,
   PageHeader,
   PageShell,
   Panel,
@@ -521,9 +524,19 @@ function NextDeparture({ r, t, cm, fmt }: { r: TourRow | null; t: Dict; cm: Comm
  * ══════════════════════════════════════════════════════════════════ */
 
 export default function PartnerManifestPage() {
+  const { lang, c: cm } = usePartnerFormat();
+  const t = T[lang] ?? T.EN;
+  const feed = usePartnerFeed("partner_manifest", parseManifest);
+  return (
+    <FeedGate feed={feed} c={cm} eyebrow={t.eyebrow} title={t.title}>
+      {(data) => <ManifestView data={data} />}
+    </FeedGate>
+  );
+}
+
+function ManifestView({ data }: { data: ManifestData }) {
   const { lang, c: cm, fmt } = usePartnerFormat();
   const t = T[lang] ?? T.EN;
-  const [data] = useState(buildManifestMock);
   const [filter, setFilter] = useState<FilterKey>("active");
   const [query, setQuery] = useState("");
 
@@ -564,8 +577,6 @@ export default function PartnerManifestPage() {
         eyebrow={t.eyebrow}
         title={t.title}
         subtitle={t.subtitle}
-        demo={cm.demo}
-        demoHint={cm.demoHint}
         aside={<NextDeparture r={next} t={t} cm={cm} fmt={fmt} />}
       />
 

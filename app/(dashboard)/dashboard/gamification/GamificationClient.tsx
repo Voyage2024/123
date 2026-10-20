@@ -91,6 +91,7 @@ import {
   type Tier,
 } from "@/lib/gamification";
 import { cormorant } from "@/app/components/profile/fonts";
+import PointsHistory from "@/app/(dashboard)/dashboard/_components/PointsHistory";
 
 /* ── Текстура: SVG-шум как data URI, без внешних файлов ──────────── */
 
@@ -1871,7 +1872,7 @@ const LEDGER_COPY: Record<Lang, {
 }> = {
   en: {
     ledgerTitle: "Influence Index · Bank Statement",
-    ledgerSubtitle: "Immutable history of points awarded by the club scoring engine.",
+    ledgerSubtitle: "Every entry shows where the points came from: tour, party, country stamp, combo. Tap a tour to see how it was calculated.",
     ledgerEmpty: "No score events have been recorded yet.",
     nextLevel: (points, title) => `${points} points to ${title}`,
     topCircle: "Black Circle · highest level reached",
@@ -1884,7 +1885,7 @@ const LEDGER_COPY: Record<Lang, {
   },
   ru: {
     ledgerTitle: "Influence Index · Банковская выписка",
-    ledgerSubtitle: "Неизменяемая история начислений серверного движка клуба.",
+    ledgerSubtitle: "У каждого начисления есть источник: тур, тусовка, штамп страны, комбо. Нажмите на тур — увидите, как посчитаны баллы.",
     ledgerEmpty: "Начислений пока нет.",
     nextLevel: (points, title) => `До уровня ${title} осталось ${points} б.`,
     topCircle: "Black Circle · максимальный уровень достигнут",
@@ -1897,7 +1898,7 @@ const LEDGER_COPY: Record<Lang, {
   },
   es: {
     ledgerTitle: "Influence Index · Extracto de puntos",
-    ledgerSubtitle: "Historial inmutable de los puntos otorgados por el motor del club.",
+    ledgerSubtitle: "Cada movimiento muestra su origen: tour, fiesta, sello, combo. Toca un tour para ver el cálculo.",
     ledgerEmpty: "Todavía no hay movimientos.",
     nextLevel: (points, title) => `Faltan ${points} puntos para ${title}`,
     topCircle: "Black Circle · nivel máximo alcanzado",
@@ -1910,7 +1911,7 @@ const LEDGER_COPY: Record<Lang, {
   },
   pt: {
     ledgerTitle: "Influence Index · Extrato de pontos",
-    ledgerSubtitle: "Histórico imutável dos pontos concedidos pelo motor do clube.",
+    ledgerSubtitle: "Cada lançamento mostra a origem: tour, festa, carimbo, combo. Toque em um tour para ver o cálculo.",
     ledgerEmpty: "Ainda não há lançamentos.",
     nextLevel: (points, title) => `Faltam ${points} pontos para ${title}`,
     topCircle: "Black Circle · nível máximo alcançado",
@@ -2017,22 +2018,18 @@ function ScoreLedger({
   circle,
   next,
   lang,
+  live,
 }: {
   events: ScoreEventRow[];
   index: number;
   circle: CircleConfig;
   next: CircleConfig | null;
   lang: Lang;
+  /** false — демо: список строится из уже загруженных строк, без RPC */
+  live: boolean;
 }) {
   const copy = LEDGER_COPY[lang];
   const remaining = next ? Math.max(0, next.min - index) : 0;
-  const locale = ({ en: "en-GB", ru: "ru-RU", es: "es-ES", pt: "pt-PT" })[lang];
-  const categoryNames: Record<Lang, Record<string, string>> = {
-    en: { tour: "Tour", event: "Event", stamp: "Country stamp", combo: "Combo", achievement: "Achievement", adjustment: "Adjustment" },
-    ru: { tour: "Тур", event: "Мероприятие", stamp: "Штамп страны", combo: "Комбо", achievement: "Ачивка", adjustment: "Корректировка" },
-    es: { tour: "Tour", event: "Evento", stamp: "Sello de país", combo: "Combo", achievement: "Logro", adjustment: "Ajuste" },
-    pt: { tour: "Tour", event: "Evento", stamp: "Carimbo de país", combo: "Combo", achievement: "Conquista", adjustment: "Ajuste" },
-  };
 
   return (
     <section className="mt-20">
@@ -2050,32 +2047,9 @@ function ScoreLedger({
             <p className="mt-1 text-[10px] text-zinc-500">{next ? copy.nextLevel(fmtPoints(remaining), next.title) : copy.topCircle}</p>
           </div>
         </div>
-        <div className="relative mt-6 border-t border-white/[0.06] pt-2">
-          {events.length === 0 ? (
-            <p className="py-8 text-center text-xs text-zinc-500">{copy.ledgerEmpty}</p>
-          ) : (
-            <ol className="divide-y divide-white/[0.05]">
-              {events.slice(0, 30).map((event) => {
-                const points = Number(event.points) || 0;
-                const date = event.created_at ? new Date(event.created_at).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" }) : copy.dateUnknown;
-                return (
-                  <li key={String(event.id)} className="flex items-center justify-between gap-4 py-3.5">
-                    <div className="min-w-0">
-                      <p className="break-words text-sm text-zinc-200">{event.reason || event.event_key}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[9px] uppercase tracking-[0.15em] text-zinc-600">
-                        <span>{categoryNames[lang][event.category] ?? event.category}</span>
-                        <span aria-hidden>·</span>
-                        <span>{date}</span>
-                      </div>
-                    </div>
-                    <span className={`shrink-0 font-mono text-sm tabular-nums ${points > 0 ? "text-emerald-300" : "text-red-300"}`}>
-                      {points > 0 ? "+" : ""}{fmtPoints(points)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
+        <div className="relative mt-6 border-t border-white/[0.06] pt-4">
+          {/* Откуда каждый балл: тур, тусовка, штамп, комбо — get_my_points_history */}
+          <PointsHistory lang={lang} live={live} fallback={events} refreshKey={events.length ? String(events[0].id) : "0"} />
         </div>
       </div>
     </section>
@@ -2238,6 +2212,7 @@ export default function GamificationClient({ demo = false, header }: { demo?: bo
         circle={circle}
         next={next}
         lang={lang}
+        live={!demo}
       />
 
       <p

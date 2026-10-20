@@ -12,7 +12,8 @@
  *   О вас        что отмечают резидентки и их отзывы — без имени автора
  *   Участницы    с кем вы летали чаще всего, их Trusted
  *
- * Данные: _lib/pulse.ts (демо). Отправка отзыва пока имитируется.
+ * Данные: RPC public.partner_pulse() через usePartnerFeed.
+ * Отзыв о резидентке пишется в partner_reviews (manager_to_resident, на модерацию).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useId, useMemo, useState } from "react";
@@ -31,21 +32,24 @@ import {
 } from "lucide-react";
 import type { Lang } from "@/app/context/LanguageContext";
 import { ROUTES } from "../_lib/routes";
+import { submitResidentReview } from "../_lib/actions";
 import type { ReviewTag } from "../_lib/command";
 import { pl, ru, usePartnerFormat, type Common, type Fmt } from "../_lib/format";
 import {
-  buildPulseMock,
+  parsePulse,
   type CrewStat,
   type ManagerCriterion,
   type PendingReview,
   type PulseData,
   type PulseMonth,
 } from "../_lib/pulse";
+import { usePartnerFeed } from "../_lib/usePartnerFeed";
 import { Stars, TrustBadge } from "../_components/TrustSignals";
 import {
   BTN_GHOST,
   BTN_GOLD,
   LINK_SUBTLE,
+  FeedGate,
   PageHeader,
   PageShell,
   Panel,
@@ -84,6 +88,7 @@ type Dict = {
     commentHint: string;
     send: string;
     sending: string;
+    failed: string;
     cancel: string;
     sent: string;
     stars: (n: number) => string;
@@ -125,6 +130,7 @@ const T: Record<Lang, Dict> = {
       commentHint: "Visible to the club and to the participant after moderation.",
       send: "Send for moderation",
       sending: "Sending…",
+      failed: "Couldn’t send — try again.",
       cancel: "Cancel",
       sent: "Under moderation",
       stars: (n) => `${n} of 5`,
@@ -182,6 +188,7 @@ const T: Record<Lang, Dict> = {
       commentHint: "Его увидят клуб и участница после модерации.",
       send: "Отправить на модерацию",
       sending: "Отправляем…",
+      failed: "Не удалось отправить — повторите.",
       cancel: "Отмена",
       sent: "На модерации",
       stars: (n) => `${n} из 5`,
@@ -239,6 +246,7 @@ const T: Record<Lang, Dict> = {
       commentHint: "Lo verán el club y la participante tras la moderación.",
       send: "Enviar a moderación",
       sending: "Enviando…",
+      failed: "No se pudo enviar: inténtelo de nuevo.",
       cancel: "Cancelar",
       sent: "En moderación",
       stars: (n) => `${n} de 5`,
@@ -296,6 +304,7 @@ const T: Record<Lang, Dict> = {
       commentHint: "O clube e a participante verão após a moderação.",
       send: "Enviar para moderação",
       sending: "Enviando…",
+      failed: "Não foi possível enviar — tente de novo.",
       cancel: "Cancelar",
       sent: "Em moderação",
       stars: (n) => `${n} de 5`,
@@ -571,9 +580,9 @@ function StarPicker({ value, onChange, t, label }: { value: number; onChange: (n
   );
 }
 
-type ReviewState = "idle" | "open" | "sending" | "sent";
+type ReviewState = "idle" | "open" | "sending" | "sent" | "failed";
 
-function ReviewRow({ p, t }: { p: PendingReview["participants"][number]; t: Dict }) {
+function ReviewRow({ p, tourId, t }: { p: PendingReview["participants"][number]; tourId: string; t: Dict }) {
   const [state, setState] = useState<ReviewState>("idle");
   const [rating, setRating] = useState(0);
   const [tags, setTags] = useState<ReviewTag[]>([]);
@@ -582,11 +591,15 @@ function ReviewRow({ p, t }: { p: PendingReview["participants"][number]; t: Dict
 
   const toggle = (tag: ReviewTag) => setTags((cur) => (cur.includes(tag) ? cur.filter((x) => x !== tag) : [...cur, tag]));
 
-  // Пока бэкенда нет — имитация. Подключение: insert в partner_reviews
-  // (tour_id, subject_id, direction 'manager_to_resident', rating, tags, comment)
-  const submit = () => {
+  // insert в partner_reviews под RLS (partner_can_review); отзыв уходит на модерацию
+  const submit = async () => {
     setState("sending");
-    window.setTimeout(() => setState("sent"), 900);
+    try {
+      await submitResidentReview({ tourId, residentId: p.id, rating, tags, comment });
+      setState("sent");
+    } catch {
+      setState("failed");
+    }
   };
 
   return (
@@ -620,13 +633,13 @@ function ReviewRow({ p, t }: { p: PendingReview["participants"][number]; t: Dict
         )}
       </div>
 
-      {(state === "open" || state === "sending") && (
+      {(state === "open" || state === "sending" || state === "failed") && (
         <form
           id={formId}
           className="mt-3 border-t border-zinc-800/70 pt-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (rating > 0 && state === "open") submit();
+            if (rating > 0 && state !== "sending") void submit();
           }}
         >
           <StarPicker value={rating} onChange={setRating} t={t} label={`${t.pending.rate}: ${p.name}`} />
@@ -668,6 +681,11 @@ function ReviewRow({ p, t }: { p: PendingReview["participants"][number]; t: Dict
             </span>
           </label>
 
+          {state === "failed" && (
+            <p role="alert" className="mt-3 text-xs text-rose-300">
+              {t.pending.failed}
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap justify-end gap-2">
             <button type="button" className={BTN_GHOST} onClick={() => setState("idle")} disabled={state === "sending"}>
               {t.pending.cancel}
@@ -714,7 +732,7 @@ function PendingPanel({ pending, t, cm, fmt }: { pending: PendingReview[]; t: Di
               </div>
               <ul className="mt-2 space-y-2">
                 {tour.participants.map((p) => (
-                  <ReviewRow key={p.id} p={p} t={t} />
+                  <ReviewRow key={p.id} p={p} tourId={tour.tourId} t={t} />
                 ))}
               </ul>
             </div>
@@ -845,9 +863,19 @@ function CrewPanel({ crew, t, fmt }: { crew: CrewStat[]; t: Dict; fmt: Fmt }) {
  * ══════════════════════════════════════════════════════════════════ */
 
 export default function PartnerPulsePage() {
+  const { lang, c: cm } = usePartnerFormat();
+  const t = T[lang] ?? T.EN;
+  const feed = usePartnerFeed("partner_pulse", parsePulse);
+  return (
+    <FeedGate feed={feed} c={cm} eyebrow={t.eyebrow} title={t.title}>
+      {(data) => <PulseView data={data} refresh={feed.refresh} />}
+    </FeedGate>
+  );
+}
+
+function PulseView({ data, refresh }: { data: PulseData; refresh: () => void }) {
   const { lang, c: cm, fmt } = usePartnerFormat();
   const t = T[lang] ?? T.EN;
-  const [data] = useState(buildPulseMock);
   const m = data.manager;
 
   const stats = useMemo(
@@ -871,8 +899,6 @@ export default function PartnerPulsePage() {
         eyebrow={t.eyebrow}
         title={t.title}
         subtitle={t.subtitle}
-        demo={cm.demo}
-        demoHint={cm.demoHint}
         actions={
           <Link href={ROUTES.keys} className={LINK_SUBTLE}>
             {t.keysLink}

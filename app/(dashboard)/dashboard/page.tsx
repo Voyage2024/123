@@ -26,9 +26,10 @@ export default async function DashboardPage() {
   if (!profile) redirect("/login?error=profile_check");
 
   const role = profile.role;
-  if (role === "owner" || role === "admin" || role === "manager") {
-    redirect("/admin");
-  }
+  // Менеджер — в Штаб: /admin для него закрыт (lib/rbac.ts), а резидентская
+  // карточка ему не принадлежит.
+  if (role === "manager") redirect("/partner");
+  if (role === "owner" || role === "admin") redirect("/admin");
   if (role !== "resident") redirect("/login?error=role_check");
 
   return <ResidentProfileDashboard />;

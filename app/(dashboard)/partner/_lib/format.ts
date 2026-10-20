@@ -44,6 +44,12 @@ export type Common = {
   nothing: string;
   reset: string;
   table: string;
+  feed: {
+    loading: string;
+    retry: string;
+    stale: string;
+    error: Record<"forbidden" | "missing" | "network" | "unknown", string>;
+  };
 };
 
 export const COMMON: Record<Lang, Common> = {
@@ -60,6 +66,17 @@ export const COMMON: Record<Lang, Common> = {
     nothing: "Nothing matches these filters.",
     reset: "Reset filters",
     table: "Show as table",
+    feed: {
+      loading: "Loading…",
+      retry: "Retry",
+      stale: "Couldn’t refresh — showing the last data.",
+      error: {
+        forbidden: "This section is open to club partners only.",
+        missing: "The section isn’t connected to the database yet: apply the migrations.",
+        network: "No connection. Check the network and retry.",
+        unknown: "Something went wrong. Retry in a minute.",
+      },
+    },
   },
   RU: {
     locale: "ru-RU",
@@ -74,6 +91,17 @@ export const COMMON: Record<Lang, Common> = {
     nothing: "По этим фильтрам ничего нет.",
     reset: "Сбросить фильтры",
     table: "Показать таблицей",
+    feed: {
+      loading: "Загружаем…",
+      retry: "Повторить",
+      stale: "Не удалось обновить — показываем последние данные.",
+      error: {
+        forbidden: "Раздел открыт только партнёрам клуба.",
+        missing: "Раздел ещё не подключён к базе: примените миграции.",
+        network: "Нет связи. Проверьте сеть и повторите.",
+        unknown: "Что-то пошло не так. Повторите через минуту.",
+      },
+    },
   },
   ES: {
     locale: "es-ES",
@@ -88,6 +116,17 @@ export const COMMON: Record<Lang, Common> = {
     nothing: "Nada coincide con estos filtros.",
     reset: "Quitar filtros",
     table: "Ver como tabla",
+    feed: {
+      loading: "Cargando…",
+      retry: "Reintentar",
+      stale: "No se pudo actualizar: mostramos los últimos datos.",
+      error: {
+        forbidden: "Esta sección es solo para socios del club.",
+        missing: "La sección aún no está conectada a la base: aplique las migraciones.",
+        network: "Sin conexión. Revise la red y reintente.",
+        unknown: "Algo salió mal. Reintente en un minuto.",
+      },
+    },
   },
   PT: {
     locale: "pt-BR",
@@ -102,6 +141,17 @@ export const COMMON: Record<Lang, Common> = {
     nothing: "Nada corresponde a esses filtros.",
     reset: "Limpar filtros",
     table: "Ver como tabela",
+    feed: {
+      loading: "Carregando…",
+      retry: "Tentar de novo",
+      stale: "Não foi possível atualizar — mostrando os últimos dados.",
+      error: {
+        forbidden: "Esta seção é só para parceiros do clube.",
+        missing: "A seção ainda não está ligada ao banco: aplique as migrações.",
+        network: "Sem conexão. Verifique a rede e tente de novo.",
+        unknown: "Algo deu errado. Tente de novo em um minuto.",
+      },
+    },
   },
 };
 

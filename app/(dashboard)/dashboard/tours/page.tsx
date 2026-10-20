@@ -45,6 +45,8 @@ interface LeaderRow {
   index_points?: number | null;
   tour_id?: string | null;
   tour_title?: string | null;
+  /* миграция 20261020090000: резидентка скрыла баллы — числа null */
+  points_hidden?: boolean | null;
 }
 
 /* ───────────────────────── i18n ───────────────────────── */
@@ -72,6 +74,7 @@ const T = {
     points: 'Tour points',
     pts: 'pts',
     you: 'You',
+    hidden: 'Hidden',
     yourPlace: 'Your place in the tour',
     credited: (n: string) => `+${n} to your Influence Index`,
     yourIndex: 'Your Influence Index',
@@ -121,6 +124,7 @@ const T = {
     points: 'Баллы тура',
     pts: 'б.',
     you: 'Вы',
+    hidden: 'Скрыто',
     yourPlace: 'Ваше место в туре',
     credited: (n: string) => `+${n} в ваш Influence Index`,
     yourIndex: 'Ваш Influence Index',
@@ -170,6 +174,7 @@ const T = {
     points: 'Puntos del tour',
     pts: 'pts',
     you: 'Tú',
+    hidden: 'Oculto',
     yourPlace: 'Tu puesto en el tour',
     credited: (n: string) => `+${n} a tu Influence Index`,
     yourIndex: 'Tu Influence Index',
@@ -219,6 +224,7 @@ const T = {
     points: 'Pontos do tour',
     pts: 'pts',
     you: 'Você',
+    hidden: 'Oculto',
     yourPlace: 'Sua posição no tour',
     credited: (n: string) => `+${n} no seu Influence Index`,
     yourIndex: 'Seu Influence Index',
@@ -609,16 +615,20 @@ export default function ToursPage() {
                           <span className="rounded-full border border-[#c9a961]/20 bg-[#c9a961]/[0.06] px-2 py-0.5 text-[#e6d3a3]">
                             Level {r.level ?? 1} · {r.circle_title || 'Voyager'}
                           </span>
-                          <span className={`rounded-full border px-2 py-0.5 ${Number(r.reliability ?? 100) >= 90 ? 'border-emerald-400/20 text-emerald-300' : Number(r.reliability ?? 100) >= 70 ? 'border-amber-400/20 text-amber-200' : 'border-red-400/20 text-red-300'}`}>
-                            Reliability {Number(r.reliability ?? 100)}%
-                          </span>
+                          {!r.points_hidden && (
+                            <span className={`rounded-full border px-2 py-0.5 ${Number(r.reliability ?? 100) >= 90 ? 'border-emerald-400/20 text-emerald-300' : Number(r.reliability ?? 100) >= 70 ? 'border-amber-400/20 text-amber-200' : 'border-red-400/20 text-red-300'}`}>
+                              Reliability {Number(r.reliability ?? 100)}%
+                            </span>
+                          )}
                         </div>
                         <p
                           className="mt-2 font-serif text-2xl font-light tabular-nums sm:text-3xl"
                           style={{ color: p.color }}
                         >
-                          {nf.format(r.tour_points)}
-                          <span className="ml-1 text-xs text-neutral-500">{t.pts}</span>
+                          {r.points_hidden ? <span className="text-base uppercase tracking-[0.2em] text-neutral-500">{t.hidden}</span> : <>
+                            {nf.format(r.tour_points)}
+                            <span className="ml-1 text-xs text-neutral-500">{t.pts}</span>
+                          </>}
                         </p>
                       </div>
                     </div>
@@ -669,14 +679,16 @@ export default function ToursPage() {
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">
                             <span className="rounded-full border border-[#c9a961]/20 px-2 py-0.5 text-[#e6d3a3]">Level {r.level ?? 1} · {r.circle_title || 'Voyager'}</span>
-                            <span className={`rounded-full border px-2 py-0.5 ${Number(r.reliability ?? 100) >= 90 ? 'border-emerald-400/20 text-emerald-300' : Number(r.reliability ?? 100) >= 70 ? 'border-amber-400/20 text-amber-200' : 'border-red-400/20 text-red-300'}`}>Reliability {Number(r.reliability ?? 100)}%</span>
-                            <span>Index {nf.format(Number(r.influence_index ?? r.influence ?? 0))}</span>
+                            {!r.points_hidden && <span className={`rounded-full border px-2 py-0.5 ${Number(r.reliability ?? 100) >= 90 ? 'border-emerald-400/20 text-emerald-300' : Number(r.reliability ?? 100) >= 70 ? 'border-amber-400/20 text-amber-200' : 'border-red-400/20 text-red-300'}`}>Reliability {Number(r.reliability ?? 100)}%</span>}
+                            {!r.points_hidden && <span>Index {nf.format(Number(r.influence_index ?? r.influence ?? 0))}</span>}
                           </div>
                         </div>
                       </div>
                       <span className="text-right text-sm tabular-nums text-neutral-100">
-                        {nf.format(r.tour_points)}
-                        <span className="ml-1 text-xs text-neutral-500">{t.pts}</span>
+                        {r.points_hidden ? <span className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">{t.hidden}</span> : <>
+                          {nf.format(r.tour_points)}
+                          <span className="ml-1 text-xs text-neutral-500">{t.pts}</span>
+                        </>}
                       </span>
                     </li>
                   ))}

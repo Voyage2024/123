@@ -458,7 +458,7 @@ export default function AmericasPage() {
             </div>
 
             <Link
-              href={user ? "/profile" : "/login"}
+              href={user ? "/dashboard" : "/login"}
               className="inline-flex min-h-9 items-center gap-2 rounded-full border border-amber-200/20 bg-zinc-900/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200 transition-all duration-300 hover:border-amber-200/40 hover:bg-zinc-900 hover:text-amber-100"
             >
               <UserRound className="h-3.5 w-3.5" />

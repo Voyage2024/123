@@ -15,7 +15,7 @@
  * Привилегии перечислены только те, что база уже обеспечивает.
  * ──────────────────────────────────────────────────────────────────── */
 
-import { useId, useState } from "react";
+import { useId } from "react";
 import Link from "next/link";
 import { Check, ChevronRight, Hourglass, KeyRound, Lock, Scale, Sparkles, Star } from "lucide-react";
 import type { Lang } from "@/app/context/LanguageContext";
@@ -23,10 +23,12 @@ import { DAY } from "../_lib/clock";
 import { ROUTES } from "../_lib/routes";
 import type { KeyTier } from "../_lib/command";
 import { pl, ru, usePartnerFormat, type Common, type Fmt } from "../_lib/format";
-import { KEY_RULES, buildKeysMock, type CountedTour, type KeysData, type TierRule } from "../_lib/keys";
+import { KEY_RULES, parseKeys, type CountedTour, type KeysData, type TierRule } from "../_lib/keys";
+import { usePartnerFeed } from "../_lib/usePartnerFeed";
 import {
   LINK_SUBTLE,
   Meter,
+  FeedGate,
   PageHeader,
   PageShell,
   Panel,
@@ -616,9 +618,19 @@ function RulesPanel({ t, fmt }: { t: Dict; fmt: Fmt }) {
  * ══════════════════════════════════════════════════════════════════ */
 
 export default function PartnerKeysPage() {
+  const { lang, c: cm } = usePartnerFormat();
+  const t = T[lang] ?? T.EN;
+  const feed = usePartnerFeed("partner_keys", parseKeys);
+  return (
+    <FeedGate feed={feed} c={cm} eyebrow={t.eyebrow} title={t.title}>
+      {(data) => <KeysView data={data} />}
+    </FeedGate>
+  );
+}
+
+function KeysView({ data }: { data: KeysData }) {
   const { lang, c: cm, fmt } = usePartnerFormat();
   const t = T[lang] ?? T.EN;
-  const [data] = useState(buildKeysMock);
 
   return (
     <PageShell>
@@ -626,8 +638,6 @@ export default function PartnerKeysPage() {
         eyebrow={t.eyebrow}
         title={t.title}
         subtitle={t.subtitle}
-        demo={cm.demo}
-        demoHint={cm.demoHint}
         actions={
           <Link href={ROUTES.pulse} className={LINK_SUBTLE}>
             {t.pulseLink}

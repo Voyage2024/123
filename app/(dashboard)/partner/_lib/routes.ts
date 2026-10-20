@@ -26,12 +26,15 @@ export const ROUTES = {
   resident: (id: string) => `/partner/residents/${id}`,
   pulse: "/partner/pulse",
   keys: "/partner/keys",
+  /** Telegram-оповещения и профиль менеджера */
+  settings: "/admin/settings",
 } as const;
 
 /**
- * Источник данных пульта (.env.local):
- *   NEXT_PUBLIC_PARTNER_DATA=live  → RPC Supabase
- *   не задана                      → демо-данные, действия имитируются
+ * Источник данных пульта. Демо-режим снят: все экраны читают RPC Supabase
+ * под RLS (миграции 20261011120000_partner_command.sql,
+ * 20261012090000_partner_deal_room.sql, 20261020094000_partner_live_pages.sql).
+ * Тип оставлен, чтобы старые проверки `source === "mock"` компилировались.
  */
 export type DataSource = "mock" | "live";
-export const DATA_SOURCE: DataSource = process.env.NEXT_PUBLIC_PARTNER_DATA === "live" ? "live" : "mock";
+export const DATA_SOURCE: DataSource = "live" as DataSource;

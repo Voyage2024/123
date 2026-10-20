@@ -33,6 +33,8 @@ export type DrainSummary = {
 
 const locallyProcessing = new Set<string>();
 const MAX_ATTEMPTS = 3;
+/** 'sending' — строку забрал этот обработчик (voyage_claim_partner_notification) */
+const ACTIVE_STATUSES = ["queued", "sending", "failed"];
 const DEFAULT_BATCH_SIZE = 25;
 
 function record(value: unknown): JsonRecord {
@@ -199,6 +201,312 @@ const text = {
   },
 } as const;
 
+/* ── Оповещения кабинета: резидентка и менеджер (миграция 20261020091000) ── */
+
+type ClubCopy = {
+  tourPublished: string;
+  partyPublished: string;
+  approvedTour: string;
+  approvedParty: string;
+  approvedCasting: string;
+  pointsTitle: (points: number) => string;
+  castingResponse: string;
+  responsesReady: (count: number, slots: number) => string;
+  contractSigned: (name: string, version: string) => string;
+  signatures: string;
+  docsUploaded: (name: string) => string;
+  reviewReceived: string;
+  reviewWithComment: string;
+  applyUntil: string;
+  departure: string;
+  projects: Record<"shoot" | "show" | "campaign" | "event", string>;
+  categories: Record<"tour" | "event" | "stamp" | "combo" | "achievement" | "adjustment", string>;
+  openMap: string;
+  openParties: string;
+  openApplications: string;
+  openCastings: string;
+  openPoints: string;
+  openCasting: string;
+  openRoom: string;
+  openPulse: string;
+  settingsHint: string;
+};
+
+const clubText: Record<TelegramLang, ClubCopy> = {
+  RU: {
+    tourPublished: "Новый тур на карте VOYAGE",
+    partyPublished: "Новая закрытая тусовка VOYAGE",
+    approvedTour: "Ваша заявка на тур одобрена",
+    approvedParty: "Ваша заявка на тусовку одобрена",
+    approvedCasting: "Вас выбрали в состав тура",
+    pointsTitle: (n) => `+${n} к Influence Index`,
+    castingResponse: "Новые отклики на кастинг",
+    responsesReady: (c, s) => `Готовы в тур: ${c} · мест: ${s}`,
+    contractSigned: (name, v) => `${name || "Участница"} подписала договор${v ? ` v${v}` : ""}`,
+    signatures: "Подписей",
+    docsUploaded: (name) => `${name || "Участница"} загрузила документы для тура`,
+    reviewReceived: "Резидентка оценила тур",
+    reviewWithComment: "Отзыв с комментарием — появится после модерации.",
+    applyUntil: "Заявки до",
+    departure: "Вылет",
+    projects: { shoot: "Съёмка", show: "Показ", campaign: "Кампейн", event: "Ивент" },
+    categories: { tour: "Тур", event: "Тусовка", stamp: "Штамп", combo: "Комбо", achievement: "Достижение", adjustment: "Корректировка" },
+    openMap: "Открыть карту",
+    openParties: "Смотреть тусовки",
+    openApplications: "Мои заявки",
+    openCastings: "Открыть кастинги",
+    openPoints: "История баллов",
+    openCasting: "Открыть кастинг",
+    openRoom: "Комната тура",
+    openPulse: "Открыть Пульс",
+    settingsHint: "Оповещения настраиваются в профиле → Настройки.",
+  },
+  EN: {
+    tourPublished: "New tour on the VOYAGE map",
+    partyPublished: "New private VOYAGE party",
+    approvedTour: "Your tour application is approved",
+    approvedParty: "Your party application is approved",
+    approvedCasting: "You have been selected for the crew",
+    pointsTitle: (n) => `+${n} to your Influence Index`,
+    castingResponse: "New casting responses",
+    responsesReady: (c, s) => `Ready for the tour: ${c} · slots: ${s}`,
+    contractSigned: (name, v) => `${name || "A participant"} signed the contract${v ? ` v${v}` : ""}`,
+    signatures: "Signatures",
+    docsUploaded: (name) => `${name || "A participant"} uploaded tour documents`,
+    reviewReceived: "A resident rated your tour",
+    reviewWithComment: "The comment will appear after moderation.",
+    applyUntil: "Applications until",
+    departure: "Departure",
+    projects: { shoot: "Shoot", show: "Show", campaign: "Campaign", event: "Event" },
+    categories: { tour: "Tour", event: "Party", stamp: "Stamp", combo: "Combo", achievement: "Achievement", adjustment: "Adjustment" },
+    openMap: "Open the map",
+    openParties: "See parties",
+    openApplications: "My applications",
+    openCastings: "Open castings",
+    openPoints: "Points history",
+    openCasting: "Open casting",
+    openRoom: "Tour room",
+    openPulse: "Open Pulse",
+    settingsHint: "Manage notifications in Profile → Settings.",
+  },
+  ES: {
+    tourPublished: "Nuevo tour en el mapa VOYAGE",
+    partyPublished: "Nueva fiesta privada VOYAGE",
+    approvedTour: "Tu solicitud para el tour fue aprobada",
+    approvedParty: "Tu solicitud para la fiesta fue aprobada",
+    approvedCasting: "Te han elegido para el equipo",
+    pointsTitle: (n) => `+${n} a tu Influence Index`,
+    castingResponse: "Nuevas respuestas al casting",
+    responsesReady: (c, s) => `Listas para el tour: ${c} · plazas: ${s}`,
+    contractSigned: (name, v) => `${name || "Una participante"} firmó el contrato${v ? ` v${v}` : ""}`,
+    signatures: "Firmas",
+    docsUploaded: (name) => `${name || "Una participante"} subió los documentos del tour`,
+    reviewReceived: "Una residente valoró tu tour",
+    reviewWithComment: "El comentario aparecerá tras la moderación.",
+    applyUntil: "Solicitudes hasta",
+    departure: "Salida",
+    projects: { shoot: "Sesión", show: "Desfile", campaign: "Campaña", event: "Evento" },
+    categories: { tour: "Tour", event: "Fiesta", stamp: "Sello", combo: "Combo", achievement: "Logro", adjustment: "Ajuste" },
+    openMap: "Abrir el mapa",
+    openParties: "Ver fiestas",
+    openApplications: "Mis solicitudes",
+    openCastings: "Abrir castings",
+    openPoints: "Historial de puntos",
+    openCasting: "Abrir casting",
+    openRoom: "Sala del tour",
+    openPulse: "Abrir Pulso",
+    settingsHint: "Gestiona los avisos en Perfil → Ajustes.",
+  },
+  PT: {
+    tourPublished: "Novo tour no mapa VOYAGE",
+    partyPublished: "Nova festa privada VOYAGE",
+    approvedTour: "Sua candidatura ao tour foi aprovada",
+    approvedParty: "Sua candidatura à festa foi aprovada",
+    approvedCasting: "Você foi escolhida para a equipe",
+    pointsTitle: (n) => `+${n} no seu Influence Index`,
+    castingResponse: "Novas respostas ao casting",
+    responsesReady: (c, s) => `Prontas para o tour: ${c} · vagas: ${s}`,
+    contractSigned: (name, v) => `${name || "Uma participante"} assinou o contrato${v ? ` v${v}` : ""}`,
+    signatures: "Assinaturas",
+    docsUploaded: (name) => `${name || "Uma participante"} enviou os documentos do tour`,
+    reviewReceived: "Uma residente avaliou seu tour",
+    reviewWithComment: "O comentário aparecerá após a moderação.",
+    applyUntil: "Candidaturas até",
+    departure: "Partida",
+    projects: { shoot: "Ensaio", show: "Desfile", campaign: "Campanha", event: "Evento" },
+    categories: { tour: "Tour", event: "Festa", stamp: "Carimbo", combo: "Combo", achievement: "Conquista", adjustment: "Ajuste" },
+    openMap: "Abrir o mapa",
+    openParties: "Ver festas",
+    openApplications: "Minhas candidaturas",
+    openCastings: "Abrir castings",
+    openPoints: "Histórico de pontos",
+    openCasting: "Abrir casting",
+    openRoom: "Sala do tour",
+    openPulse: "Abrir Pulso",
+    settingsHint: "Gerencie os avisos em Perfil → Configurações.",
+  },
+};
+
+const CLUB_TEMPLATES = new Set([
+  "tour_published", "party_published", "application_approved", "points_awarded",
+  "casting_response", "contract_signed", "docs_uploaded", "review_received",
+]);
+
+/** Название из jsonb { RU, EN, … } или строка */
+function localizedText(value: unknown, lang: TelegramLang): string {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const r = value as JsonRecord;
+    return pickText(r[lang], r.EN, r.RU, ...Object.values(r));
+  }
+  return valueText(value);
+}
+
+function projectLabel(value: unknown, copy: ClubCopy): string {
+  const key = valueText(value) as keyof ClubCopy["projects"];
+  return copy.projects[key] ?? valueText(value);
+}
+
+function formatDate(value: unknown, lang: TelegramLang): string {
+  const raw = valueText(value);
+  if (!raw) return "";
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  const locale = { RU: "ru-RU", EN: "en-GB", ES: "es-ES", PT: "pt-PT" }[lang];
+  return date.toLocaleDateString(locale, { day: "numeric", month: "long", timeZone: "UTC" });
+}
+
+function clubNotificationBody(template: string, payload: JsonRecord, lang: TelegramLang): string {
+  const copy = clubText[lang];
+  const title = pickText(localizedText(payload.title_i18n, lang), payload.title);
+  const place = [pickText(payload.city), projectLabel(payload.project, copy)].filter(Boolean).join(" · ");
+  const lines: string[] = [];
+
+  switch (template) {
+    case "tour_published": {
+      lines.push(`<b>${escapeHtml(copy.tourPublished)}</b>`);
+      if (title) lines.push(escapeHtml(title));
+      const subtitle = localizedText(payload.subtitle_i18n, lang);
+      if (subtitle) lines.push(`<i>${escapeHtml(subtitle)}</i>`);
+      break;
+    }
+    case "party_published": {
+      lines.push(`<b>${escapeHtml(copy.partyPublished)}</b>`);
+      if (title) lines.push(escapeHtml(title));
+      const until = formatDate(payload.closes_at, lang);
+      if (until) lines.push(`${escapeHtml(copy.applyUntil)}: ${escapeHtml(until)}`);
+      break;
+    }
+    case "application_approved": {
+      const kind = valueText(payload.kind);
+      const head = kind === "party" ? copy.approvedParty : kind === "casting" ? copy.approvedCasting : copy.approvedTour;
+      lines.push(`<b>${escapeHtml(head)}</b>`);
+      if (kind === "casting") {
+        if (place) lines.push(escapeHtml(place));
+        const start = formatDate(payload.starts_on, lang);
+        if (start) lines.push(`${escapeHtml(copy.departure)}: ${escapeHtml(start)}`);
+      } else if (title) {
+        lines.push(escapeHtml(title));
+      }
+      break;
+    }
+    case "points_awarded": {
+      const points = Number(valueText(payload.points)) || 0;
+      lines.push(`<b>${escapeHtml(copy.pointsTitle(points))}</b>`);
+      const items = Array.isArray(payload.items) ? payload.items.map(record) : [];
+      for (const item of items.slice(0, 6)) {
+        const category = valueText(item.category) as keyof ClubCopy["categories"];
+        const label = pickText(item.label, copy.categories[category]);
+        lines.push(`• ${escapeHtml(copy.categories[category] ?? "")}${label && label !== copy.categories[category] ? ` · ${escapeHtml(label)}` : ""}: +${escapeHtml(valueText(item.points))}`);
+      }
+      break;
+    }
+    case "casting_response": {
+      lines.push(`<b>${escapeHtml(copy.castingResponse)}</b>`);
+      if (place) lines.push(escapeHtml(place));
+      const count = Number(valueText(payload.count)) || 1;
+      const slots = Number(valueText(payload.slots)) || 0;
+      lines.push(escapeHtml(copy.responsesReady(count, slots)));
+      break;
+    }
+    case "contract_signed": {
+      lines.push(`<b>${escapeHtml(copy.contractSigned(pickText(payload.name), pickText(payload.version)))}</b>`);
+      if (place) lines.push(escapeHtml(place));
+      const signed = pickText(payload.signed);
+      const required = pickText(payload.required);
+      if (signed && required) lines.push(`${escapeHtml(copy.signatures)}: ${escapeHtml(signed)}/${escapeHtml(required)}`);
+      break;
+    }
+    case "docs_uploaded": {
+      lines.push(`<b>${escapeHtml(copy.docsUploaded(pickText(payload.name)))}</b>`);
+      if (place) lines.push(escapeHtml(place));
+      const departs = formatDate(payload.departs_at, lang);
+      if (departs) lines.push(`${escapeHtml(copy.departure)}: ${escapeHtml(departs)}`);
+      break;
+    }
+    case "review_received": {
+      const rating = Math.max(1, Math.min(5, Number(valueText(payload.rating)) || 0));
+      lines.push(`<b>${escapeHtml(copy.reviewReceived)}</b>`);
+      lines.push(`${"★".repeat(rating)}${"☆".repeat(5 - rating)}${place ? ` · ${escapeHtml(place)}` : ""}`);
+      if (payload.has_comment === true) lines.push(`<i>${escapeHtml(copy.reviewWithComment)}</i>`);
+      break;
+    }
+    default:
+      throw new Error(`Unsupported club notification template: ${template}`);
+  }
+
+  lines.push("", `<i>${escapeHtml(copy.settingsHint)}</i>`);
+  return lines.join("\n");
+}
+
+function clubKeyboard(template: string, payload: JsonRecord, lang: TelegramLang): InlineKeyboard {
+  const copy = clubText[lang];
+  const ref = encodeURIComponent(pickText(payload.ref_id));
+  const keyboard = new InlineKeyboard();
+  switch (template) {
+    case "tour_published":
+      return keyboard.url(copy.openMap, getSiteLink("/dashboard/map"));
+    case "party_published":
+      return keyboard.url(copy.openParties, getSiteLink("/dashboard/parties"));
+    case "application_approved":
+      return valueText(payload.kind) === "casting"
+        ? keyboard.url(copy.openCastings, getSiteLink("/dashboard/castings"))
+        : keyboard.url(copy.openApplications, getSiteLink("/dashboard/applications"));
+    case "points_awarded":
+      return keyboard.url(copy.openPoints, getSiteLink("/dashboard/gamification#points-history"));
+    case "casting_response":
+      return keyboard.url(copy.openCasting, getSiteLink(ref ? `/partner/castings/${ref}` : "/partner/castings"));
+    case "contract_signed":
+    case "docs_uploaded":
+      return keyboard.url(copy.openRoom, getSiteLink(ref ? `/partner/manifest/${ref}/room` : "/partner/manifest"));
+    case "review_received":
+      return keyboard.url(copy.openPulse, getSiteLink("/partner/pulse"));
+  }
+  return keyboard;
+}
+
+/** Тумблеры member_preferences: участница могла выключить оповещение, пока строка ждала в очереди */
+const PREFERENCE_COLUMN: Record<string, string> = {
+  tour_published: "notify_tours",
+  party_published: "notify_parties",
+  application_approved: "notify_approvals",
+  points_awarded: "notify_points",
+  casting_response: "notify_casting_responses",
+  contract_signed: "notify_contract_signed",
+  docs_uploaded: "notify_docs_uploaded",
+  review_received: "notify_reviews",
+};
+
+async function isOptedOut(recipientId: string, template: string): Promise<boolean> {
+  const column = PREFERENCE_COLUMN[template];
+  if (!column) return false;
+  const { data, error } = await getTelegramServiceClient().from("member_preferences")
+    .select(column)
+    .eq("profile_id", recipientId)
+    .maybeSingle();
+  if (error || !data) return false;
+  return (data as unknown as Record<string, unknown>)[column] === false;
+}
+
 type LanguageText = (typeof text)[TelegramLang];
 
 function formatPayer(value: unknown, labels: LanguageText): string {
@@ -338,7 +646,7 @@ async function recordFailure(row: NotificationRow, error: unknown): Promise<void
     .update({ status: "failed", attempts: currentAttempts + 1, error: safeError(error) })
     .eq("id", row.id)
     .eq("attempts", currentAttempts)
-    .in("status", ["queued", "failed"]);
+    .in("status", ACTIVE_STATUSES);
   if (updateError) console.error("[partner-notifications] could not record failed delivery", { code: updateError.code ?? "unknown" });
 }
 
@@ -366,9 +674,9 @@ async function processOne(row: NotificationRow): Promise<keyof Omit<DrainSummary
   const telegramId = valueText(profile.telegram_id);
   if (!telegramId) {
     const { error } = await db.from("partner_notifications")
-      .update({ status: "skipped" })
+      .update({ status: "skipped", error: "no_telegram" })
       .eq("id", row.id)
-      .in("status", ["queued", "failed"]);
+      .in("status", ACTIVE_STATUSES);
     if (error) {
       await recordFailure(row, new Error(`Could not mark notification as skipped: ${error.message}`));
       return "failed";
@@ -376,17 +684,29 @@ async function processOne(row: NotificationRow): Promise<keyof Omit<DrainSummary
     return "skipped";
   }
 
+  if (await isOptedOut(row.recipient_id, row.template)) {
+    await db.from("partner_notifications")
+      .update({ status: "skipped", error: "opted_out" })
+      .eq("id", row.id)
+      .in("status", ACTIVE_STATUSES);
+    return "skipped";
+  }
+
   try {
     const payload = record(row.payload);
     const lang = await getPreferredTelegramLanguage(telegramId);
-    const message = notificationBody(row.template, payload, lang);
-    const keyboard = keyboardFor(row, payload, lang);
-    await telegramBotApi().sendMessage(telegramId, message, { reply_markup: keyboard });
+    const club = CLUB_TEMPLATES.has(row.template);
+    const message = club ? clubNotificationBody(row.template, payload, lang) : notificationBody(row.template, payload, lang);
+    const keyboard = club ? clubKeyboard(row.template, payload, lang) : keyboardFor(row, payload, lang);
+    await telegramBotApi().sendMessage(telegramId, message, {
+      reply_markup: keyboard,
+      ...(club ? { parse_mode: "HTML" as const } : {}),
+    });
 
     const { error: sentError } = await db.from("partner_notifications")
       .update({ status: "sent", sent_at: new Date().toISOString() })
       .eq("id", row.id)
-      .in("status", ["queued", "failed"]);
+      .in("status", ACTIVE_STATUSES);
     if (sentError) {
       // Do not record a send failure after Telegram accepted the message: doing so would
       // cause the same message to be retried and duplicated. Leave an explicit server log.
@@ -405,7 +725,7 @@ async function processOne(row: NotificationRow): Promise<keyof Omit<DrainSummary
  */
 export async function processPartnerNotificationQueue(options: DrainOptions = {}): Promise<DrainSummary> {
   const db = getTelegramServiceClient();
-  const statuses = options.includeFailed ? ["queued", "failed"] : ["queued"];
+  const statuses = options.includeFailed ? ["queued", "failed", "sending"] : ["queued"];
   const limit = Math.min(50, Math.max(1, Math.floor(options.limit ?? DEFAULT_BATCH_SIZE)));
   const rowsById = new Map<string, NotificationRow>();
 
@@ -441,7 +761,19 @@ export async function processPartnerNotificationQueue(options: DrainOptions = {}
     }
     locallyProcessing.add(row.id);
     try {
-      const outcome = await processOne(row);
+      // Атомарно забираем строку: параллельный вызов вебхука её уже не получит,
+      // поэтому массовая рассылка не задваивает сообщения.
+      const { data: claimed, error: claimError } = await db.rpc("voyage_claim_partner_notification", {
+        p_id: row.id,
+        p_include_failed: Boolean(options.includeFailed),
+      });
+      if (claimError) throw new Error(`Partner notification claim failed: ${claimError.message}`);
+      const claimedRow = Array.isArray(claimed) ? claimed[0] : claimed;
+      if (!claimedRow) {
+        summary.busy += 1;
+        continue;
+      }
+      const outcome = await processOne(claimedRow as NotificationRow);
       summary[outcome] += 1;
     } finally {
       locallyProcessing.delete(row.id);

@@ -930,6 +930,63 @@ function EditableText({
   );
 }
 
+const HIDDEN_POINTS_COPY: Record<Lang, { title: string; body: string; reveal: string; settings: string }> = {
+  RU: {
+    title: "Баллы и рейтинг скрыты",
+    body: "Другие резидентки видят только ваше место в рейтинге. Клуб продолжает начислять баллы как обычно.",
+    reveal: "Показать мне",
+    settings: "Изменить в настройках",
+  },
+  EN: {
+    title: "Points and rating hidden",
+    body: "Other residents only see your place in the rating. The club keeps awarding points as usual.",
+    reveal: "Show me",
+    settings: "Change in settings",
+  },
+  ES: {
+    title: "Puntos y ranking ocultos",
+    body: "Las demás residentes solo ven tu puesto. El club sigue sumando puntos como siempre.",
+    reveal: "Mostrarme",
+    settings: "Cambiar en ajustes",
+  },
+  PT: {
+    title: "Pontos e ranking ocultos",
+    body: "As outras residentes veem apenas sua posição. O clube continua somando pontos normalmente.",
+    reveal: "Mostrar para mim",
+    settings: "Alterar nas configurações",
+  },
+};
+
+/** Свёрнутый блок статуса, когда резидентка скрыла баллы */
+function HiddenPointsPanel({ lang, circleTitle, onReveal }: { lang: Lang; circleTitle: string; onReveal: () => void }) {
+  const c = HIDDEN_POINTS_COPY[lang] ?? HIDDEN_POINTS_COPY.RU;
+  return (
+    <div className="flex flex-col justify-between rounded-2xl border border-white/[0.07] bg-zinc-950/60 p-5 sm:p-6">
+      <div>
+        <p className="text-[9px] uppercase tracking-[0.35em] text-[#c9a961]/70">{circleTitle}</p>
+        <p className={`${cormorant.className} mt-3 flex items-center gap-2 text-2xl text-zinc-100`}>
+          <EyeOff size={18} className="text-[#c9a961]/70" />
+          {c.title}
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-zinc-500">{c.body}</p>
+      </div>
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={onReveal}
+          className="inline-flex items-center gap-2 rounded-full border border-[#c9a961]/35 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-[#e6d3a3] transition-colors hover:bg-[#c9a961]/10"
+        >
+          <Eye size={13} />
+          {c.reveal}
+        </button>
+        <a href="/dashboard/settings" className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 underline-offset-4 hover:text-zinc-300 hover:underline">
+          {c.settings}
+        </a>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────
 export default function ResidentProfilePage() {
   const { user, hasRole } = useAuth();
@@ -955,6 +1012,26 @@ export default function ResidentProfilePage() {
 
   // Circle резидента из базы — цвет кардхолдера меняется сам при повышении
   const standing = useClubStanding(user?.id, profile?.status);
+
+  // Настройки → «Скрыть мои баллы и рейтинг» (member_preferences.hide_points):
+  // блок свёрнут и у самой резидентки, цифры открываются по нажатию.
+  const [pointsHidden, setPointsHidden] = useState(false);
+  const [pointsRevealed, setPointsRevealed] = useState(false);
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+    void supabase
+      .from("member_preferences")
+      .select("hide_points")
+      .eq("profile_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (alive) setPointsHidden(data?.hide_points === true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [user?.id]);
 
   // ── Генерация signed URL для приватного бакета ──────────────────────
   const resolvePhotos = useCallback(async (entries: string[]) => {
@@ -1285,16 +1362,20 @@ export default function ResidentProfilePage() {
                 {t.cardTapHint}
               </p>
             </div>
-            <CircleStatusPanel
-              t={t}
-              circle={standing.circle}
-              next={standing.next}
-              index={standing.index}
-              progress={standing.progress}
-              completion={completion}
-              kycLevel={profile.kyc_level}
-              loading={standing.loading}
-            />
+            {pointsHidden && !pointsRevealed ? (
+              <HiddenPointsPanel lang={lang} circleTitle={standing.circle.title} onReveal={() => setPointsRevealed(true)} />
+            ) : (
+              <CircleStatusPanel
+                t={t}
+                circle={standing.circle}
+                next={standing.next}
+                index={standing.index}
+                progress={standing.progress}
+                completion={completion}
+                kycLevel={profile.kyc_level}
+                loading={standing.loading}
+              />
+            )}
           </div>
 
           {/* ── Достижения ───────────────────────────────────────── */}

@@ -7,10 +7,12 @@
  * Механика ленты — в ../_components/CastingFeed:
  *   «Открыта к турам» → «Готова в тур» → опцион → рукопожатие.
  * Лента живая: данные из partner_resident_feed (см. _components/CastingFeed).
+ * Ниже — «Мои туры»: итоги, баллы и отзыв о менеджере (_components/MyPartnerTours).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { EyeOff, Handshake, Hourglass, MousePointerClick, Sparkles, ToggleRight } from "lucide-react";
 import CastingFeed from "@/app/(dashboard)/dashboard/_components/CastingFeed";
+import MyPartnerTours from "@/app/(dashboard)/dashboard/_components/MyPartnerTours";
 import PageExplainerHeader, {
   ResidentPageShell,
   type ExplainerDict,
@@ -103,6 +105,10 @@ export default function ResidentCastingsPage() {
 
       <div className="mt-10">
         <CastingFeed />
+      </div>
+
+      <div className="mt-10">
+        <MyPartnerTours />
       </div>
     </ResidentPageShell>
   );

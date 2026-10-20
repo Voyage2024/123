@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, KeyRound } from "lucide-react";
 import { isRole, useAuth } from "@/app/context/AuthContext";
+import { getRoleHomePath } from "@/lib/rbac";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { cormorant } from "@/app/components/profile/fonts";
 import { supabase } from "@/lib/supabase";
@@ -41,6 +42,9 @@ const translations = {
     enterClub: "Enter the Club",
     signingIn: "Signing in...",
     invitationOnly: "Access is strictly by invitation only.",
+    partnerEyebrow: "For club partners",
+    partnerSlogan: "Discreet service for those who build the tours. Crews, contracts and reputation under one VOYAGE seal.",
+    welcome: (name: string) => `Good day, ${name}. Opening your Command…`,
     defaultName: "Resident",
     errors: {
       invalidCredentials: "Incorrect username or password. Please try again.",
@@ -68,6 +72,9 @@ const translations = {
     enterClub: "Войти в клуб",
     signingIn: "Вход...",
     invitationOnly: "Доступ строго по приглашениям.",
+    partnerEyebrow: "Для партнёров клуба",
+    partnerSlogan: "Тихий сервис для тех, кто собирает туры. Составы, контракты и репутация — под одной печатью VOYAGE.",
+    welcome: (name: string) => `Добрый день, ${name}. Открываем ваш Штаб…`,
     defaultName: "Резидент",
     errors: {
       invalidCredentials: "Неверный логин или пароль. Попробуйте ещё раз.",
@@ -95,6 +102,9 @@ const translations = {
     enterClub: "Entrar al Club",
     signingIn: "Entrando...",
     invitationOnly: "El acceso es estrictamente por invitación.",
+    partnerEyebrow: "Para socios del club",
+    partnerSlogan: "Un servicio discreto para quienes crean los tours. Equipos, contratos y reputación bajo un mismo sello VOYAGE.",
+    welcome: (name: string) => `Buenos días, ${name}. Abriendo su Cuartel…`,
     defaultName: "Residente",
     errors: {
       invalidCredentials: "Usuario o contraseña incorrectos. Inténtalo de nuevo.",
@@ -122,6 +132,9 @@ const translations = {
     enterClub: "Entrar no Clube",
     signingIn: "Entrando...",
     invitationOnly: "O acesso é estritamente por convite.",
+    partnerEyebrow: "Para parceiros do clube",
+    partnerSlogan: "Um serviço discreto para quem monta os tours. Equipes, contratos e reputação sob um só selo VOYAGE.",
+    welcome: (name: string) => `Bom dia, ${name}. Abrindo seu Quartel…`,
     defaultName: "Residente",
     errors: {
       invalidCredentials: "Usuário ou senha incorretos. Tente novamente.",
@@ -166,6 +179,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorKey, setErrorKey] = useState<ErrorKey | null>(null);
+  /** Приветствие партнёра, пока открывается Штаб */
+  const [welcome, setWelcome] = useState<string | null>(null);
 
   const hasError = errorKey !== null;
   const isNickname = email.trim().length > 0 && !email.includes("@");
@@ -205,7 +220,7 @@ export default function LoginPage() {
       // source of truth; a missing/invalid row must never be silently treated as resident.
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, full_name")
         .eq("id", data.user.id)
         .maybeSingle();
 
@@ -222,6 +237,7 @@ export default function LoginPage() {
       }
 
       const userName =
+        (typeof profile.full_name === "string" && profile.full_name.trim()) ||
         (data.user.user_metadata?.full_name as string | undefined) ||
         (data.user.user_metadata?.name as string | undefined) ||
         t.defaultName;
@@ -239,12 +255,11 @@ export default function LoginPage() {
         fullName: userName,
       });
 
-      // Staff enters the operational workspace; residents enter the resident dashboard.
+      // Менеджер → Штаб (/partner), админ и владелец → /admin, резидентка → /dashboard.
+      // Раньше менеджер попадал в /admin, куда у него нет доступа (lib/rbac.ts).
       // `replace` prevents returning to the login form via browser Back.
-      const destination = ["owner", "admin", "manager"].includes(profile.role)
-        ? "/admin"
-        : "/dashboard";
-      router.replace(destination);
+      if (profile.role === "manager") setWelcome(t.welcome(userName.split(/\s+/)[0] || userName));
+      router.replace(getRoleHomePath(profile.role));
     } catch (err) {
       console.error("Login error:", err);
       setErrorKey("network");
@@ -407,7 +422,24 @@ export default function LoginPage() {
           </button>
         </form>
 
+        {welcome && (
+          <p role="status" className={`${cormorant.className} mt-6 text-center text-lg italic text-amber-100/90`}>
+            {welcome}
+          </p>
+        )}
+
         <p className="mt-8 text-center text-[11px] tracking-wide text-zinc-600">{t.invitationOnly}</p>
+
+        {/* Партнёрам клуба — короткое приветствие в тоне консьерж-сервиса */}
+        <div className="mt-8 border-t border-zinc-800/70 pt-6 text-center">
+          <p className="inline-flex items-center gap-2 text-[9px] uppercase tracking-[0.35em] text-amber-200/60">
+            <KeyRound size={11} strokeWidth={1.6} />
+            {t.partnerEyebrow}
+          </p>
+          <p className={`${cormorant.className} mx-auto mt-3 max-w-xs text-[15px] italic leading-relaxed text-zinc-400`}>
+            {t.partnerSlogan}
+          </p>
+        </div>
       </div>
     </main>
   );

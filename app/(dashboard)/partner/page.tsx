@@ -98,6 +98,7 @@ type Dict = {
   key: { label: string; toNext: (n: number, next: string) => string; ratingGate: string; top: string };
   pulse: { label: string; caption: string; foot: (flown: number, total: number) => string; empty: string };
   kpi: { castings: string; departures: string; ready: string; rating: string };
+  quick: { eyebrow: string; items: Record<QuickKey, { label: string; hint: string }> };
   in: (d: string) => string;
   ago: (d: string) => string;
   left: (d: string) => string;
@@ -215,6 +216,10 @@ const T: Record<Lang, Dict> = {
       empty: "Appears after your first completed tour",
     },
     kpi: { castings: "Active castings", departures: "Departures · 72h", ready: "“Ready” responses", rating: "Resident rating" },
+    quick: {
+      eyebrow: "Quick access · Command",
+      items: { castings: { label: "Castings", hint: "Open calls and “Ready” replies" }, manifest: { label: "Manifest", hint: "Tours, crews, deal rooms" }, pulse: { label: "Pulse", hint: "Show rate and reviews" }, blacklist: { label: "Blacklist", hint: "Reasons, reports, appeals" }, keys: { label: "Keys", hint: "Your partner tier" }, settings: { label: "Notifications", hint: "Telegram work alerts" } },
+    },
     in: (d) => `in ${d}`,
     ago: (d) => `${d} ago`,
     left: (d) => `${d} left`,
@@ -338,6 +343,10 @@ const T: Record<Lang, Dict> = {
       empty: "Появится после первого закрытого тура",
     },
     kpi: { castings: "Активные кастинги", departures: "Вылеты · 72 ч", ready: "Ответы «Готова»", rating: "Оценка резиденток" },
+    quick: {
+      eyebrow: "Быстрый доступ · Штаб",
+      items: { castings: { label: "Кастинги", hint: "Открытые наборы и ответы «Готова»" }, manifest: { label: "Манифест", hint: "Туры, составы, комнаты сделки" }, pulse: { label: "Пульс", hint: "Явка и отзывы" }, blacklist: { label: "Чёрный список", hint: "Причины, заявки, апелляции" }, keys: { label: "Ключи", hint: "Ваш уровень партнёра" }, settings: { label: "Оповещения", hint: "Рабочие уведомления в Telegram" } },
+    },
     in: (d) => `через ${d}`,
     ago: (d) => `${d} назад`,
     left: (d) => `осталось ${d}`,
@@ -462,6 +471,10 @@ const T: Record<Lang, Dict> = {
       empty: "Aparece tras tu primer tour cerrado",
     },
     kpi: { castings: "Castings activos", departures: "Salidas · 72 h", ready: "Respuestas «Lista»", rating: "Valoración de residentes" },
+    quick: {
+      eyebrow: "Acceso rápido · Cuartel",
+      items: { castings: { label: "Castings", hint: "Convocatorias y respuestas «Lista»" }, manifest: { label: "Manifiesto", hint: "Tours, equipos, salas de acuerdo" }, pulse: { label: "Pulso", hint: "Asistencia y reseñas" }, blacklist: { label: "Lista negra", hint: "Motivos, reportes, apelaciones" }, keys: { label: "Llaves", hint: "Tu nivel de socio" }, settings: { label: "Avisos", hint: "Alertas de trabajo en Telegram" } },
+    },
     in: (d) => `en ${d}`,
     ago: (d) => `hace ${d}`,
     left: (d) => `quedan ${d}`,
@@ -584,6 +597,10 @@ const T: Record<Lang, Dict> = {
       empty: "Aparece após o primeiro tour concluído",
     },
     kpi: { castings: "Castings ativos", departures: "Partidas · 72 h", ready: "Respostas «Pronta»", rating: "Avaliação das residentes" },
+    quick: {
+      eyebrow: "Acesso rápido · Quartel",
+      items: { castings: { label: "Castings", hint: "Convocatórias e respostas «Pronta»" }, manifest: { label: "Manifesto", hint: "Tours, equipes, salas de acordo" }, pulse: { label: "Pulso", hint: "Comparecimento e avaliações" }, blacklist: { label: "Lista negra", hint: "Motivos, denúncias, recursos" }, keys: { label: "Chaves", hint: "Seu nível de parceiro" }, settings: { label: "Avisos", hint: "Alertas de trabalho no Telegram" } },
+    },
     in: (d) => `em ${d}`,
     ago: (d) => `há ${d}`,
     left: (d) => `faltam ${d}`,
@@ -1114,6 +1131,44 @@ function KpiStrip({ items }: { items: { label: string; value: string; icon: Luci
         </div>
       ))}
     </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+ * БЫСТРЫЙ ДОСТУП: разделы Штаба одной строкой
+ * ══════════════════════════════════════════════════════════════════ */
+
+type QuickKey = "castings" | "manifest" | "pulse" | "blacklist" | "keys" | "settings";
+
+const QUICK: { key: QuickKey; href: string; icon: LucideIcon }[] = [
+  { key: "castings", href: ROUTES.castings, icon: Sparkles },
+  { key: "manifest", href: ROUTES.manifest, icon: Plane },
+  { key: "pulse", href: ROUTES.pulse, icon: RadarIcon },
+  { key: "blacklist", href: ROUTES.blacklist, icon: ShieldAlert },
+  { key: "keys", href: ROUTES.keys, icon: KeyRound },
+  { key: "settings", href: ROUTES.settings, icon: Bell },
+];
+
+function QuickAccess({ t }: { t: Dict }) {
+  return (
+    <nav aria-label={t.quick.eyebrow} className="mt-6">
+      <p className="mb-3 text-[10px] uppercase tracking-[0.3em] text-amber-200/60">{t.quick.eyebrow}</p>
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
+        {QUICK.map(({ key, href, icon: Icon }) => (
+          <Link
+            key={key}
+            href={href}
+            className="group flex min-h-16 items-start gap-3 rounded-2xl border border-zinc-800/80 bg-zinc-900/30 px-3.5 py-3 transition-colors hover:border-amber-200/30 hover:bg-amber-200/[0.04]"
+          >
+            <Icon className="mt-0.5 size-4 shrink-0 text-amber-200/70" strokeWidth={1.5} aria-hidden />
+            <span className="min-w-0">
+              <span className="block text-sm text-zinc-100 group-hover:text-amber-50">{t.quick.items[key].label}</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-zinc-500">{t.quick.items[key].hint}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </nav>
   );
 }
 
@@ -1917,6 +1972,7 @@ export default function PartnerCommandPage() {
         {data && (
           <>
             <KpiStrip items={kpis} />
+            <QuickAccess t={t} />
 
             {/* ≥ xl Радар — колонкой справа, ниже — после манифеста */}
             <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">

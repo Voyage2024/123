@@ -764,7 +764,7 @@ export default function MiddleEastPage() {
 
             <Link
               href={
-                user ? "/profile" : "/login"
+                user ? "/dashboard" : "/login"
               }
               aria-label={
                 user

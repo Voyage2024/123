@@ -15,12 +15,15 @@
  *   FilterTabs   сегменты-фильтры со счётчиками
  *   SearchField  поиск с кнопкой очистки
  *   Panel, SectionHeader, Pill, Meter, EmptyFilter
+ *   FeedGate     скелет / ошибка / «данные устарели» над usePartnerFeed
  * ──────────────────────────────────────────────────────────────────── */
 
 import type { ReactNode } from "react";
-import { Search, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
+import { RotateCw, Search, SlidersHorizontal, WifiOff, X, type LucideIcon } from "lucide-react";
 import { cormorant } from "@/app/components/profile/fonts";
 import type { KeyTier } from "../_lib/command";
+import type { Common } from "../_lib/format";
+import type { FeedState } from "../_lib/usePartnerFeed";
 
 export { cormorant };
 
@@ -379,5 +382,73 @@ export function EmptyFilter({ text, reset, onReset }: { text: string; reset: str
         {reset}
       </button>
     </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+ * ЗАГРУЗКА ЭКРАНА: скелет, ошибка, устаревшие данные
+ * ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Обёртка страницы пульта над usePartnerFeed: пока данных нет —
+ * скелет или панель ошибки с повтором; есть данные — рендерит children,
+ * а неудачное фоновое обновление показывает полоской сверху.
+ */
+export function FeedGate<T>({
+  feed,
+  c,
+  eyebrow,
+  title,
+  children,
+}: {
+  feed: FeedState<T>;
+  c: Common;
+  eyebrow: string;
+  title: string;
+  children: (data: T) => ReactNode;
+}) {
+  if (feed.data) {
+    return (
+      <>
+        {feed.error && (
+          <div className="fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-xl flex-wrap items-center gap-3 rounded-2xl border border-amber-400/25 bg-zinc-950/95 px-4 py-3 shadow-2xl shadow-black/50 backdrop-blur-xl">
+            <p className="flex min-w-0 flex-1 items-center gap-2 text-xs text-amber-100">
+              <WifiOff className="size-4 shrink-0 text-amber-300" strokeWidth={1.5} aria-hidden />
+              {c.feed.stale}
+            </p>
+            <button type="button" onClick={feed.refresh} disabled={feed.refreshing} className={BTN_GHOST}>
+              <RotateCw className={`size-3.5 ${feed.refreshing ? "motion-safe:animate-spin" : ""}`} aria-hidden />
+              {c.feed.retry}
+            </button>
+          </div>
+        )}
+        {children(feed.data)}
+      </>
+    );
+  }
+
+  return (
+    <PageShell>
+      <PageHeader eyebrow={eyebrow} title={title} subtitle={feed.loading ? c.feed.loading : ""} />
+      {feed.loading || !feed.error ? (
+        <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-busy="true" aria-label={c.feed.loading}>
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="h-24 animate-pulse rounded-2xl border border-zinc-800/60 bg-zinc-900/40" />
+          ))}
+          <div className="col-span-full h-64 animate-pulse rounded-2xl border border-zinc-800/60 bg-zinc-900/30" />
+        </div>
+      ) : (
+        <div role="alert" className="mt-8 flex flex-col items-start gap-4 rounded-2xl border border-rose-400/20 bg-rose-400/[0.04] p-6 sm:flex-row sm:items-center">
+          <WifiOff className="size-5 shrink-0 text-rose-300" strokeWidth={1.5} aria-hidden />
+          <p className="min-w-0 flex-1 text-sm text-zinc-300">{c.feed.error[feed.error.reason]}</p>
+          {feed.error.reason !== "forbidden" && (
+            <button type="button" onClick={feed.refresh} className={BTN_GHOST}>
+              <RotateCw className="size-3.5" aria-hidden />
+              {c.feed.retry}
+            </button>
+          )}
+        </div>
+      )}
+    </PageShell>
   );
 }

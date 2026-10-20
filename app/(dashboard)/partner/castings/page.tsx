@@ -13,7 +13,7 @@
  * (ссылка в слепую карточку кандидатки), после — инициалы и профиль.
  * Вся карточка — ссылка на кастинг; аватары и «Комната тура» поверх неё.
  *
- * Данные: _lib/castings.ts (демо, место подключения RPC отмечено там).
+ * Данные: RPC public.partner_castings_list() через usePartnerFeed.
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useMemo, useState, type ReactNode } from "react";
@@ -42,11 +42,13 @@ import type { Lang } from "@/app/context/LanguageContext";
 import { DAY, HOUR } from "../_lib/clock";
 import { ROUTES } from "../_lib/routes";
 import { pl, ru, usePartnerFormat, type Common, type Fmt } from "../_lib/format";
-import { buildCastingsMock, type CastingBrief, type CastingStage } from "../_lib/castings";
+import { parseCastings, type CastingBrief, type CastingStage, type CastingsData } from "../_lib/castings";
+import { usePartnerFeed } from "../_lib/usePartnerFeed";
 import { SNAP_RING, isFreshSnap, snapState } from "../_components/TrustSignals";
 import {
   BTN_GOLD,
   EmptyFilter,
+  FeedGate,
   FilterTabs,
   OVERLAY_LINK,
   PILL,
@@ -73,6 +75,7 @@ type Dict = {
   subtitle: string;
   create: string;
   blindRule: string;
+  firstCasting: string;
   stats: { active: string; ready: string; handshakes: string; closing: string };
   filters: Record<FilterKey, string> & { label: string };
   searchPlaceholder: string;
@@ -107,6 +110,7 @@ const T: Record<Lang, Dict> = {
     subtitle: "Your briefs and the blind selection. Names and profiles open only after the handshake.",
     create: "New casting",
     blindRule: "Blind selection: before the handshake you see a code, Live Snap and Trusted — no name, no contacts.",
+    firstCasting: "No castings yet. Publish the first brief — residents who match will see it and reply “Ready”.",
     stats: { active: "Active castings", ready: "“Ready” replies", handshakes: "Handshakes", closing: "Closing within 24 h" },
     filters: { label: "Casting filter", active: "Active", open: "Open", shortlist: "Shortlist", archive: "Archive", all: "All" },
     searchPlaceholder: "City or brief text",
@@ -139,6 +143,7 @@ const T: Record<Lang, Dict> = {
     subtitle: "Ваши брифы и слепой отбор. Имя и профиль открываются только после рукопожатия.",
     create: "Новый кастинг",
     blindRule: "Слепой отбор: до рукопожатия вы видите код, Live Snap и Trusted — без имени и контактов.",
+    firstCasting: "Кастингов пока нет. Опубликуйте первый бриф — подходящие резидентки увидят его и ответят «Готова».",
     stats: { active: "Активные кастинги", ready: "Ответы «Готова»", handshakes: "Рукопожатия", closing: "Закрываются за 24 ч" },
     filters: { label: "Фильтр кастингов", active: "Активные", open: "Открыт", shortlist: "Шорт-лист", archive: "Архив", all: "Все" },
     searchPlaceholder: "Город или текст брифа",
@@ -171,6 +176,7 @@ const T: Record<Lang, Dict> = {
     subtitle: "Tus briefs y la selección a ciegas. El nombre y el perfil se abren solo tras el apretón de manos.",
     create: "Nuevo casting",
     blindRule: "Selección a ciegas: antes del apretón de manos ves un código, Live Snap y Trusted, sin nombre ni contactos.",
+    firstCasting: "Aún no hay castings. Publica el primer brief: las residentes que encajen lo verán y responderán «Lista».",
     stats: { active: "Castings activos", ready: "Respuestas «Lista»", handshakes: "Apretones de manos", closing: "Cierran en 24 h" },
     filters: { label: "Filtro de castings", active: "Activos", open: "Abierto", shortlist: "Preselección", archive: "Archivo", all: "Todos" },
     searchPlaceholder: "Ciudad o texto del brief",
@@ -203,6 +209,7 @@ const T: Record<Lang, Dict> = {
     subtitle: "Seus briefs e a seleção às cegas. Nome e perfil abrem só depois do aperto de mão.",
     create: "Novo casting",
     blindRule: "Seleção às cegas: antes do aperto de mão você vê um código, Live Snap e Trusted, sem nome nem contatos.",
+    firstCasting: "Ainda não há castings. Publique o primeiro brief — as residentes compatíveis vão vê-lo e responder «Pronta».",
     stats: { active: "Castings ativos", ready: "Respostas «Pronta»", handshakes: "Apertos de mão", closing: "Fecham em 24 h" },
     filters: { label: "Filtro de castings", active: "Ativos", open: "Aberto", shortlist: "Pré-seleção", archive: "Arquivo", all: "Todos" },
     searchPlaceholder: "Cidade ou texto do brief",
@@ -488,9 +495,19 @@ function SignalChip({ tone, icon: Icon, children }: { tone: Tone; icon: LucideIc
  * ══════════════════════════════════════════════════════════════════ */
 
 export default function PartnerCastingsPage() {
+  const { lang, c: cm } = usePartnerFormat();
+  const t = T[lang] ?? T.EN;
+  const feed = usePartnerFeed("partner_castings_list", parseCastings);
+  return (
+    <FeedGate feed={feed} c={cm} eyebrow={t.eyebrow} title={t.title}>
+      {(data) => <CastingsView data={data} />}
+    </FeedGate>
+  );
+}
+
+function CastingsView({ data }: { data: CastingsData }) {
   const { lang, c: cm, fmt } = usePartnerFormat();
   const t = T[lang] ?? T.EN;
-  const [data] = useState(buildCastingsMock);
   const [filter, setFilter] = useState<FilterKey>("active");
   const [query, setQuery] = useState("");
 
@@ -533,8 +550,6 @@ export default function PartnerCastingsPage() {
         eyebrow={t.eyebrow}
         title={t.title}
         subtitle={t.subtitle}
-        demo={cm.demo}
-        demoHint={cm.demoHint}
         actions={
           <Link href={ROUTES.newCasting} className={BTN_GOLD}>
             <Plus className="size-4" aria-hidden />
@@ -568,7 +583,16 @@ export default function PartnerCastingsPage() {
       </p>
 
       <div className="mt-5">
-        {visible.length === 0 ? (
+        {all.length === 0 ? (
+          <div className="flex flex-col items-start gap-4 rounded-2xl border border-dashed border-amber-200/20 bg-amber-200/[0.03] p-6 sm:flex-row sm:items-center">
+            <Sparkles className="size-5 shrink-0 text-amber-200/70" strokeWidth={1.5} aria-hidden />
+            <p className="min-w-0 flex-1 text-sm leading-relaxed text-zinc-300">{t.firstCasting}</p>
+            <Link href={ROUTES.newCasting} className={BTN_GOLD}>
+              <Plus className="size-4" aria-hidden />
+              {t.create}
+            </Link>
+          </div>
+        ) : visible.length === 0 ? (
           <EmptyFilter
             text={cm.nothing}
             reset={cm.reset}

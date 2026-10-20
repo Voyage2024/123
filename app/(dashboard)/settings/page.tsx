@@ -2,6 +2,7 @@
 
 import RoleGuard from "@/app/components/RoleGuard";
 import AccountSettings, { AccountSettingsHeader } from "@/app/components/AccountSettings";
+import NotificationPreferences from "@/app/components/NotificationPreferences";
 
 export default function ResidentSettingsPage() {
   return (
@@ -11,6 +12,7 @@ export default function ResidentSettingsPage() {
           {/* У резидентов не передаем слово "Admin", будет просто "Настройки профиля" */}
           <AccountSettingsHeader />
           <AccountSettings />
+          <NotificationPreferences variant="resident" />
         </div>
       </main>
     </RoleGuard>

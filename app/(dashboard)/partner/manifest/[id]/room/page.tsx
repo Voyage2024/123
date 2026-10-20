@@ -15,9 +15,9 @@
  *   Лог тура          кто и когда загрузил документы, подписал, заменил,
  *                     напомнил. Пишет сервер, править нельзя.
  *
- * Данные: _lib/useDealRoom — демо или RPC partner_deal_room
- * (NEXT_PUBLIC_PARTNER_DATA=live). Действия: _lib/actions → очередь Telegram.
- * Тур закрыт — комната только для чтения.
+ * Данные: _lib/useDealRoom — RPC partner_deal_room. Действия: _lib/actions →
+ * очередь Telegram. Тур начался — панель «Закрыть тур» (partner_close_tour,
+ * баллы долетевшим). Тур закрыт — комната только для чтения.
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useMemo, useState, type ReactNode } from "react";
@@ -66,6 +66,7 @@ import { cityLabel } from "../../../_lib/cities";
 import { ContractSeal, LiveSnapBadge, TrustBadge } from "../../../_components/TrustSignals";
 import { TelegramAction } from "../../../_components/TelegramAction";
 import { ContractEditor } from "../../../_components/ContractEditor";
+import { CloseTourPanel } from "../../../_components/CloseTourPanel";
 import { cormorant } from "@/app/components/profile/fonts";
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1270,6 +1271,16 @@ export default function DealRoomPage() {
                 {t.readOnly}
               </div>
             )}
+
+            {/* тур начался и не закрыт — менеджер закрывает его, баллы начисляются сразу */}
+            {!data.readOnly &&
+              (data.tour.status === "in_tour" || (data.tour.status === "confirmed" && fmt.ready && data.tour.departsAt <= now)) && (
+                <CloseTourPanel
+                  tourId={data.tour.id}
+                  participants={data.parties.filter((p) => p.role === "participant").map((p) => ({ id: p.id, name: p.name }))}
+                  onClosed={refresh}
+                />
+              )}
 
             {/* ≥ xl: слева контракт и лог, справа состав; на телефоне — контракт, состав, лог */}
             <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:items-start">

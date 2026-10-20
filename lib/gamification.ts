@@ -577,6 +577,8 @@ export type LeaderboardRow = {
   /** баллы всех туров × множитель (миграция 20261014) — уже внутри total_influence */
   tour_points?: Num;
   tours_count?: Num;
+  /** резидентка скрыла баллы (member_preferences.hide_points): числовые поля — null */
+  points_hidden?: boolean | null;
 };
 
 /* ── Итоговая конфигурация (каталог + БД) ────────────────────────── */

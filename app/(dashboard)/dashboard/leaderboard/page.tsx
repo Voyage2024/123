@@ -43,7 +43,7 @@ const POLL_MS = 60_000;
 const COLUMNS =
   "profile_id, position, total_influence, rank_title, level, circle_key, full_name, avatar_url, " +
   "stamps_count, destinations_count, combos_completed, patronage_points, proteges_count, tour_points, tours_count, " +
-  "segment, reliability, profile_level, profile_circle, segment_position";
+  "segment, reliability, profile_level, profile_circle, segment_position, points_hidden";
 
 const TEXT: Record<Lang, { loading: string; failed: string; migration: string; retry: string }> = {
   en: {
@@ -97,9 +97,11 @@ function toEntries(raw: Raw): LeaderboardEntry[] {
         patronage: num(r.patronage_points) ?? 0,
         proteges: num(r.proteges_count) ?? 0,
         tourPoints: num(r.tour_points) ?? 0,
+        hidden: r.points_hidden === true,
       };
     })
-    .sort((a, b) => b.influence - a.influence || a.position - b.position || a.name.localeCompare(b.name));
+    // Место считает сервер по настоящим баллам — в том числе у тех, кто их скрыл
+    .sort((a, b) => a.position - b.position || b.influence - a.influence || a.name.localeCompare(b.name));
 }
 
 export default function LeaderboardPage() {
