@@ -83,6 +83,7 @@ type NavKey =
   | "database"
   | "command"
   | "castings"
+  | "mapTours"
   | "manifest"
   | "pulse"
   | "blacklist"
@@ -106,6 +107,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { key: "myVoyage", href: "/dashboard", icon: LayoutDashboard },
       { key: "castings", href: "/dashboard/castings", icon: Sparkles },
+      { key: "mapTours", href: "/dashboard/map", icon: Map },
       { key: "myApplications", href: "/dashboard/applications", icon: FileText },
       // Глобальный рейтинг клуба (Influence Index) — «марафон».
       // Внутри него: «спринт» текущего тура и паспорт со штампами.
@@ -254,6 +256,7 @@ const translations = {
       database: "Full Database",
       command: "Command",
       castings: "Castings",
+      mapTours: "Tour Map",
       manifest: "Manifest",
       pulse: "Pulse",
       blacklist: "Blacklist",
@@ -314,6 +317,7 @@ const translations = {
       database: "Полная база",
       command: "Штаб",
       castings: "Кастинги",
+      mapTours: "Карта туров",
       manifest: "Манифест",
       pulse: "Пульс",
       blacklist: "Чёрный список",
@@ -374,6 +378,7 @@ const translations = {
       database: "Base de datos",
       command: "Mando",
       castings: "Castings",
+      mapTours: "Mapa de tours",
       manifest: "Manifiesto",
       pulse: "Pulso",
       blacklist: "Lista negra",
@@ -434,6 +439,7 @@ const translations = {
       database: "Banco de dados",
       command: "Comando",
       castings: "Castings",
+      mapTours: "Mapa de tours",
       manifest: "Manifesto",
       pulse: "Pulso",
       blacklist: "Lista negra",
