@@ -44,6 +44,7 @@ import {
   type PulseMonth,
 } from "../_lib/pulse";
 import { usePartnerFeed } from "../_lib/usePartnerFeed";
+import { PartnerGuide } from "../_components/PartnerGuide";
 import { Stars, TrustBadge } from "../_components/TrustSignals";
 import {
   BTN_GHOST,
@@ -916,6 +917,8 @@ function PulseView({ data, refresh }: { data: PulseData; refresh: () => void }) 
       </Panel>
 
       <StatStrip items={stats} />
+
+      <PartnerGuide page="pulse" />
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">

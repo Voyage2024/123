@@ -67,6 +67,7 @@ import { ContractSeal, LiveSnapBadge, TrustBadge } from "../../../_components/Tr
 import { TelegramAction } from "../../../_components/TelegramAction";
 import { ContractEditor } from "../../../_components/ContractEditor";
 import { CloseTourPanel } from "../../../_components/CloseTourPanel";
+import { PartnerGuide } from "../../../_components/PartnerGuide";
 import { cormorant } from "@/app/components/profile/fonts";
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1271,6 +1272,8 @@ export default function DealRoomPage() {
                 {t.readOnly}
               </div>
             )}
+
+            <PartnerGuide page="room" />
 
             {/* тур начался и не закрыт — менеджер закрывает его, баллы начисляются сразу */}
             {!data.readOnly &&

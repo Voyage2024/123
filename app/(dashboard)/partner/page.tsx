@@ -74,6 +74,7 @@ import { ROUTES } from "./_lib/routes";
 import { cityLabel } from "./_lib/cities";
 import { notifyTour, type NotifyResult } from "./_lib/actions";
 import { TelegramAction } from "./_components/TelegramAction";
+import { PartnerGuide } from "./_components/PartnerGuide";
 import {
   ContractSeal,
   LiveSnapBadge,
@@ -1973,6 +1974,7 @@ export default function PartnerCommandPage() {
           <>
             <KpiStrip items={kpis} />
             <QuickAccess t={t} />
+            <PartnerGuide page="command" />
 
             {/* ≥ xl Радар — колонкой справа, ниже — после манифеста */}
             <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">

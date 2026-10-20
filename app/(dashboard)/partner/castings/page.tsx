@@ -44,6 +44,7 @@ import { ROUTES } from "../_lib/routes";
 import { pl, ru, usePartnerFormat, type Common, type Fmt } from "../_lib/format";
 import { parseCastings, type CastingBrief, type CastingStage, type CastingsData } from "../_lib/castings";
 import { usePartnerFeed } from "../_lib/usePartnerFeed";
+import { PartnerGuide } from "../_components/PartnerGuide";
 import { SNAP_RING, isFreshSnap, snapState } from "../_components/TrustSignals";
 import {
   BTN_GOLD,
@@ -571,6 +572,8 @@ function CastingsView({ data }: { data: CastingsData }) {
           },
         ]}
       />
+
+      <PartnerGuide page="castings" />
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <FilterTabs items={filterItems} value={filter} onChange={setFilter} label={t.filters.label} />

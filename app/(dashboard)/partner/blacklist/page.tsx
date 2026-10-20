@@ -56,6 +56,7 @@ import {
   type BlacklistEntry,
 } from "../_lib/blacklist";
 import { usePartnerFeed } from "../_lib/usePartnerFeed";
+import { PartnerGuide } from "../_components/PartnerGuide";
 import {
   BTN_GHOST,
   BTN_GOLD,
@@ -869,6 +870,8 @@ function BlacklistView({ data, refresh }: { data: BlacklistData; refresh: () => 
           { label: t.stats.yours, value: fmt.num(count((e) => !!e.residentId)), icon: UserX },
         ]}
       />
+
+      <PartnerGuide page="blacklist" />
 
       {/* менеджер — заявка на проверку; админ — запись сразу */}
       <ReportPanel t={t} x={x} fmt={fmt} isAdmin={data.isAdmin} onDone={refresh} />

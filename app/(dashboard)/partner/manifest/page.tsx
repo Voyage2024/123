@@ -41,6 +41,7 @@ import { pl, ru, usePartnerFormat, type Common, type Fmt } from "../_lib/format"
 import { parseManifest,
   type ManifestData, type TourRow, type TourStatus } from "../_lib/manifest";
 import { usePartnerFeed } from "../_lib/usePartnerFeed";
+import { PartnerGuide } from "../_components/PartnerGuide";
 import { isSealed } from "../_components/TrustSignals";
 import {
   EDGE,
@@ -593,6 +594,8 @@ function ManifestView({ data }: { data: ManifestData }) {
           { label: t.stats.closed, value: fmt.num(counts.closed), icon: PlaneLanding },
         ]}
       />
+
+      <PartnerGuide page="manifest" />
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <FilterTabs items={filterItems} value={filter} onChange={setFilter} label={t.filters.label} />
