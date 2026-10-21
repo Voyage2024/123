@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond } from "next/font/google";
 import { AuthProvider } from "./context/AuthContext"; // "Мозг" авторизации
 import { LanguageProvider } from "./context/LanguageContext"; // Глобальный язык
 import Navbar from "./components/Navbar";
 import PresenceHeartbeat from "./components/PresenceHeartbeat";
+import { cormorant } from "./components/profile/fonts";
 import "./globals.css";
 import "./mobile.css";
 import type { Viewport } from "next";
@@ -14,11 +14,6 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   themeColor: "#09090b",
 };
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "cyrillic"],
-  weight: ["500", "600"],
-  variable: "--font-cormorant",
-});
 
 export const metadata: Metadata = {
   title: "Voyage — Private Club",
