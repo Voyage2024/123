@@ -12,6 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext"; // <-- ДОБАВИЛИ ИМПОРТ ГЛОБАЛЬНОГО ЯЗЫКА
+import GuidesSection from "./_components/GuidesSection";
 
 // next/font переименовывает шрифт, поэтому берём его через CSS-переменную
 const SERIF = "var(--font-cormorant), Georgia, serif";
@@ -477,6 +478,9 @@ export default function HomePage() {
           </Link>
         </div>
       </section>
+
+      {/* ─── Guides & Cheat Sheets (после направлений: «куда» → «как собраться») ─── */}
+      <GuidesSection />
 
       {/* ─── Why Voyage / Values ─── */}
       <section className="px-6 py-24 border-t border-white/5">
