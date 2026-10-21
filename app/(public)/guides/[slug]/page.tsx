@@ -1,10 +1,18 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, BookOpen, CalendarDays, Clock, Download, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import GuideMarkdown from "@/app/components/guides/GuideMarkdown";
-import { GUIDE_COLUMNS, guideDownloadUrl, type GuideLanguage, type GuideRow } from "@/lib/guides";
+import { renderGuideContent } from "@/lib/server/guide-content";
+import GuideContent from "@/app/components/guides/GuideContent";
+import {
+  GUIDE_COLUMNS,
+  guideDownloadUrl,
+  resolveGuideSeo,
+  type GuideLanguage,
+  type GuideRow,
+} from "@/lib/guides";
 
 /* ──────────────────────────────────────────────────────────────────────
  * Страница гайда — app/(public)/guides/[slug]/page.tsx
@@ -13,6 +21,11 @@ import { GUIDE_COLUMNS, guideDownloadUrl, type GuideLanguage, type GuideRow } fr
  * посетителя. Гость видит только опубликованные (RLS), администратор
  * видит и черновики — так можно проверить гайд до публикации.
  * Подписи на странице — на языке самого гайда.
+ *
+ * SEO: <title>, description и keywords — из seo_title / seo_description /
+ * seo_keywords (пустые → title и description карточки), плюс canonical,
+ * Open Graph / Twitter (картинка — первая из статьи) и JSON-LD Article.
+ * Текст — Markdown + HTML, очищается на сервере (lib/server/guide-content).
  * ──────────────────────────────────────────────────────────────────── */
 
 const SERIF = "var(--font-cormorant), Georgia, serif";
@@ -82,7 +95,8 @@ const copy: Record<GuideLanguage, {
 
 type PageProps = { params: Promise<{ slug: string }> };
 
-async function loadGuide(slug: string): Promise<GuideRow | null> {
+// cache: generateMetadata и страница делят один запрос к базе
+const loadGuide = cache(async (slug: string): Promise<GuideRow | null> => {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("guides")
@@ -94,16 +108,54 @@ async function loadGuide(slug: string): Promise<GuideRow | null> {
     return null;
   }
   return (data as GuideRow | null) ?? null;
+});
+
+const OG_LOCALE: Record<GuideLanguage, string> = { ru: "ru_RU", en: "en_US", es: "es_ES", pt: "pt_BR" };
+
+function siteUrl(): URL | undefined {
+  const raw = (process.env.NEXT_PUBLIC_SITE_URL ?? process.env.SITE_URL ?? "").trim().replace(/\/+$/, "");
+  try {
+    return raw ? new URL(raw) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const guide = await loadGuide(slug);
-  if (!guide) return { title: "Voyage — Private Club" };
+  if (!guide) return { title: "Voyage — Private Club", robots: { index: false, follow: false } };
+
+  const seo = resolveGuideSeo(guide);
+  const image = renderGuideContent(guide.content).firstImage;
+  const path = `/guides/${guide.slug}`;
+
   return {
-    title: `${guide.title} · Voyage`,
-    description: guide.description || undefined,
-    robots: guide.is_published ? undefined : { index: false, follow: false },
+    metadataBase: siteUrl(),
+    // seo_title пишется целиком, без дописывания «· Voyage»: так задумал редактор
+    title: seo.title,
+    description: seo.description || undefined,
+    keywords: seo.keywords.length ? seo.keywords : undefined,
+    alternates: { canonical: path },
+    robots: guide.is_published ? { index: true, follow: true } : { index: false, follow: false },
+    openGraph: {
+      type: "article",
+      url: path,
+      title: seo.title,
+      description: seo.description || undefined,
+      siteName: "VOYAGE",
+      locale: OG_LOCALE[guide.language],
+      publishedTime: guide.created_at,
+      modifiedTime: guide.updated_at,
+      tags: guide.tags,
+      images: image ? [{ url: image }] : undefined,
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title: seo.title,
+      description: seo.description || undefined,
+      images: image ? [image] : undefined,
+    },
   };
 }
 
@@ -134,10 +186,35 @@ export default async function GuidePage({ params }: PageProps) {
     month: "long",
     year: "numeric",
   });
-  const hasContent = guide.content.trim().length > 0;
+  const rendered = renderGuideContent(guide.content);
+  const hasContent = rendered.html.length > 0;
+  const seo = resolveGuideSeo(guide);
+  const base = siteUrl();
+
+  // Разметка для поисковиков: статья, язык, даты, ключевые слова
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: seo.title,
+    description: seo.description || undefined,
+    inLanguage: guide.language,
+    datePublished: guide.created_at,
+    dateModified: guide.updated_at,
+    keywords: seo.keywords.length ? seo.keywords.join(", ") : undefined,
+    image: rendered.firstImage ?? undefined,
+    mainEntityOfPage: base ? new URL(`/guides/${guide.slug}`, base).toString() : undefined,
+    publisher: { "@type": "Organization", name: "VOYAGE" },
+  };
 
   return (
     <article className="relative overflow-hidden px-6 pb-28 pt-10">
+      {guide.is_published && (
+        <script
+          type="application/ld+json"
+          // < экранируем, чтобы текст гайда не мог закрыть тег script
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+        />
+      )}
       <div className="pointer-events-none absolute inset-0" aria-hidden>
         <div className="absolute -top-40 left-1/2 h-[480px] w-[720px] -translate-x-1/2 rounded-full bg-[#c9a961]/[0.06] blur-[140px]" />
       </div>
@@ -226,7 +303,7 @@ export default async function GuidePage({ params }: PageProps) {
 
         {/* Текст гайда */}
         {hasContent ? (
-          <GuideMarkdown source={guide.content} />
+          <GuideContent html={rendered.html} />
         ) : (
           guide.pdf_url && <p className="text-center text-sm font-light text-zinc-500">{t.pdfOnly}</p>
         )}

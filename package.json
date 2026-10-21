@@ -12,13 +12,15 @@
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.108.2",
     "framer-motion": "^12.41.0",
+    "grammy": "^1.44.0",
     "js-cookie": "^3.0.8",
     "lucide-react": "^1.21.0",
+    "marked": "^18.1.1",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "tailwindcss-animate": "^1.0.7",
-    "grammy": "^1.44.0"
+    "sanitize-html": "^2.18.1",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -26,6 +28,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/sanitize-html": "^2.16.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
