@@ -1,16 +1,40 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowUpRight,
   BookOpen,
   Clock,
+  ConciergeBell,
   Download,
   FileText,
   Luggage,
+  ScrollText,
+  ShieldCheck,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
+import { supabase } from "@/lib/supabase";
+import {
+  GUIDE_CARD_COLUMNS,
+  GUIDE_FALLBACK_LANGUAGE,
+  guideDownloadUrl,
+  isGuideNew,
+  langToGuideLanguage,
+  pickGuideIcon,
+  type GuideCard,
+  type GuideIconKey,
+  type GuideLanguage,
+} from "@/lib/guides";
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Секция «Гайды и шпаргалки» на главной.
+ * Данные — из таблицы public.guides (только is_published), управление —
+ * в админке /admin/guides. Вёрстка карточки прежняя.
+ * ──────────────────────────────────────────────────────────────────── */
 
 // next/font переименовывает шрифт, поэтому берём его через CSS-переменную
 const SERIF = "var(--font-cormorant), Georgia, serif";
@@ -25,7 +49,6 @@ const copy: Record<Lang, {
   subtitle: string;
   badgeNew: string;
   guideLabel: string;
-  minutes: string;
   read: string;
   download: string;
   soonTitle: string;
@@ -37,7 +60,6 @@ const copy: Record<Lang, {
     subtitle: "Practical notes from the team, written for residents before every tour. Short, honest and to the point.",
     badgeNew: "New",
     guideLabel: "Guide",
-    minutes: "min read",
     read: "Read the guide",
     download: "Download PDF",
     soonTitle: "More guides are on the way",
@@ -49,7 +71,6 @@ const copy: Record<Lang, {
     subtitle: "Практичные заметки от команды, которые стоит прочитать перед каждым туром. Коротко, честно и по делу.",
     badgeNew: "Новое",
     guideLabel: "Гайд",
-    minutes: "мин чтения",
     read: "Читать гайд",
     download: "Скачать PDF",
     soonTitle: "Скоро новые гайды",
@@ -61,7 +82,6 @@ const copy: Record<Lang, {
     subtitle: "Notas prácticas del equipo para leer antes de cada tour. Breves, honestas y al grano.",
     badgeNew: "Nuevo",
     guideLabel: "Guía",
-    minutes: "min de lectura",
     read: "Leer la guía",
     download: "Descargar PDF",
     soonTitle: "Pronto habrá más guías",
@@ -73,7 +93,6 @@ const copy: Record<Lang, {
     subtitle: "Notas práticas da equipe para ler antes de cada tour. Curtas, honestas e diretas.",
     badgeNew: "Novo",
     guideLabel: "Guia",
-    minutes: "min de leitura",
     read: "Ler o guia",
     download: "Baixar PDF",
     soonTitle: "Mais guias em breve",
@@ -81,45 +100,56 @@ const copy: Record<Lang, {
   },
 };
 
-// --- Список гайдов. Новый гайд = новый объект здесь + PDF в public/guides/ ---
-type Guide = {
-  id: string;
-  icon: LucideIcon;
-  minutes: number;
-  pdf: string; // путь от корня сайта, файл лежит в public/
-  isNew?: boolean;
-  title: Record<Lang, string>;
-  desc: Record<Lang, string>;
-  tags: Record<Lang, string[]>;
+// --- Иконка обложки подбирается по тегам/заголовку гайда (lib/guides.ts) ---
+const ICONS: Record<GuideIconKey, LucideIcon> = {
+  luggage: Luggage,
+  passport: ScrollText,
+  beauty: Sparkles,
+  shield: ShieldCheck,
+  concierge: ConciergeBell,
+  book: BookOpen,
 };
 
-const guides: Guide[] = [
-  {
-    id: "suitcase",
-    icon: Luggage,
-    minutes: 7,
-    pdf: "/guides/voyage-suitcase-guide.pdf",
-    isNew: true,
-    title: {
-      RU: "Чемодан в тур без паники: что реально взять с собой для работы и жизни, а что оставить дома",
-      EN: "Packing for a tour without panic: what to actually bring for work and life, and what to leave at home",
-      ES: "La maleta del tour sin pánico: qué llevar de verdad para el trabajo y la vida, y qué dejar en casa",
-      PT: "A mala do tour sem pânico: o que realmente levar para o trabalho e a vida, e o que deixar em casa",
-    },
-    desc: {
-      RU: "Проверенный список вещей для тура: образы под разные форматы вечеров, бьюти-минимум, документы и мелочи, о которых вспоминают уже в самолёте. Плюс то, что можно смело оставить дома.",
-      EN: "A tested packing list for the tour: looks for different evening formats, a beauty minimum, documents and the small things people remember only on the plane. Plus what you can safely leave at home.",
-      ES: "Una lista probada para el tour: looks para distintos formatos de noche, lo mínimo de belleza, documentos y esos detalles que se recuerdan ya en el avión. Y lo que puedes dejar en casa sin miedo.",
-      PT: "Uma lista testada para o tour: looks para diferentes formatos de noite, o mínimo de beleza, documentos e os detalhes que só lembramos no avião. E o que você pode deixar em casa sem medo.",
-    },
-    tags: {
-      RU: ["Образы", "Бьюти", "Документы"],
-      EN: ["Looks", "Beauty", "Documents"],
-      ES: ["Looks", "Belleza", "Documentos"],
-      PT: ["Looks", "Beleza", "Documentos"],
-    },
-  },
-];
+/**
+ * Опубликованные гайды на языке интерфейса. Одним запросом берём язык
+ * интерфейса и русский: если на выбранном языке гайдов нет — показываем RU.
+ */
+function useGuides(lang: Lang) {
+  const language = langToGuideLanguage(lang);
+  const [state, setState] = useState<{ language: GuideLanguage | null; guides: GuideCard[] }>({
+    language: null,
+    guides: [],
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const languages = Array.from(new Set([language, GUIDE_FALLBACK_LANGUAGE]));
+
+    void (async () => {
+      const { data, error } = await supabase
+        .from("guides")
+        .select(GUIDE_CARD_COLUMNS)
+        .eq("is_published", true)
+        .in("language", languages)
+        .order("created_at", { ascending: true });
+      if (cancelled) return;
+      if (error) console.warn("[GuidesSection] guides load failed:", error.message);
+
+      const rows = (data ?? []) as GuideCard[];
+      const own = rows.filter((g) => g.language === language);
+      setState({
+        language,
+        guides: own.length ? own : rows.filter((g) => g.language === GUIDE_FALLBACK_LANGUAGE),
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [language]);
+
+  return { guides: state.guides, loading: state.language !== language };
+}
 
 export default function GuidesSection() {
   const { lang } = useLanguage();
@@ -127,6 +157,8 @@ export default function GuidesSection() {
   const upper = String(lang).toUpperCase() as Lang;
   const key: Lang = upper in copy ? upper : "EN";
   const t = copy[key];
+  const { guides, loading } = useGuides(key);
+  const now = Date.now();
 
   return (
     <section id="guides" className="relative px-6 py-28 border-t border-white/5 overflow-hidden scroll-mt-8">
@@ -160,8 +192,18 @@ export default function GuidesSection() {
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {guides.map((g, i) => {
-            const Icon = g.icon;
+          {/* Пока гайды грузятся — пустая карточка той же формы, чтобы сетка не прыгала */}
+          {loading && (
+            <div
+              aria-hidden
+              className="relative overflow-hidden rounded-3xl border border-white/[0.06] bg-zinc-900/40 backdrop-blur-xl lg:col-span-2 min-h-[22rem] animate-pulse"
+            >
+              <div className="pointer-events-none absolute inset-3 rounded-[1.25rem] border border-[#c9a961]/[0.07]" />
+            </div>
+          )}
+
+          {!loading && guides.map((g, i) => {
+            const Icon = ICONS[pickGuideIcon(g)];
             return (
               <motion.article
                 key={g.id}
@@ -200,33 +242,37 @@ export default function GuidesSection() {
                   {/* Текст карточки */}
                   <div className="flex flex-col">
                     <div className="flex flex-wrap items-center gap-3 mb-5 text-[11px] tracking-wider uppercase">
-                      {g.isNew && (
+                      {isGuideNew(g.created_at, now) && (
                         <span className="rounded-full bg-[#c9a961] px-3 py-1 font-semibold text-zinc-950">
                           {t.badgeNew}
                         </span>
                       )}
-                      <span className="inline-flex items-center gap-1.5 text-zinc-400">
-                        <Clock size={13} strokeWidth={1.75} style={{ color: GOLD }} />
-                        {g.minutes} {t.minutes}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 text-zinc-500">
-                        <FileText size={13} strokeWidth={1.75} />
-                        PDF
-                      </span>
+                      {g.reading_time && (
+                        <span className="inline-flex items-center gap-1.5 text-zinc-400">
+                          <Clock size={13} strokeWidth={1.75} style={{ color: GOLD }} />
+                          {g.reading_time}
+                        </span>
+                      )}
+                      {g.pdf_url && (
+                        <span className="inline-flex items-center gap-1.5 text-zinc-500">
+                          <FileText size={13} strokeWidth={1.75} />
+                          PDF
+                        </span>
+                      )}
                     </div>
 
                     <h3
                       className="text-2xl md:text-3xl font-light leading-snug text-zinc-50 mb-4"
                       style={{ fontFamily: SERIF }}
                     >
-                      {g.title[key]}
+                      {g.title}
                     </h3>
                     <p className="text-sm leading-7 text-zinc-400 font-light mb-6">
-                      {g.desc[key]}
+                      {g.description}
                     </p>
 
                     <div className="flex flex-wrap gap-2 mb-8">
-                      {g.tags[key].map((tag) => (
+                      {g.tags.map((tag) => (
                         <span
                           key={tag}
                           className="px-3 py-1 text-[11px] tracking-wider uppercase rounded-full border border-zinc-700 text-zinc-500"
@@ -237,24 +283,26 @@ export default function GuidesSection() {
                     </div>
 
                     <div className="mt-auto flex flex-col sm:flex-row gap-3">
-                      <a
-                        href={g.pdf}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <Link
+                        href={`/guides/${g.slug}`}
                         className="group/btn inline-flex items-center justify-center gap-2.5 rounded-full bg-amber-200 px-7 py-3.5 text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-950 shadow-[0_0_24px_rgba(251,191,36,0.1)] transition duration-300 hover:bg-amber-100 hover:shadow-[0_0_34px_rgba(251,191,36,0.18)]"
                       >
                         <BookOpen size={15} strokeWidth={1.75} />
                         {t.read}
                         <ArrowUpRight size={15} className="transition-transform duration-300 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
-                      </a>
-                      <a
-                        href={g.pdf}
-                        download
-                        className="inline-flex items-center justify-center gap-2.5 rounded-full border border-amber-200/30 bg-amber-200/[0.06] px-7 py-3.5 text-[11px] font-medium uppercase tracking-[0.2em] text-amber-100 transition-all duration-300 hover:border-amber-200/60 hover:bg-amber-200/[0.1]"
-                      >
-                        <Download size={15} strokeWidth={1.75} />
-                        {t.download}
-                      </a>
+                      </Link>
+                      {g.pdf_url && (
+                        <a
+                          href={guideDownloadUrl(g.pdf_url)}
+                          download
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-2.5 rounded-full border border-amber-200/30 bg-amber-200/[0.06] px-7 py-3.5 text-[11px] font-medium uppercase tracking-[0.2em] text-amber-100 transition-all duration-300 hover:border-amber-200/60 hover:bg-amber-200/[0.1]"
+                        >
+                          <Download size={15} strokeWidth={1.75} />
+                          {t.download}
+                        </a>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -267,7 +315,7 @@ export default function GuidesSection() {
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.65, delay: guides.length * 0.12, ease: "easeOut" }}
+            transition={{ duration: 0.65, delay: (loading ? 1 : guides.length) * 0.12, ease: "easeOut" }}
             className="relative flex flex-col justify-center rounded-3xl border border-dashed border-zinc-800 bg-zinc-900/20 backdrop-blur-sm p-8 text-center"
           >
             <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-full border border-amber-200/20 text-amber-200/60">

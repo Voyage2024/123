@@ -42,6 +42,7 @@ import {
   Mail,
   Globe,
   Database,
+  BookOpen,
   LogOut,
   Menu,
   X,
@@ -79,6 +80,7 @@ type NavKey =
   | "roleManagement"
   | "adminParties"
   | "mapLocations"
+  | "guides"
   | "negotiations"
   | "database"
   | "command"
@@ -176,6 +178,7 @@ const NAV_SECTIONS: NavSection[] = [
       { key: "invitations", href: "/admin/invites", icon: Mail },
       { key: "adminParties", href: "/admin/parties", icon: GlassWater },
       { key: "mapLocations", href: "/admin/map-locations", icon: Globe },
+      { key: "guides", href: "/admin/guides", icon: BookOpen },
     ],
   },
   // Role management remains owner-only, matching the existing RBAC contract.
@@ -253,6 +256,7 @@ const translations = {
       roleManagement: "Role Management",
       adminParties: "Manage Parties",
       mapLocations: "Map Locations",
+      guides: "Guides",
       database: "Full Database",
       command: "Command",
       castings: "Castings",
@@ -314,6 +318,7 @@ const translations = {
       roleManagement: "Управление ролями",
       adminParties: "Управление тусовками",
       mapLocations: "Локации карты",
+      guides: "Гайды",
       database: "Полная база",
       command: "Штаб",
       castings: "Кастинги",
@@ -375,6 +380,7 @@ const translations = {
       roleManagement: "Gestión de roles",
       adminParties: "Gestionar fiestas",
       mapLocations: "Ubicaciones del mapa",
+      guides: "Guías",
       database: "Base de datos",
       command: "Mando",
       castings: "Castings",
@@ -436,6 +442,7 @@ const translations = {
       roleManagement: "Gestão de funções",
       adminParties: "Gerenciar festas",
       mapLocations: "Localizações do mapa",
+      guides: "Guias",
       database: "Banco de dados",
       command: "Comando",
       castings: "Castings",
