@@ -30,6 +30,7 @@ import {
   Italic,
   Link2,
   List,
+  ListChecks,
   ListOrdered,
   LoaderCircle,
   Minus,
@@ -68,6 +69,7 @@ import {
   guideStoragePath,
   langToGuideLanguage,
   slugify,
+  type GuideContentSegment,
   type GuideLanguage,
   type GuideRow,
 } from "@/lib/guides";
@@ -173,7 +175,7 @@ export default function GuideEditorModal({ guide, onClose, onSaved }: Props) {
   const [slugTouched, setSlugTouched] = useState(Boolean(guide));
   const [slugEditing, setSlugEditing] = useState(false);
   const [tab, setTab] = useState<"write" | "preview">("write");
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<GuideContentSegment[] | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -408,7 +410,7 @@ export default function GuideEditorModal({ guide, onClose, onSaved }: Props) {
     setPreviewLoading(true);
     try {
       const result = await previewGuideContent(form.content);
-      setPreviewHtml(result.ok ? result.data : "");
+      setPreviewHtml(result.ok ? result.data : []);
       if (!result.ok) setError(errorText(result.reason));
     } finally {
       setPreviewLoading(false);
@@ -623,6 +625,20 @@ export default function GuideEditorModal({ guide, onClose, onSaved }: Props) {
                     </button>
                   ))}
                   <span className="mx-1 h-5 w-px bg-zinc-800" aria-hidden />
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      rememberSelection();
+                    }}
+                    onClick={() => insert(t.sampleChecklist, "", "", true, true)}
+                    disabled={saving}
+                    title={t.tbChecklistHint}
+                    className="mr-1 inline-flex items-center gap-2 rounded-lg border border-zinc-700/80 bg-black/20 px-3 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:border-amber-200/40 hover:text-amber-100 disabled:opacity-40"
+                  >
+                    <ListChecks size={14} />
+                    {t.tbChecklist}
+                  </button>
                   <input
                     ref={imageInput}
                     type="file"
@@ -665,8 +681,8 @@ export default function GuideEditorModal({ guide, onClose, onSaved }: Props) {
                     <LoaderCircle size={16} className="mr-2 inline animate-spin text-amber-100/70" />
                     {t.previewLoading}
                   </p>
-                ) : previewHtml ? (
-                  <GuideContent html={previewHtml} />
+                ) : previewHtml?.length ? (
+                  <GuideContent segments={previewHtml} language={form.language} guideTitle={form.title} />
                 ) : (
                   <p className="py-10 text-center text-sm text-zinc-500">{t.previewEmpty}</p>
                 )}

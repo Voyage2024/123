@@ -15,6 +15,7 @@ import {
   isGuideLanguage,
   parseTags,
   slugify,
+  type GuideContentSegment,
   type GuideLanguage,
   type GuideRow,
 } from "@/lib/guides";
@@ -291,10 +292,10 @@ export async function discardGuideImages(urls: string[]): Promise<GuideActionRes
 }
 
 /** Предпросмотр в админке: тот же рендер и та же очистка HTML, что на сайте */
-export async function previewGuideContent(content: string): Promise<GuideActionResult<string>> {
+export async function previewGuideContent(content: string): Promise<GuideActionResult<GuideContentSegment[]>> {
   try {
     await requireRole(ADMIN_ROLES);
-    return { ok: true, data: renderGuideContent(String(content ?? "").slice(0, 300_000)).html };
+    return { ok: true, data: renderGuideContent(String(content ?? "").slice(0, 300_000)).segments };
   } catch (error) {
     return fail(error, "preview");
   }

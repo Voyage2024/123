@@ -192,3 +192,5 @@
 @media (min-width: 1024px) {
   .guide-prose .guide-wide { margin-left: -4rem; margin-right: -4rem; }
 }
+
+.guide-prose + .guide-prose { margin-top: 1.5rem; }

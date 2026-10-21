@@ -187,7 +187,7 @@ export default async function GuidePage({ params }: PageProps) {
     year: "numeric",
   });
   const rendered = renderGuideContent(guide.content);
-  const hasContent = rendered.html.length > 0;
+  const hasContent = rendered.hasContent;
   const seo = resolveGuideSeo(guide);
   const base = siteUrl();
 
@@ -303,7 +303,7 @@ export default async function GuidePage({ params }: PageProps) {
 
         {/* Текст гайда */}
         {hasContent ? (
-          <GuideContent html={rendered.html} />
+          <GuideContent segments={rendered.segments} language={guide.language} slug={guide.slug} guideTitle={guide.title} />
         ) : (
           guide.pdf_url && <p className="text-center text-sm font-light text-zinc-500">{t.pdfOnly}</p>
         )}

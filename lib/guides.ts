@@ -207,3 +207,15 @@ export function resolveGuideSeo(guide: Pick<GuideRow, "title" | "description" | 
     .filter(Boolean);
   return { title, description, keywords };
 }
+
+// ─── Интерактивный чек-лист в тексте гайда ─────────────────────────────
+
+/** Один пункт: html — уже очищенная inline-разметка, text — для копирования */
+export type GuideChecklistItem = { id: string; html: string; text: string; checked: boolean };
+export type GuideChecklistGroup = { title: string | null; items: GuideChecklistItem[] };
+export type GuideChecklistData = { title: string | null; groups: GuideChecklistGroup[] };
+
+/** Текст гайда после рендера: обычный HTML вперемешку с чек-листами */
+export type GuideContentSegment =
+  | { type: "html"; html: string }
+  | { type: "checklist"; data: GuideChecklistData };
