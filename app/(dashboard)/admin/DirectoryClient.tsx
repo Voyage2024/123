@@ -61,7 +61,7 @@ import {
   useKycSubmissions,
   type KycLevelWithFile,
   type KycSubmission,
-} from "./KycVault";
+} from "@/app/(dashboard)/admin/KycVault";
 
 export { cormorant };
 

@@ -7,7 +7,7 @@ import { useLanguage } from "@/app/context/LanguageContext";
 import { normalizeLang, type Lang } from "@/lib/gamification";
 import { supabase } from "@/lib/supabase";
 import { updateResidentTrust, type ResidentSegment } from "@/app/actions/admin-profile-trust";
-import { KycViewer, useKycSubmissions, type KycLevelWithFile } from "../../KycVault";
+import { KycViewer, useKycSubmissions, type KycLevelWithFile } from "@/app/(dashboard)/admin/KycVault";
 
 type Props = {
   profileId: string;

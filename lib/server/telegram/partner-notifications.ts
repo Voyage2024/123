@@ -1,9 +1,9 @@
 import "server-only";
 
 import { Bot, InlineKeyboard, type Context } from "grammy";
-import { getTelegramServiceClient } from "./service-client";
-import { getPreferredTelegramLanguage } from "./preferences";
-import type { TelegramLang } from "./types";
+import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
+import { getPreferredTelegramLanguage } from "@/lib/server/telegram/preferences";
+import type { TelegramLang } from "@/lib/server/telegram/types";
 
 type JsonRecord = Record<string, unknown>;
 type NotificationRow = JsonRecord & {

@@ -29,7 +29,7 @@ import {
   type Payer,
   type ProjectKey,
   type Raw,
-} from "../../partner/_lib/command";
+} from "@/app/(dashboard)/partner/_lib/command";
 
 /**
  * Отклик резидентки — partner_casting_responses.status, null — ещё не откликалась.

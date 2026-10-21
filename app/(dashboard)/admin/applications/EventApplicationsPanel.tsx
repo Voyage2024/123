@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calendar, Check, Loader2, RefreshCw, Search, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { ResidentTrustBadges } from './ResidentTrustBadges';
+import { ResidentTrustBadges } from '@/app/(dashboard)/admin/applications/ResidentTrustBadges';
 
 type Status = 'pending' | 'approved' | 'rejected' | 'completed';
 type Profile = {

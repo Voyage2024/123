@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarClock, CircleUserRound, ShieldCheck } from "lucide-react";
-import ResidentProfileManagement from "./ResidentProfileManagement";
-import DeleteResidentDangerZone from "./DeleteResidentDangerZone";
+import ResidentProfileManagement from "@/app/(dashboard)/admin/database/[id]/ResidentProfileManagement";
+import DeleteResidentDangerZone from "@/app/(dashboard)/admin/database/[id]/DeleteResidentDangerZone";
 import { createClient } from "@/lib/supabase/server";
 
 function isUuid(value: string) {

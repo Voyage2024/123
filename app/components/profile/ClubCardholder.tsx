@@ -31,7 +31,7 @@ import {
 } from "react";
 import { Crown } from "lucide-react";
 import type { CircleKey } from "@/lib/gamification";
-import { cormorant } from "./fonts";
+import { cormorant } from "@/app/components/profile/fonts";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПАЛИТРА КРУГОВ

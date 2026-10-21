@@ -11,8 +11,8 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react";
-import CandidateModal from "./CandidateModal";
-import { resolvePhotoUrls } from "./photoUrl";
+import CandidateModal from "@/app/(dashboard)/admin/face-control/CandidateModal";
+import { resolvePhotoUrls } from "@/app/(dashboard)/admin/face-control/photoUrl";
 
 export type Application = {
   id: string;

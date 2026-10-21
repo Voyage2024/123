@@ -16,7 +16,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/app/context/AuthContext";
 import { isClubAdmin, isStaff } from "@/lib/access";
 import { resolveAvatarUrl } from "@/lib/memberCards";
-import AdminOverviewClient, { cormorant, useOverviewI18n, type OverviewData } from "./AdminOverviewClient";
+import AdminOverviewClient, { cormorant, useOverviewI18n, type OverviewData } from "@/app/(dashboard)/admin/directory/AdminOverviewClient";
 
 type Raw = {
   residents?: number;

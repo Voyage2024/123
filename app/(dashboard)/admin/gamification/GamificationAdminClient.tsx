@@ -55,7 +55,7 @@ import {
   revokeGameStamp,
   issueResidentAchievement,
   revokeResidentAchievement,
-} from "./actions";
+} from "@/app/(dashboard)/admin/gamification/actions";
 import { useLanguage } from "@/app/context/LanguageContext";
 import {
   COMBO_LORE,

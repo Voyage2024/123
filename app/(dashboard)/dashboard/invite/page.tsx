@@ -33,7 +33,7 @@ import {
   type ClubInviteRow,
   type PatronageRuleRow,
 } from "@/lib/patronage";
-import InviteClient, { type InviteData, type IssuedKey, type Protege } from "./InviteClient";
+import InviteClient, { type InviteData, type IssuedKey, type Protege } from "@/app/(dashboard)/dashboard/invite/InviteClient";
 
 const RELOAD_DEBOUNCE_MS = 400;
 

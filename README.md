@@ -1,36 +1,140 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Voyage: правки по 7 пунктам
 
-## Getting Started
+Файлы лежат по тем же путям, что и в репозитории, поэтому их можно скопировать поверх. Второй вариант — применить `voyage-changes.patch` из корня проекта командой `git apply voyage-changes.patch`.
 
-First, run the development server:
+**Миграции не применялись к рабочей базе.** Их прогнали только на локальной копии схемы из дампа, результаты проверки описаны ниже.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Порядок применения миграций
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Миграции применяются строго по порядку, каждая выполняется в одной транзакции:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. `20261020090000_member_preferences.sql` — таблица `member_preferences`: тумблеры Telegram и флаг `hide_points`. Лидерборды отдают `points_hidden` и маскируют цифры.
+2. `20261020091000_telegram_notifications.sql`:
+   - новые шаблоны очереди и учёт отказов от оповещений;
+   - триггеры: одобрение в тур, начисление баллов (одно сообщение на транзакцию), новые туры и тусовки, ответы на кастинг;
+   - для менеджера: подпись контракта, загрузка документов, отзыв;
+   - атомарный захват строки очереди `voyage_claim_partner_notification`.
+3. `20261020092000_partner_tour_completion_points.sql`:
+   - автоначисление баллов при закрытии тура (`closed`, статус `completed` тоже принимается);
+   - RPC `partner_close_tour`;
+   - новые поля тура: `country_code`, `complexity_score` (менять может только админ), `closed_at`, `closed_by`.
+4. `20261020093000_points_history.sql` — RPC `get_my_points_history`: история начислений с источником, страной и формулой.
+5. `20261020094000_partner_live_pages.sql`:
+   - живые RPC для кастингов, манифеста, пульса и ключей;
+   - чёрный список: заявка менеджера (`pending`), решение админа, прямая запись админа;
+   - `partner_resident_tours` для резидентки.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Что сделано по пунктам
 
-## Learn More
+1. **Тумблеры резидентки.** Блок «Telegram-оповещения» в настройках: туры, тусовки, одобрение в тур, начисление баллов.
+   - Изменения сохраняются сразу; компоненты `app/components/NotificationPreferences.tsx` и `app/actions/notification-preferences.ts`.
+   - Отказ проверяется дважды: в SQL при постановке в очередь и в боте перед отправкой.
+2. **История баллов и скрытие рейтинга.**
+   - Компонент `PointsHistory` на странице геймификации (`#points-history`): за что начислено (тур, тусовка, тур менеджера, штамп, комбо, ачивка), фильтры, группировка по месяцам, раскрываемая формула.
+   - Тумблер «Скрыть мои баллы» убирает цифры в лидерборде и турах для других, а на главной показывает закрытую панель.
+3. **Карта** `/dashboard/map` переделана в премиальном стиле. На странице есть объяснение, карточки регионов с живыми счётчиками, блок «Как читать карту» и путь «От отклика до баллов».
+4. **Менеджер.**
+   - Карта и страницы направлений для менеджера закрыты заглушкой со ссылкой в Штаб (`ManagerMapGate`).
+   - На входе менеджер видит приветствие и слоган для партнёров. Редирект по роли идёт на `/partner`; раньше менеджера отправляло в `/admin`, где он получал «Доступ запрещён».
+   - **Баг с чужим профилем.** `/profile` был макетом резидентки с зашитыми данными, теперь он перенаправляет по роли. Ссылки со страниц направлений ведут на `/dashboard`.
+   - В Штабе (`/partner`) есть «Добрый день, [Имя]», KPI и новая строка быстрого доступа: кастинги, манифест, пульс, чёрный список, ключи, оповещения.
+5. **Демо убрано.**
+   - Кастинги, манифест, пульс, ключи и чёрный список читают RPC. Есть состояния загрузки, ошибки и пустых данных.
+   - Пульс сохраняет оценку участницы в `partner_reviews`.
+   - Чёрный список:
+     - менеджер отправляет заявку (участница его тура, причина, описание) и видит свои заявки «На проверке»;
+     - админ видит доказательства и заявителя, подтверждает, переводит на апелляцию, снимает, задаёт срок, вносит запись напрямую.
+   - В Ключах остались блоки с объяснениями и лестницей уровней.
+   - У резидентки на `/dashboard/castings` появился блок «Мои туры»: итог, баллы и анонимная оценка менеджера.
+   - Переменная `NEXT_PUBLIC_PARTNER_DATA` больше не нужна, пульт всегда работает на живых данных.
+6. **Оповещения менеджера.** Блок в `/admin/settings` (доступен менеджеру): ответы на кастинг, подписи контрактов, документы, отзывы, заявки на локации.
+7. **Автобаллы.**
+   - Тур закрывается в комнате тура панелью «Закрыть тур · начислить баллы»: итог по каждой участнице и страна. Вызывает `partner_close_tour`.
+   - Триггер начисляет баллы всем долетевшим (база 100, плюс гонорар и надёжность, умноженные на сложность), ставит штамп паспорта, отправляет Telegram.
+   - Для заявок на локации админ может «Завершить тур» в `admin/map-locations`.
 
-To learn more about Next.js, take a look at the following resources:
+## Переменные окружения
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Новых переменных нет. Используются уже существующие:
+- `SUPABASE_SERVICE_ROLE_KEY`;
+- `TELEGRAM_BOT_TOKEN`;
+- `PARTNER_NOTIFICATIONS_WEBHOOK_SECRET`;
+- `NEXT_PUBLIC_SITE_URL`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`NEXT_PUBLIC_PARTNER_DATA` можно удалить.
 
-## Deploy on Vercel
+## ⚠️ Безопасность: секрет вебхука в триггере
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+В текущей базе триггер очереди `partner_notifications` (вызывает `supabase_functions.http_request` → `/api/telegram/notify`) хранит секрет открытым текстом в заголовке `x-voyage-webhook-secret`. Значение видно в дампе, поэтому его стоит считать скомпрометированным. Что нужно сделать:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Сгенерировать новый секрет и записать его в `PARTNER_NOTIFICATIONS_WEBHOOK_SECRET` на хостинге.
+2. Пересоздать webhook в Supabase Dashboard (Database → Webhooks) с новым секретом и условием `WHEN (new.status = 'queued')`. Тогда служебные строки `skipped` и `opted_out` не будут дёргать сайт.
+3. Не коммитить дамп с секретом в репозиторий.
+
+## Проверка
+
+- **SQL.** Все 5 миграций применены к локальной копии схемы из дампа (PostgreSQL), затем прогнаны сквозные сценарии:
+  - закрытие тура дало 150 баллов за тур и 25 за штамп;
+  - баллы пришли одним Telegram-сообщением;
+  - отказ от оповещений соблюдается;
+  - история баллов собирается;
+  - скрытые баллы маскируются в лидерборде;
+  - заявка в чёрный список проходит путь pending → confirmed;
+  - отзыв уведомляет менеджера;
+  - новый тур рассылается резиденткам;
+  - захват строки очереди идемпотентен;
+  - статус `completed` работает как синоним `closed`.
+
+  Все сценарии прошли.
+- **TypeScript.** `tsc --strict` по всему проекту (next 15, react 19, supabase-js 2). Новых ошибок нет. Те же 11 ошибок, что и до правок, есть и в исходном коде: в песочнице не установлен `framer-motion` и есть типы в `delete-resident.ts`.
+- `next build` и запуск в браузере не проводились: в архиве нет `package.json`.
+
+## Дополнение: гиды по кабинету партнёра
+
+Это отдельная правка, база данных в ней не меняется. Её патч лежит в `partner-guides.patch`, а файлы этой правки собраны в архиве `partner-guides.zip`.
+
+- `app/(dashboard)/partner/_components/PartnerGuide.tsx` — общий сворачиваемый гид. Он выглядит так же, как RulesPanel в Ключах: панель, заголовок шрифтом Cormorant, золотые номера шагов. Свёрнут гид или открыт, запоминается на устройстве отдельно для каждой страницы.
+- `app/(dashboard)/partner/_components/guides.ts` — тексты гидов на RU/EN/ES/PT и иконки к ним. Править формулировки нужно здесь.
+- Гиды подключены на страницы: Штаб, Кастинги, Манифест, Комната тура, Пульс, Чёрный список. Ключи не трогали.
+
+## Дополнение: секция гайдов на главной (21.10.2026)
+
+Отдельная правка, только код, база данных не меняется. Патч: `guides-section.patch` (накладывается на исходный архив).
+
+- `app/(public)/_components/GuidesSection.tsx` — новая секция «Библиотека клуба / Гайды и шпаргалки»: карточка статьи с иконкой чемодана, номером гайда, бейджем «Новое», временем чтения, кратким описанием, тегами и двумя кнопками («Читать гайд» открывает PDF в новой вкладке, «Скачать PDF» сразу скачивает). Рядом карточка «Скоро новые гайды». Тексты на RU/EN/ES/PT, язык берётся из `LanguageContext`, как на главной.
+- `app/(public)/page.tsx` — секция подключена между «Актуальными направлениями» и «Почему Voyage».
+- Новый гайд добавляется одним объектом в массив `guides` в том же файле.
+- **PDF статьи нужно положить в `public/guides/voyage-suitcase-guide.pdf`.** Пока файла нет, кнопки будут вести на 404. Время чтения (7 мин) поставлено ориентировочно, поле `minutes`.
+- Превью: `previews/guides-section-desktop.png` и `previews/guides-section-mobile.png` (секция отрисована отдельно, с теми же классами Tailwind).
+- Проверка: `tsc --strict` по новым файлам (react 18, framer-motion 11, lucide-react 0.400) без новых ошибок. Иконки `Luggage`, `BookOpen`, `Download` раньше в проекте не использовались, но есть в lucide-react давно.
+
+## Дополнение: фикс сборки Turbopack, шрифт Cormorant (21.10.2026)
+
+Сборка на Vercel падала с `Module not found: Can't resolve '@vercel/turbopack-next/internal/font/google/font'`.
+Патч `font-cdn-fix.patch` (применять из корня репо: `git apply voyage-changes/font-cdn-fix.patch`) убирает `next/font/google` целиком:
+
+- `app/components/profile/fonts.ts` — `cormorant` теперь простой объект `{ className, variable, style }`, все ~30 файлов с `cormorant.className` не меняются.
+- `app/layout.tsx` — локальный `Cormorant_Garamond` удалён, берётся общий `cormorant`.
+- `app/globals.css` — `@import` Google Fonts первой строкой (до `@import "tailwindcss"`), `--font-cormorant` на `:root`, класс `.voyage-cormorant` и утилита `font-cormorant` через `@theme`.
+
+`font-serif` не трогали: он как был системным сериф-стеком Tailwind, так и остался.
+
+## Дополнение: страница ролей `/admin/roles` переписана (21.10.2026)
+
+Только код, база данных не меняется. Файл: `app/(dashboard)/admin/roles/page.tsx`, патч: `admin-roles-page.patch` (накладывается на исходный архив).
+
+- Импорты собраны заново по реальным путям. Алиас `@/` в проекте указывает на корень репо, поэтому всё идёт через `@/app/...`: `@/app/actions/access-control`, `@/app/actions/map-locations`, `@/app/components/admin/AddStaffModal`, `@/app/components/admin/TelegramRecoveryLinkModal`, `@/app/context/LanguageContext`, `@/app/context/AuthContext`. Варианты `@/actions/...` и `@/components/...` в этом проекте не резолвятся.
+- Логика та же: смена ролей, баны и снятие банов, Telegram-ссылка восстановления, приглашение сотрудника, закрепление за локациями карты, автообновление присутствия раз в минуту. Словари RU/EN/ES/PT перенесены без изменений.
+- Новое: страница берёт `useAuth()` и грузит данные только когда сессия проверена и роль `owner` (раньше запросы уходили ещё до проверки сессии). Модалку бана нельзя закрыть «Отменой», пока запрос идёт, на кнопке подтверждения крутится лоадер.
+- Проверка: `tsc --strict` с алиасом `@/* → ./*` (react 19, next 15, lucide-react) — в странице ошибок 0.
+
+## Дополнение: относительные импорты переведены на `@/` (21.10.2026)
+
+Только код, база данных не меняется. Патч: `abs-imports-fix.patch`, 70 файлов, меняются только строки `import`/`export ... from`. Накладывается на состояние «исходный архив + все предыдущие правки из `voyage-changes/`»: `git apply voyage-changes/abs-imports-fix.patch` из корня репо. Обновлённые файлы целиком тоже лежат здесь по своим путям.
+
+- Каждый `./` и `../` в `app/` и `lib/` заменён на эквивалентный `@/app/...` или `@/lib/...` (алиас `@/* → ./*`). Цели не менялись, файлы никуда не переносились.
+- `app/(dashboard)/partner/manifest/[id]/page.tsx`: `../../_lib/routes` → `@/app/(dashboard)/partner/_lib/routes`. Вариант `@/lib/routes` не подходит: в корневой `lib/` файла `routes.ts` нет, `ROUTES` живёт только в `partner/_lib/routes.ts`.
+- `GamificationClient.tsx` и `LocationManagementPanel.tsx` лежат рядом со своими `page.tsx` (не в `_components`), импорты: `@/app/(dashboard)/dashboard/gamification/GamificationClient` и `@/app/(dashboard)/admin/map-locations/LocationManagementPanel`.
+- Два файла с переводами строк CRLF (`face-control/AccessCredentials.tsx`, `partner/castings/new/page.tsx`) сохранили CRLF, дифф только по строкам импорта.
+- Проверка: скрипт резолва — 0 неразрешённых `@/` и не осталось ни одного относительного импорта; `tsc` по всему `app/` + `lib/` даёт ровно тот же список ошибок, что и до правки (ошибок «Cannot find module» по локальным файлам нет).
+- Важно: в исходном архиве все относительные импорты и так указывали на существующие файлы. Если Vercel пишет `Module not found`, скорее всего этих файлов нет в git (не закоммичены или отрезаны `.gitignore`) либо у них другой регистр в имени: Vercel собирает на Linux, где `Routes.ts` ≠ `routes.ts`.

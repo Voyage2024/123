@@ -1,8 +1,8 @@
 import "server-only";
 
 import { Api } from "grammy";
-import { getTelegramServiceClient } from "./service-client";
-import type { TelegramLang } from "./types";
+import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
+import type { TelegramLang } from "@/lib/server/telegram/types";
 
 export type ApprovedCredentials = {
   deliveryId: string;

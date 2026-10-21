@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/app/context/AuthContext";
-import FaceControlList, { type Application } from "./FaceControlList";
+import FaceControlList, { type Application } from "@/app/(dashboard)/admin/face-control/FaceControlList";
 import { approveProfile } from "@/app/actions/approve-profile";
-import { declineApplication } from "./actions";
+import { declineApplication } from "@/app/(dashboard)/admin/face-control/actions";
 import { cormorant } from "@/app/components/profile/fonts";
 
 /* ──────────────────────────────────────────────────────────────────────

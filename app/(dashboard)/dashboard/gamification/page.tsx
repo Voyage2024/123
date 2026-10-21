@@ -9,7 +9,7 @@
  * ──────────────────────────────────────────────────────────────────── */
 
 import { BadgeCheck, Crown, Gem, Landmark, Plane, Stamp } from "lucide-react";
-import GamificationClient from "./GamificationClient";
+import GamificationClient from "@/app/(dashboard)/dashboard/gamification/GamificationClient";
 import PageExplainerHeader, { type ExplainerDict } from "@/app/(dashboard)/dashboard/_components/PageExplainerHeader";
 
 const COPY: ExplainerDict = {

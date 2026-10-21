@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { AuthProvider } from "./context/AuthContext"; // "Мозг" авторизации
-import { LanguageProvider } from "./context/LanguageContext"; // Глобальный язык
-import Navbar from "./components/Navbar";
-import PresenceHeartbeat from "./components/PresenceHeartbeat";
-import { cormorant } from "./components/profile/fonts";
-import "./globals.css";
-import "./mobile.css";
+import { AuthProvider } from "@/app/context/AuthContext"; // "Мозг" авторизации
+import { LanguageProvider } from "@/app/context/LanguageContext"; // Глобальный язык
+import Navbar from "@/app/components/Navbar";
+import PresenceHeartbeat from "@/app/components/PresenceHeartbeat";
+import { cormorant } from "@/app/components/profile/fonts";
+import "@/app/globals.css";
+import "@/app/mobile.css";
 import type { Viewport } from "next";
 
 export const viewport: Viewport = {

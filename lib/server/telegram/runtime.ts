@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Bot } from "grammy";
-import { createVoyageTelegramBot } from "./bot";
+import { createVoyageTelegramBot } from "@/lib/server/telegram/bot";
 
 let instance: Bot | null = null;
 let tokenUsed: string | null = null;

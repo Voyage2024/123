@@ -1,5 +1,5 @@
 "use client";
-import AccessCredentials from "./AccessCredentials";
+import AccessCredentials from "@/app/(dashboard)/admin/face-control/AccessCredentials";
 import { useCallback, useEffect, useState } from "react";
 import {
   X,
@@ -16,8 +16,8 @@ import {
   Cigarette,
   Wine,
 } from "lucide-react";
-import type { Application } from "./FaceControlList";
-import { resolvePhotoUrls } from "./photoUrl";
+import type { Application } from "@/app/(dashboard)/admin/face-control/FaceControlList";
+import { resolvePhotoUrls } from "@/app/(dashboard)/admin/face-control/photoUrl";
 import { cormorant } from "@/app/components/profile/fonts";
 
 type Props = {

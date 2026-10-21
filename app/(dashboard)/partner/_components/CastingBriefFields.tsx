@@ -17,7 +17,7 @@
 import { useId, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
-import type { Payer, ProjectKey } from "../_lib/command";
+import type { Payer, ProjectKey } from "@/app/(dashboard)/partner/_lib/command";
 
 export const PROJECT_TYPES: ProjectKey[] = ["shoot", "show", "campaign", "event"];
 export const AUDIENCE_SEGMENTS = ["all", "working", "elite"] as const;

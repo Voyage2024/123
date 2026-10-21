@@ -11,9 +11,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { CommandError } from "./command";
-import { buildRoomMock, fetchDealRoom, type DealRoomData } from "./dealRoom";
-import { DATA_SOURCE, type DataSource } from "./routes";
+import { CommandError } from "@/app/(dashboard)/partner/_lib/command";
+import { buildRoomMock, fetchDealRoom, type DealRoomData } from "@/app/(dashboard)/partner/_lib/dealRoom";
+import { DATA_SOURCE, type DataSource } from "@/app/(dashboard)/partner/_lib/routes";
 
 const REFRESH_MS = 30_000;
 

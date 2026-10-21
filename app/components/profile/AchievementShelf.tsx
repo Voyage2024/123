@@ -31,8 +31,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Lang } from "@/app/context/LanguageContext";
-import { cormorant } from "./fonts";
-import "./achievement-shelf.css";
+import { cormorant } from "@/app/components/profile/fonts";
+import "@/app/components/profile/achievement-shelf.css";
 
 export const ACHIEVEMENT_KEYS = [
   "welcome_to_voyage",

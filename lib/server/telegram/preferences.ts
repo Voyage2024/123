@@ -1,7 +1,7 @@
 import "server-only";
 
-import { getTelegramServiceClient } from "./service-client";
-import { isTelegramLang, languageFromTelegram, type TelegramLang } from "./types";
+import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
+import { isTelegramLang, languageFromTelegram, type TelegramLang } from "@/lib/server/telegram/types";
 
 /** Returns a manually selected language, or null if this user has not selected one yet. */
 export async function getStoredTelegramLanguage(telegramId: string): Promise<TelegramLang | null> {

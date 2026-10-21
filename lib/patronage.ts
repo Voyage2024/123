@@ -12,7 +12,7 @@
  * если админ поменял их в базе, побеждает база.
  * ──────────────────────────────────────────────────────────────────── */
 
-import { CIRCLES, normalizeCircleKey, num, type CircleKey } from "./gamification";
+import { CIRCLES, normalizeCircleKey, num, type CircleKey } from "@/lib/gamification";
 
 /* ── Статусы ключа ───────────────────────────────────────────────── */
 

@@ -42,7 +42,7 @@ import DirectoryClient, {
   type DirectoryText,
   type KycFilter,
   type ResidentDraft,
-} from "./DirectoryClient";
+} from "@/app/(dashboard)/admin/DirectoryClient";
 
 const PHOTO_BUCKET = "user-uploads";
 const SIGNED_URL_TTL = 60 * 60;

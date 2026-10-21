@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Lang } from "@/app/context/LanguageContext";
-import { cormorant } from "./fonts";
+import { cormorant } from "@/app/components/profile/fonts";
 
 /* ══════════════════════════════════════════════════════════════════
  * КОНСТАНТЫ

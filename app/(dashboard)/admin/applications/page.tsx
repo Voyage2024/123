@@ -29,8 +29,8 @@ import { supabase } from '@/lib/supabase';
 import RoleGuard from '@/app/components/RoleGuard';
 import { useAuth } from '@/app/context/AuthContext';
 import { useLanguage, type Lang } from '@/app/context/LanguageContext';
-import EventApplicationsPanel from './EventApplicationsPanel';
-import { ResidentTrustBadges } from './ResidentTrustBadges';
+import EventApplicationsPanel from '@/app/(dashboard)/admin/applications/EventApplicationsPanel';
+import { ResidentTrustBadges } from '@/app/(dashboard)/admin/applications/ResidentTrustBadges';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Настройки

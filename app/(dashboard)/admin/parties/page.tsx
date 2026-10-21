@@ -20,11 +20,11 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/app/context/LanguageContext';
 import { cormorant } from "@/app/components/profile/fonts";
-import PartyApplicationsDialog from "./PartyApplicationsDialog";
+import PartyApplicationsDialog from "@/app/(dashboard)/admin/parties/PartyApplicationsDialog";
 import {
   getEventApplicationSummaries,
   type PartyApplicationSummary,
-} from "./actions";
+} from "@/app/(dashboard)/admin/parties/actions";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */

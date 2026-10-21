@@ -34,7 +34,7 @@ import {
   declineCastingResponse,
   setCastingResponseOption,
   type CastingActionResult,
-} from "./actions";
+} from "@/app/(dashboard)/partner/castings/[id]/actions";
 
 type Casting = {
   id: string;

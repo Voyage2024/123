@@ -21,7 +21,7 @@ import {
   type PartyApplication,
   type PartyApplicationStatus,
   type PartyApplicationSummary,
-} from "./actions";
+} from "@/app/(dashboard)/admin/parties/actions";
 import { cormorant } from "@/app/components/profile/fonts";
 
 type Props = {

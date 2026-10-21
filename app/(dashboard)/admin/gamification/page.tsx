@@ -31,7 +31,7 @@ import GamificationAdminClient, {
   type AdminGameStamp,
   type ExtraDestination,
   type SavedRow,
-} from "./GamificationAdminClient";
+} from "@/app/(dashboard)/admin/gamification/GamificationAdminClient";
 import {
   TIERS,
   circleFor,

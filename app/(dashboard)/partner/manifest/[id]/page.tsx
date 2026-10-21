@@ -7,7 +7,7 @@
  * ──────────────────────────────────────────────────────────────────── */
 
 import { redirect } from "next/navigation";
-import { ROUTES } from "../../_lib/routes";
+import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
 
 // Next 15 передаёт params промисом; в Next 14 await обычного объекта тоже работает
 export default async function PartnerTourPage({ params }: { params: Promise<{ id: string }> }) {

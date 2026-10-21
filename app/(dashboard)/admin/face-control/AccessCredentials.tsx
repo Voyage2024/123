@@ -2,7 +2,7 @@
  
 import { useEffect, useState } from "react";
 import { Check, Copy, KeyRound } from "lucide-react";
-import type { Application } from "./FaceControlList";
+import type { Application } from "@/app/(dashboard)/admin/face-control/FaceControlList";
  
 /* ──────────────────────────────────────────────────────────────────────
  * Access Credentials — блок доступов гостя в модалке Face Control.

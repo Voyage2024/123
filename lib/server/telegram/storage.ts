@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { Api } from "grammy";
-import { getTelegramServiceClient } from "./service-client";
+import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
 
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 const BUCKET = process.env.TELEGRAM_STORAGE_BUCKET?.trim() || "user-uploads";

@@ -11,7 +11,7 @@
  * ──────────────────────────────────────────────────────────────────── */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DAY, HOUR, MIN } from "./clock";
+import { DAY, HOUR, MIN } from "@/app/(dashboard)/partner/_lib/clock";
 import {
   CommandError,
   PROJECTS,
@@ -27,8 +27,8 @@ import {
   type ContractTerms,
   type ProjectKey,
   type Trust,
-} from "./command";
-import type { NotifyTemplate } from "./actions";
+} from "@/app/(dashboard)/partner/_lib/command";
+import type { NotifyTemplate } from "@/app/(dashboard)/partner/_lib/actions";
 
 /* ══════════════════════════════════════════════════════════════════
  * ТИПЫ

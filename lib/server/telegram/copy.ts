@@ -1,5 +1,5 @@
 import { InlineKeyboard } from "grammy";
-import type { TelegramLang } from "./types";
+import type { TelegramLang } from "@/lib/server/telegram/types";
 
 type FaqTopic = "application" | "review" | "photos" | "access";
 type Copy = {

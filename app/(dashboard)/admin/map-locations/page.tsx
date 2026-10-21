@@ -20,7 +20,7 @@ import {
 import { useLanguage } from "@/app/context/LanguageContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { supabase } from "@/lib/supabase";
-import LocationManagementPanel from "./LocationManagementPanel";
+import LocationManagementPanel from "@/app/(dashboard)/admin/map-locations/LocationManagementPanel";
 
 type Lang = "EN" | "RU" | "ES" | "PT";
 type Localized = Record<Lang, string>;

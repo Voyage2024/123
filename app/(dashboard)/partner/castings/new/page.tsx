@@ -18,7 +18,7 @@ import {
   createCasting,
   type BriefErrorKey,
   type BriefValues,
-} from "../../_components/CastingBriefFields";
+} from "@/app/(dashboard)/partner/_components/CastingBriefFields";
 
 export default function NewCastingPage() {
   const router = useRouter();

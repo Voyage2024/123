@@ -32,7 +32,7 @@ import {
   type ClubInviteRow,
   type PatronageRuleRow,
 } from "@/lib/patronage";
-import AdminInvitesClient, { cormorant, useInvitesI18n } from "./AdminInvitesClient";
+import AdminInvitesClient, { cormorant, useInvitesI18n } from "@/app/(dashboard)/admin/invites/AdminInvitesClient";
 
 const RELOAD_DEBOUNCE_MS = 400;
 

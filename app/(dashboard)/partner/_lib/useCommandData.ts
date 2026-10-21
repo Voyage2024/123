@@ -15,8 +15,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { buildMock, CommandError, fetchCommand, type CommandData } from "./command";
-import { DATA_SOURCE, type DataSource } from "./routes";
+import { buildMock, CommandError, fetchCommand, type CommandData } from "@/app/(dashboard)/partner/_lib/command";
+import { DATA_SOURCE, type DataSource } from "@/app/(dashboard)/partner/_lib/routes";
 
 export type CommandSource = DataSource;
 export const COMMAND_SOURCE: CommandSource = DATA_SOURCE;

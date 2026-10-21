@@ -1,8 +1,8 @@
 import "server-only";
 
 import { InlineKeyboard } from "grammy";
-import { getTelegramServiceClient } from "./service-client";
-import type { TelegramLang } from "./types";
+import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
+import type { TelegramLang } from "@/lib/server/telegram/types";
 
 type RegistrationSource = "landing" | "telegram_bot" | "referral";
 type RegistrationNotice = {
@@ -73,7 +73,7 @@ export async function notifyAdminsOfNewRegistration(input: RegistrationNotice): 
     } catch { destination = null; }
 
     // Dynamic import avoids a circular import: onboarding handlers are installed by bot.ts.
-    const { getVoyageTelegramBot } = await import("./runtime");
+    const { getVoyageTelegramBot } = await import("@/lib/server/telegram/runtime");
     const bot = getVoyageTelegramBot();
     for (const [chatId, lang] of recipients) {
       const claimResult = await db.rpc("claim_admin_telegram_notification", { p_event_key: input.eventKey, p_recipient_chat_id: chatId });

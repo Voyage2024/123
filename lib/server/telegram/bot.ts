@@ -2,13 +2,13 @@ import "server-only";
 
 import { Bot, GrammyError, HttpError } from "grammy";
 import { createHash, randomInt, randomUUID } from "node:crypto";
-import { copy, faqMenu, languageMenu, mainMenu } from "./copy";
-import { cancelRegistration, beginRegistration, getConversationState, saveConversationState, handleRegistrationPhoto, handleRegistrationText, sendWelcome, updateConversationLanguage } from "./onboarding";
-import { getTelegramServiceClient } from "./service-client";
-import { getPreferredTelegramLanguage } from "./preferences";
-import { sendApprovedCredentialsTelegram } from "./credentials";
-import { languageFromTelegram, type TelegramLang } from "./types";
-import { handlePartnerContractSignCallback } from "./partner-notifications";
+import { copy, faqMenu, languageMenu, mainMenu } from "@/lib/server/telegram/copy";
+import { cancelRegistration, beginRegistration, getConversationState, saveConversationState, handleRegistrationPhoto, handleRegistrationText, sendWelcome, updateConversationLanguage } from "@/lib/server/telegram/onboarding";
+import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
+import { getPreferredTelegramLanguage } from "@/lib/server/telegram/preferences";
+import { sendApprovedCredentialsTelegram } from "@/lib/server/telegram/credentials";
+import { languageFromTelegram, type TelegramLang } from "@/lib/server/telegram/types";
+import { handlePartnerContractSignCallback } from "@/lib/server/telegram/partner-notifications";
 
 function isBanned(profile: { banned_until?: string | null; ban_permanent?: boolean | null }): boolean {
   if (profile.ban_permanent === true || profile.banned_until === "infinity") return true;

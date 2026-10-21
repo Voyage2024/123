@@ -36,8 +36,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
-import { DAY, UNITS, fmtAge } from "../_lib/clock";
-import type { Contract, Payer, Trust } from "../_lib/command";
+import { DAY, UNITS, fmtAge } from "@/app/(dashboard)/partner/_lib/clock";
+import type { Contract, Payer, Trust } from "@/app/(dashboard)/partner/_lib/command";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПЕРЕВОДЫ

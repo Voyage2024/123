@@ -30,7 +30,7 @@
 import { useId, useState } from "react";
 import { Check, Clock, Loader2, Send, ShieldAlert, Unlink, type LucideIcon } from "lucide-react";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
-import { ActionError, type ActionFailure, type NotifyResult } from "../_lib/actions";
+import { ActionError, type ActionFailure, type NotifyResult } from "@/app/(dashboard)/partner/_lib/actions";
 
 type Phase = "idle" | "submitting" | "sent" | "partial" | "throttled" | "nobody" | "empty" | "error";
 

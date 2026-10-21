@@ -16,7 +16,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/app/context/AuthContext";
 import { isClubAdmin } from "@/lib/access";
 import { normalizeApplication, type GuestApplication, type GuestApplicationRow } from "@/lib/guestApplications";
-import AdminRequestsClient, { cormorant, useRequestsI18n } from "./AdminRequestsClient";
+import AdminRequestsClient, { cormorant, useRequestsI18n } from "@/app/(dashboard)/admin/requests/AdminRequestsClient";
 
 const RELOAD_DEBOUNCE_MS = 400;
 const WEEK_MS = 7 * 86_400_000;

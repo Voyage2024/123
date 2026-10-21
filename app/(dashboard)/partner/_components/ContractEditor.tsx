@@ -16,9 +16,9 @@
 import { useId, useMemo, useState, type ReactNode } from "react";
 import { ArrowRight, Banknote, BedDouble, Hourglass, Info, Plane, Send, type LucideIcon } from "lucide-react";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
-import type { ContractTerms, Payer } from "../_lib/command";
-import type { NotifyResult } from "../_lib/actions";
-import { TelegramAction } from "./TelegramAction";
+import type { ContractTerms, Payer } from "@/app/(dashboard)/partner/_lib/command";
+import type { NotifyResult } from "@/app/(dashboard)/partner/_lib/actions";
+import { TelegramAction } from "@/app/(dashboard)/partner/_components/TelegramAction";
 
 const CURRENCIES = ["USD", "EUR", "AED", "AUD"] as const;
 const SPLITS = ["50/50", "30/70", "100%"] as const;

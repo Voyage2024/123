@@ -2,12 +2,12 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import type { Context } from "grammy";
-import { copy, mainMenu } from "./copy";
-import { getTelegramServiceClient } from "./service-client";
-import { notifyAdminsOfNewRegistration } from "./admin-notifications";
-import { uploadTelegramPhoto } from "./storage";
-import type { RegistrationAnswers, TelegramConversationState, TelegramLang } from "./types";
-import { getPreferredTelegramLanguage, savePreferredTelegramLanguage } from "./preferences";
+import { copy, mainMenu } from "@/lib/server/telegram/copy";
+import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
+import { notifyAdminsOfNewRegistration } from "@/lib/server/telegram/admin-notifications";
+import { uploadTelegramPhoto } from "@/lib/server/telegram/storage";
+import type { RegistrationAnswers, TelegramConversationState, TelegramLang } from "@/lib/server/telegram/types";
+import { getPreferredTelegramLanguage, savePreferredTelegramLanguage } from "@/lib/server/telegram/preferences";
 
 const MIN_PHOTOS = 2;
 const MAX_PHOTOS = 3;

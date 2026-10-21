@@ -48,9 +48,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Lang } from "@/app/context/LanguageContext";
-import { DAY } from "../../partner/_lib/clock";
-import type { ProjectKey } from "../../partner/_lib/command";
-import { pl, ru, usePartnerFormat, type Common, type Fmt } from "../../partner/_lib/format";
+import { DAY } from "@/app/(dashboard)/partner/_lib/clock";
+import type { ProjectKey } from "@/app/(dashboard)/partner/_lib/command";
+import { pl, ru, usePartnerFormat, type Common, type Fmt } from "@/app/(dashboard)/partner/_lib/format";
 import {
   BTN_GOLD,
   FilterTabs,
@@ -61,15 +61,15 @@ import {
   TIER_LABEL,
   TIER_TEXT,
   cormorant,
-} from "../../partner/_components/PartnerUI";
+} from "@/app/(dashboard)/partner/_components/PartnerUI";
 import {
   fetchCastingFeed,
   type CastingFeedData,
   type FeedCasting,
   type ResidentProfile,
   type ResponseStatus,
-} from "../_lib/castingFeed";
-import { applyToCasting, markCastingsSeen, setOpenToTours, withdrawResponse, type ActionResult } from "../_lib/actions";
+} from "@/app/(dashboard)/dashboard/_lib/castingFeed";
+import { applyToCasting, markCastingsSeen, setOpenToTours, withdrawResponse, type ActionResult } from "@/app/(dashboard)/dashboard/_lib/actions";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПЕРЕВОДЫ
