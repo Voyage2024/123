@@ -11,6 +11,7 @@ import {
   ADMIN_HOME_PATH,
   type Role,
 } from "@/lib/rbac";
+import { bunkerGuard } from "@/lib/bunker/middleware"; // 👈 Импорт защиты бункера
 
 const LOGIN_PATH = "/login";
 const STAFF_HOME_PATH = ADMIN_HOME_PATH;
@@ -54,6 +55,13 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // 🔒 Защита приватного бункера /bunker (строго для владельца)
+  const bunker = await bunkerGuard(request, {
+    supabase,
+    userId: user?.id ?? null,
+  });
+  if (bunker) return bunker;
 
   const { pathname } = request.nextUrl;
   if (request.cookies.has(LEGACY_COOKIE)) response.cookies.delete(LEGACY_COOKIE);
