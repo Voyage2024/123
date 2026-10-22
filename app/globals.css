@@ -24,6 +24,24 @@
   font-family: var(--font-cormorant);
 }
 
+/* Золотой перелив текста (главная, «Твой выбор.») — #c9a961 с бликом */
+.voyage-gold-shimmer {
+  background: linear-gradient(110deg, #a8884a 0%, #c9a961 30%, #f3e3b8 48%, #c9a961 62%, #a8884a 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: voyage-gold-shimmer 7s ease-in-out infinite;
+  padding-right: 0.08em; /* курсив не обрезается по правому краю */
+}
+@keyframes voyage-gold-shimmer {
+  0%, 100% { background-position: 100% 0; }
+  50% { background-position: 0% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .voyage-gold-shimmer { animation: none; background-position: 50% 0; }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;

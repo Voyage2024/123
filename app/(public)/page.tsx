@@ -7,12 +7,12 @@ import {
   Shield,
   Lock,
   BadgeDollarSign,
-  Key,
-  Sparkles,
   ShieldCheck,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext"; // <-- ДОБАВИЛИ ИМПОРТ ГЛОБАЛЬНОГО ЯЗЫКА
 import GuidesSection from "@/app/(public)/_components/GuidesSection";
+import ManifestoSection from "@/app/(public)/_components/ManifestoSection";
+import TeamSection from "@/app/(public)/_components/TeamSection";
 
 // next/font переименовывает шрифт, поэтому берём его через CSS-переменную
 const SERIF = "var(--font-cormorant), Georgia, serif";
@@ -51,14 +51,6 @@ export default function HomePage() {
       value3Desc: "100% retention of tips. Everything you earn above the rate stays with you only.",
       footerRights: "Private Members Only — All Rights Reserved",
       footerAccess: "Member Access →",
-      missionEyebrow: "Mission & Positioning",
-      manifesto: "We do not just organize travel. Voyage is a private, invitation-only club. A place where the world's elite, the right connections, and impeccable aesthetics converge.",
-      pillar1Title: "The Inner Circle",
-      pillar1Desc: "Access is everything. Become part of an exclusive network. From closed after-parties in Hollywood to private yacht charters in Monaco, we put you in the right room with the right people.",
-      pillar2Title: "Impeccable Image",
-      pillar2Desc: "Aesthetic is our currency. We host high-end image parties and elite gatherings where absolute beauty meets undeniable status.",
-      pillar3Title: "Ultimate Discretion",
-      pillar3Desc: "Your privacy is our highest priority. Flawless security, non-disclosure protocols, and a seamless VIP experience across 4 continents.",
       formEyebrow: "Join The Club",
       formTitle: "Registration Through Telegram Only",
       formDesc: "VOYAGE is a private community. New resident applications and verification are handled exclusively through our official Telegram bot.",
@@ -92,14 +84,6 @@ export default function HomePage() {
       value3Desc: "Полное сохранение чаевых. Всё, что вы зарабатываете сверх тарифа, остаётся только у вас.",
       footerRights: "Только для членов клуба — Все права защищены",
       footerAccess: "Вход для резидентов →",
-      missionEyebrow: "Миссия и позиционирование",
-      manifesto: "Мы не просто организуем поездки. Voyage — это закрытый клуб по приглашениям. Место, где пересекаются мировая элита, правильные связи и безупречная эстетика.",
-      pillar1Title: "Закрытое комьюнити",
-      pillar1Desc: "Доступ решает всё. Станьте частью эксклюзивного нетворка. От закрытых after-party в Голливуде до чартеров в Монако — мы открываем двери в правильные комнаты к нужным людям.",
-      pillar2Title: "Безупречный имидж",
-      pillar2Desc: "Эстетика — наша валюта. Мы организуем премиальные имидж-вечеринки и элитные собрания, где абсолютная красота встречается с непререкаемым статусом.",
-      pillar3Title: "Абсолютная приватность",
-      pillar3Desc: "Ваша приватность — наш абсолютный приоритет. Безупречная безопасность, протоколы конфиденциальности и бесшовный VIP-сервис на 4 континентах.",
       formEyebrow: "Вступление в клуб",
       formTitle: "Регистрация только через Telegram",
       formDesc: "VOYAGE - закрытое сообщество. Регистрация и верификация новых резиденток проходит исключительно через нашего официального Telegram-бота.",
@@ -133,14 +117,6 @@ export default function HomePage() {
       value3Desc: "Conservas el 100% de tus propinas. Todo lo que ganes por encima de la tarifa es solo tuyo.",
       footerRights: "Solo para Miembros Privados — Todos los Derechos Reservados",
       footerAccess: "Acceso de Miembros →",
-      missionEyebrow: "Misión y Posicionamiento",
-      manifesto: "No solo organizamos viajes. Voyage es un club privado por invitación. Un lugar donde convergen la élite mundial, las conexiones correctas y una estética impecable.",
-      pillar1Title: "El Círculo Interno",
-      pillar1Desc: "El acceso lo es todo. Conviértete en parte de una red exclusiva. Desde after-parties cerrados en Hollywood hasta yates privados en Mónaco.",
-      pillar2Title: "Imagen Impecable",
-      pillar2Desc: "La estética es nuestra moneda. Organizamos fiestas de imagen de alto nivel y reuniones de élite.",
-      pillar3Title: "Discreción Absoluta",
-      pillar3Desc: "Tu privacidad es nuestra máxima prioridad. Seguridad impecable, protocolos de confidencialidad y una experiencia VIP.",
       formEyebrow: "Únete al club",
       formTitle: "Registro solo a través de Telegram",
       formDesc: "VOYAGE es una comunidad privada. Las solicitudes y la verificación de nuevas residentes se gestionan exclusivamente a través de nuestro bot oficial de Telegram.",
@@ -174,14 +150,6 @@ export default function HomePage() {
       value3Desc: "Você mantém 100% de suas gorjetas. Tudo o que você ganha acima da tarifa permanece apenas com você.",
       footerRights: "Apenas para Membros Privados — Todos os Direitos Reservados",
       footerAccess: "Acesso de Membros →",
-      missionEyebrow: "Missão e Posicionamento",
-      manifesto: "Não organizamos apenas viagens. Voyage é um clube privado apenas para convidados. Um lugar onde a elite mundial, as conexões certas e a estética impecável convergem.",
-      pillar1Title: "O Círculo Interno",
-      pillar1Desc: "O acesso é tudo. Torne-se parte de uma rede exclusiva. Desde after-parties fechados em Hollywood a iates privados em Mônaco.",
-      pillar2Title: "Imagem Impecável",
-      pillar2Desc: "A estética é a nossa moeda. Organizamos festas de imagem de alto nível e encontros de elite.",
-      pillar3Title: "Discrição Absoluta",
-      pillar3Desc: "A sua privacidade é a nossa prioridade. Segurança impecável, protocolos de confidencialidade e uma experiência VIP.",
       formEyebrow: "Entre para o clube",
       formTitle: "Cadastro somente pelo Telegram",
       formDesc: "VOYAGE é uma comunidade privada. O cadastro e a verificação de novas residentes acontecem exclusivamente pelo nosso bot oficial do Telegram.",
@@ -197,13 +165,6 @@ export default function HomePage() {
 
   const botUsername = (process.env.NEXT_PUBLIC_BOT_USERNAME ?? "").trim().replace(/^@/, "");
   const applyBotUrl = botUsername ? `https://t.me/${botUsername}?start=apply` : "https://t.me";
-
-  // --- Три столпа (Manifesto pillars) ---
-  const pillars = [
-    { icon: <Key size={18} strokeWidth={1.5} />, title: t.pillar1Title, desc: t.pillar1Desc },
-    { icon: <Sparkles size={18} strokeWidth={1.5} />, title: t.pillar2Title, desc: t.pillar2Desc },
-    { icon: <ShieldCheck size={18} strokeWidth={1.5} />, title: t.pillar3Title, desc: t.pillar3Desc },
-  ];
 
   return (
     <div className="text-zinc-100 font-sans antialiased">
@@ -257,71 +218,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ─── Mission & Positioning (Манифест и Три столпа) ─── */}
-      <section className="relative px-6 py-28 overflow-hidden">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[640px] h-[420px] rounded-full bg-amber-400/[0.04] blur-[130px]" />
-        </div>
+      {/* ─── Философия VOYAGE: манифест + четыре столпа (заменила прежний блок «Mission & Positioning») ─── */}
+      <ManifestoSection />
 
-        <div className="relative max-w-5xl mx-auto">
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="text-center text-xs tracking-[0.5em] uppercase text-amber-200/60 font-medium mb-10"
-          >
-            {t.missionEyebrow}
-          </motion.p>
-
-          <motion.blockquote
-            initial={{ opacity: 0, y: 26 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.85, ease: "easeOut" }}
-            className="mx-auto max-w-4xl text-center text-2xl md:text-4xl lg:text-[2.6rem] font-light leading-snug text-zinc-100"
-            style={{ fontFamily: SERIF }}
-          >
-            {t.manifesto}
-          </motion.blockquote>
-
-          <motion.div
-            initial={{ opacity: 0, scaleX: 0 }}
-            whileInView={{ opacity: 1, scaleX: 1 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
-            className="w-16 h-px bg-amber-200/40 mx-auto my-16 origin-center"
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {pillars.map((p, i) => (
-              <motion.div
-                key={p.title}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.6, delay: i * 0.15, ease: "easeOut" }}
-                className="group relative overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-sm p-8 hover:border-amber-200/20 transition-all duration-500"
-              >
-                <div className="w-12 h-12 rounded-full border border-amber-200/20 flex items-center justify-center mb-6 text-amber-200/70 group-hover:border-amber-200/40 group-hover:text-amber-200 transition-colors duration-500">
-                  {p.icon}
-                </div>
-                <h3
-                  className="text-2xl font-light text-zinc-100 mb-4"
-                  style={{ fontFamily: SERIF }}
-                >
-                  {p.title}
-                </h3>
-                <p className="text-zinc-500 text-sm leading-relaxed font-light">
-                  {p.desc}
-                </p>
-
-                <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-400/5 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* ─── Команда и поддержка (сразу после манифеста: «во что верим» → «кто за это отвечает») ─── */}
+      <TeamSection />
 
       {/* ─── Destinations ─── */}
       <section id="destinations" className="px-6 py-28 max-w-6xl mx-auto">
