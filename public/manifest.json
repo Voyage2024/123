@@ -1,0 +1,28 @@
+{
+  "id": "/bunker",
+  "name": "Bunker — личный планер и сейф",
+  "short_name": "Bunker",
+  "description": "Приватный планер, финансы, заметки и сейф владельца Voyage.",
+  "lang": "ru",
+  "dir": "ltr",
+  "start_url": "/bunker",
+  "scope": "/bunker",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "orientation": "portrait",
+  "theme_color": "#09090b",
+  "background_color": "#09090b",
+  "categories": ["productivity", "finance"],
+  "icons": [
+    { "src": "/bunker/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/bunker/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/bunker/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/bunker/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ],
+  "shortcuts": [
+    { "name": "Задачи", "url": "/bunker/tasks" },
+    { "name": "Финансы", "url": "/bunker/finance" },
+    { "name": "Заметки", "url": "/bunker/notes" },
+    { "name": "Сейф", "url": "/bunker/vault" }
+  ]
+}

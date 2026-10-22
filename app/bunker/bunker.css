@@ -1,0 +1,158 @@
+/* ──────────────────────────────────────────────────────────────────────
+ * Бункер · стили, которые неудобно писать утилитами Tailwind.
+ * Всё под .bunker-root, на остальной сайт не влияет.
+ * ──────────────────────────────────────────────────────────────────── */
+
+.bunker-root {
+  -webkit-font-smoothing: antialiased;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior-y: none;
+}
+
+.bunker-root ::selection {
+  background: rgba(201, 169, 97, 0.35);
+}
+
+/* В режиме «приложения» на iPhone убираем выделение текста долгим тапом у кнопок */
+@media (display-mode: standalone) {
+  .bunker-root button,
+  .bunker-root a {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+
+.bunker-scroll-x {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.bunker-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Markdown заметок ───────────────────────────────────────────── */
+.bunker-md {
+  color: #d4d4d8;
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.bunker-md > * + * {
+  margin-top: 0.7em;
+}
+.bunker-md h1,
+.bunker-md h2,
+.bunker-md h3 {
+  color: #fafafa;
+  font-weight: 600;
+  line-height: 1.25;
+  margin-top: 1.2em;
+}
+.bunker-md h1 {
+  font-family: var(--font-cormorant);
+  font-size: 1.9em;
+  font-weight: 500;
+}
+.bunker-md h2 {
+  font-size: 1.25em;
+}
+.bunker-md h3 {
+  font-size: 1.05em;
+  color: #e9d7a8;
+}
+.bunker-md > :first-child {
+  margin-top: 0;
+}
+.bunker-md strong {
+  color: #fff;
+  font-weight: 600;
+}
+.bunker-md em {
+  color: #e4e4e7;
+}
+.bunker-md del {
+  color: #71717a;
+}
+.bunker-md a {
+  color: #c9a961;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(201, 169, 97, 0.4);
+}
+.bunker-md ul,
+.bunker-md ol {
+  padding-left: 1.3em;
+}
+.bunker-md ul {
+  list-style: disc;
+}
+.bunker-md ol {
+  list-style: decimal;
+}
+.bunker-md li + li {
+  margin-top: 0.25em;
+}
+.bunker-md li::marker {
+  color: #c9a961;
+}
+.bunker-md li.md-task {
+  list-style: none;
+  margin-left: -1.3em;
+  display: flex;
+  gap: 0.6em;
+  align-items: flex-start;
+}
+.bunker-md .md-box {
+  margin-top: 0.25em;
+  flex: none;
+  width: 1.05em;
+  height: 1.05em;
+  border-radius: 0.3em;
+  border: 1.5px solid #52525b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75em;
+  color: #09090b;
+}
+.bunker-md li.md-done .md-box {
+  background: #c9a961;
+  border-color: #c9a961;
+}
+.bunker-md li.md-done > span:last-child {
+  color: #71717a;
+  text-decoration: line-through;
+}
+.bunker-md blockquote {
+  border-left: 2px solid #c9a961;
+  padding: 0.2em 0 0.2em 1em;
+  color: #a1a1aa;
+  font-style: italic;
+}
+.bunker-md code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.88em;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 0.1em 0.4em;
+  color: #f1e2bb;
+}
+.bunker-md pre {
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 0.9em 1em;
+  overflow-x: auto;
+}
+.bunker-md pre code {
+  background: none;
+  padding: 0;
+  color: #d4d4d8;
+}
+.bunker-md hr {
+  border: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201, 169, 97, 0.4), transparent);
+  margin: 1.4em 0;
+}

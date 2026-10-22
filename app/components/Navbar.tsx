@@ -418,7 +418,14 @@ function ProfileSheet({
  * ШАПКА
  * ══════════════════════════════════════════════════════════════════ */
 
+/** Личный бункер (/bunker) — отдельное PWA со своей навигацией, шапку Voyage там не рисуем. */
 export default function Navbar() {
+  const pathname = usePathname();
+  if (pathname === "/bunker" || pathname?.startsWith("/bunker/")) return null;
+  return <VoyageNavbar />;
+}
+
+function VoyageNavbar() {
   const { user, role, loading, logout } = useAuth();
   const { lang, setLang } = useLanguage();
   const pathname = usePathname();
