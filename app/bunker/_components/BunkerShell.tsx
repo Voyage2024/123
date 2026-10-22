@@ -1,11 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { KeyRound, LayoutGrid, ListTodo, NotebookPen, Wallet } from "lucide-react";
+import { KeyRound, LayoutGrid, ListTodo, Lock, NotebookPen, ShieldCheck, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
+import { useBunkerLock } from "@/app/bunker/_components/BunkerLock";
+import { SecuritySheet } from "@/app/bunker/_components/SecuritySheet";
 import { ToastProvider } from "@/app/bunker/_components/toast";
 import { cx } from "@/app/bunker/_components/ui";
 
@@ -29,6 +31,8 @@ function isActive(pathname: string, href: string) {
 
 export default function BunkerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/bunker";
+  const { lock } = useBunkerLock();
+  const [securityOpen, setSecurityOpen] = useState(false);
 
   return (
     <ToastProvider>
@@ -69,13 +73,48 @@ export default function BunkerShell({ children }: { children: ReactNode }) {
               );
             })}
           </div>
-          <Link href="/admin" className="text-[10px] uppercase tracking-wider text-zinc-600 hover:text-zinc-300">
-            Voyage
-          </Link>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setSecurityOpen(true)}
+              aria-label="Безопасность"
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-zinc-500 transition-colors hover:bg-white/[0.04] hover:text-zinc-200"
+            >
+              <ShieldCheck className="h-5 w-5" strokeWidth={1.6} />
+            </button>
+            <button
+              type="button"
+              onClick={lock}
+              aria-label="Заблокировать"
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-zinc-500 transition-colors hover:bg-white/[0.04] hover:text-[#e9d7a8]"
+            >
+              <Lock className="h-5 w-5" strokeWidth={1.6} />
+            </button>
+          </div>
         </nav>
 
+        {/* iPhone: замок и «Безопасность» над заголовком страницы (уезжают при прокрутке) */}
+        <div className="absolute right-3 top-[calc(env(safe-area-inset-top)+0.625rem)] z-10 flex gap-1 md:hidden">
+          <button
+            type="button"
+            onClick={() => setSecurityOpen(true)}
+            aria-label="Безопасность"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.06] bg-[#121215]/80 text-zinc-400 backdrop-blur-xl active:scale-90"
+          >
+            <ShieldCheck className="h-[18px] w-[18px]" strokeWidth={1.6} />
+          </button>
+          <button
+            type="button"
+            onClick={lock}
+            aria-label="Заблокировать"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.06] bg-[#121215]/80 text-zinc-400 backdrop-blur-xl active:scale-90"
+          >
+            <Lock className="h-[18px] w-[18px]" strokeWidth={1.6} />
+          </button>
+        </div>
+
         <main className="relative md:pl-[88px]">
-          <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+1.25rem)] sm:px-6 md:px-10 md:pb-16 md:pt-10">
+          <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+3.75rem)] sm:px-6 md:px-10 md:pb-16 md:pt-10">
             {children}
           </div>
         </main>
@@ -110,6 +149,7 @@ export default function BunkerShell({ children }: { children: ReactNode }) {
             })}
           </div>
         </nav>
+        <SecuritySheet open={securityOpen} onClose={() => setSecurityOpen(false)} />
       </div>
     </ToastProvider>
   );

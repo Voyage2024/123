@@ -6,14 +6,14 @@ import { useMemo, useState } from "react";
 import { Button, Field, IconButton, Sheet, cx, inputClass } from "@/app/bunker/_components/ui";
 import { useBunkerRows } from "@/app/bunker/_lib/useBunkerRows";
 import { slugify } from "@/lib/bunker/format";
-import { BUILTIN_PROJECTS, type BunkerProject } from "@/lib/bunker/types";
+import type { BunkerProject } from "@/lib/bunker/types";
 
-/* Проекты = 4 встроенных + свои из bunker_projects. В задачах и заметках
- * хранится slug проекта (category). */
+/* Проекты — строки bunker_projects (в режиме Duress — камуфляжные).
+ * В задачах и заметках хранится slug проекта (category). */
 
 export function useProjects() {
   const custom = useBunkerRows<BunkerProject>("bunker_projects", [{ column: "sort" }, { column: "created_at" }]);
-  const all = useMemo(() => [...BUILTIN_PROJECTS, ...custom.rows], [custom.rows]);
+  const all = useMemo(() => [...custom.rows].sort((a, b) => a.sort - b.sort), [custom.rows]);
   const bySlug = useMemo(() => new Map(all.map((p) => [p.slug, p])), [all]);
   return { all, custom, bySlug };
 }
@@ -56,13 +56,9 @@ export function ProjectsSheet({ open, onClose, projects }: { open: boolean; onCl
             <span className="w-6 text-center text-lg">{p.emoji ?? "◆"}</span>
             <span className="h-2 w-2 rounded-full" style={{ background: p.color ?? "#a1a1aa" }} />
             <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">{p.name}</span>
-            {p.id.startsWith("builtin-") ? (
-              <span className="text-[11px] uppercase tracking-wider text-zinc-600">базовый</span>
-            ) : (
-              <IconButton label="Удалить проект" onClick={() => projects.custom.remove(p.id)}>
-                <Trash2 className="h-4 w-4" />
-              </IconButton>
-            )}
+            <IconButton label="Удалить проект" onClick={() => projects.custom.remove(p.id)}>
+              <Trash2 className="h-4 w-4" />
+            </IconButton>
           </div>
         ))}
       </div>

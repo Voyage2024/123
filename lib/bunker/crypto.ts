@@ -42,7 +42,7 @@ export function randomBytes(n: number) {
 }
 
 export function isValidPin(pin: string) {
-  return /^\d{4,6}$/.test(pin);
+  return /^\d{4,8}$/.test(pin);
 }
 
 export async function deriveVaultKey(pin: string, saltB64: string, iterations: number, pepper: string | null) {

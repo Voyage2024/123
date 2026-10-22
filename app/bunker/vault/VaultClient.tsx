@@ -1,16 +1,14 @@
 "use client";
 
-import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Braces,
   Copy,
   CreditCard,
-  Delete,
   Eye,
   EyeOff,
   KeyRound,
   Lock,
-  LockOpen,
   NotebookText,
   Plus,
   RefreshCw,
@@ -20,9 +18,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { getVaultPepper } from "@/app/actions/bunker";
+import { changeMasterPin } from "@/app/actions/bunker";
+import { useBunkerLock } from "@/app/bunker/_components/BunkerLock";
+import { PinPad } from "@/app/bunker/_components/PinPad";
 import { useBunkerToast } from "@/app/bunker/_components/toast";
 import {
   Button,
@@ -39,17 +39,10 @@ import {
   cx,
   inputClass,
 } from "@/app/bunker/_components/ui";
+import { bunkerDb } from "@/app/bunker/_lib/db";
 import { errorText } from "@/app/bunker/_lib/useBunkerRows";
-import {
-  createVaultKeyMaterial,
-  decryptSecret,
-  encryptSecret,
-  generatePassword,
-  isValidPin,
-  unlockVault,
-} from "@/lib/bunker/crypto";
+import { createVaultKeyMaterial, decryptSecret, encryptSecret, generatePassword, unlockVault } from "@/lib/bunker/crypto";
 import { plural, relativeTime } from "@/lib/bunker/format";
-import { supabase } from "@/lib/supabase";
 import {
   VAULT_CATEGORIES,
   type BunkerVaultKeys,
@@ -61,17 +54,16 @@ import {
 /* ──────────────────────────────────────────────────────────────────────
  * /bunker/vault — сейф (zero-knowledge).
  *
- * Всё шифруется и расшифровывается в этой вкладке (lib/bunker/crypto.ts).
- * Ключ — non-extractable CryptoKey в памяти; расшифрованные записи тоже
- * только в памяти. Блокировка (сворачивание приложения, 3 минуты без
- * действий, кнопка) стирает и то и другое.
+ * Отдельного PIN у сейфа больше нет: ключ AES-256-GCM выводится из
+ * Master PIN при входе в бункер (BunkerLock) и живёт только в памяти до
+ * блокировки. В режиме Duress тот же экран открывает камуфляжный сейф,
+ * зашифрованный ключом из Duress PIN.
  *
- * Забытый PIN = потерянные данные: восстановить нечем, кроме сброса сейфа.
+ * Всё шифруется и расшифровывается в браузере (lib/bunker/crypto.ts),
+ * в базу уходят только шифротекст и iv.
  * ──────────────────────────────────────────────────────────────────── */
 
-const IDLE_LOCK_MS = 3 * 60 * 1000;
 const CLIPBOARD_CLEAR_MS = 30 * 1000;
-const ATTEMPTS_KEY = "voyage-bunker:vault-attempts";
 
 const CATEGORY_ICON: Record<VaultCategory, typeof KeyRound> = {
   login: KeyRound,
@@ -81,213 +73,107 @@ const CATEGORY_ICON: Record<VaultCategory, typeof KeyRound> = {
 };
 
 type Item = { row: BunkerVaultRow; secret: VaultSecret };
-type Phase = "loading" | "setup" | "locked" | "unlocked" | "error";
 
-function readAttempts(): { count: number; until: number } {
-  try {
-    return JSON.parse(localStorage.getItem(ATTEMPTS_KEY) ?? "") as { count: number; until: number };
-  } catch {
-    return { count: 0, until: 0 };
+async function decryptAll(key: CryptoKey, rows: BunkerVaultRow[]) {
+  const items: Item[] = [];
+  let broken = 0;
+  for (const row of rows) {
+    try {
+      items.push({ row, secret: await decryptSecret(key, row.category, row.ciphertext, row.iv) });
+    } catch {
+      broken++;
+    }
   }
+  return { items, broken };
 }
-function writeAttempts(v: { count: number; until: number }) {
-  try {
-    localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(v));
-  } catch {
-    /* приватный режим — просто без счётчика */
-  }
+
+async function loadRows() {
+  return bunkerDb<BunkerVaultRow[]>({ kind: "select", table: "bunker_vault", order: [{ column: "created_at", ascending: false }] });
 }
 
 export default function VaultClient() {
-  const notify = useBunkerToast();
-  const [phase, setPhase] = useState<Phase>("loading");
-  const [keys, setKeys] = useState<BunkerVaultKeys | null>(null);
-  const [pepper, setPepper] = useState<string | null>(null);
-  const [fatal, setFatal] = useState<string | null>(null);
-  const [items, setItems] = useState<Item[]>([]);
-  const keyRef = useRef<CryptoKey | null>(null);
+  const { vault } = useBunkerLock();
 
+  if (!vault) {
+    return (
+      <>
+        <PageHeader eyebrow="Zero-knowledge" title="Сейф" />
+        <Skeleton className="h-40" />
+      </>
+    );
+  }
+  if (vault.status === "pepper-missing") {
+    return (
+      <>
+        <PageHeader eyebrow="Zero-knowledge" title="Сейф" />
+        <Empty
+          icon={<X className="h-5 w-5" />}
+          title="Сейф недоступен"
+          text="Сейф зашифрован с серверным pepper, а BUNKER_VAULT_PEPPER на сервере сейчас не задан. Верни переменную на Vercel."
+        />
+      </>
+    );
+  }
+  if (vault.status === "mismatch" || !vault.key) return <VaultMigration />;
+  return <VaultBody vaultKey={vault.key} keys={vault.keys} hasPepper={!!vault.pepper} />;
+}
+
+function VaultBody({ vaultKey, keys, hasPepper }: { vaultKey: CryptoKey; keys: BunkerVaultKeys | null; hasPepper: boolean }) {
+  const notify = useBunkerToast();
+  const { lock } = useBunkerLock();
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Item[]>([]);
   const [tab, setTab] = useState<VaultCategory | "all">("all");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Item | "new" | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  /* ── загрузка ключевой записи ── */
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [{ data, error }, pep] = await Promise.all([
-        supabase.from("bunker_vault_keys").select("*").maybeSingle(),
-        getVaultPepper().catch(() => ({ pepper: null })),
-      ]);
+      const res = await loadRows();
+      if (cancelled || res.locked) return;
+      if (res.error) notify(res.error, { tone: "error" });
+      const { items: list, broken } = await decryptAll(vaultKey, res.data ?? []);
       if (cancelled) return;
-      setPepper(pep.pepper);
-      if (error) {
-        setFatal(errorText(error));
-        setPhase("error");
-        return;
-      }
-      setKeys(data as BunkerVaultKeys | null);
-      setPhase(data ? "locked" : "setup");
+      if (broken) notify(`Не расшифровано записей: ${broken}`, { tone: "error" });
+      setItems(list);
+      setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [vaultKey, notify]);
 
-  const lock = useCallback(() => {
-    keyRef.current = null;
-    setItems([]);
-    setOpen(null);
-    setSettingsOpen(false);
-    setPhase((p) => (p === "unlocked" ? "locked" : p));
-  }, []);
-
-  /* ── авто-блокировка: свернули приложение / ушли со вкладки / простой ── */
-  useEffect(() => {
-    if (phase !== "unlocked") return;
-    let idle = setTimeout(lock, IDLE_LOCK_MS);
-    const bump = () => {
-      clearTimeout(idle);
-      idle = setTimeout(lock, IDLE_LOCK_MS);
-    };
-    const onHidden = () => document.visibilityState === "hidden" && lock();
-    document.addEventListener("visibilitychange", onHidden);
-    window.addEventListener("pagehide", lock);
-    window.addEventListener("pointerdown", bump);
-    window.addEventListener("keydown", bump);
-    return () => {
-      clearTimeout(idle);
-      document.removeEventListener("visibilitychange", onHidden);
-      window.removeEventListener("pagehide", lock);
-      window.removeEventListener("pointerdown", bump);
-      window.removeEventListener("keydown", bump);
-    };
-  }, [phase, lock]);
-
-  // Ушли со страницы сейфа внутри приложения — тоже блокируем.
-  useEffect(() => () => void (keyRef.current = null), []);
-
-  const loadItems = async (key: CryptoKey) => {
-    const { data, error } = await supabase.from("bunker_vault").select("*").order("created_at", { ascending: false });
-    if (error) {
-      notify(errorText(error), { tone: "error" });
-      return false;
-    }
-    const decrypted: Item[] = [];
-    let broken = 0;
-    for (const row of (data ?? []) as BunkerVaultRow[]) {
-      try {
-        decrypted.push({ row, secret: await decryptSecret(key, row.category, row.ciphertext, row.iv) });
-      } catch {
-        broken++;
-      }
-    }
-    if (broken) notify(`${broken} запис(ей) не расшифровано — повреждены или другой ключ`, { tone: "error" });
-    setItems(decrypted);
-    return true;
-  };
-
-  /* ── первый PIN ── */
-  const setup = async (pin: string) => {
-    const { key, row } = await createVaultKeyMaterial(pin, pepper);
-    const { data, error } = await supabase.from("bunker_vault_keys").insert(row).select("*").single();
-    if (error) {
-      notify(errorText(error), { tone: "error" });
-      return;
-    }
-    keyRef.current = key;
-    setKeys(data as BunkerVaultKeys);
-    setItems([]);
-    setPhase("unlocked");
-    notify("Сейф создан и открыт");
-  };
-
-  /* ── разблокировка ── */
-  const unlock = async (pin: string): Promise<string | null> => {
-    if (!keys) return "Нет ключа сейфа";
-    const att = readAttempts();
-    if (att.until > Date.now()) return `Подожди ${Math.ceil((att.until - Date.now()) / 1000)} с`;
-    if (keys.uses_pepper && !pepper) return "На сервере не задан BUNKER_VAULT_PEPPER — без него сейф не открыть";
-
-    const key = await unlockVault(pin, keys, keys.uses_pepper ? pepper : null);
-    if (!key) {
-      const count = att.count + 1;
-      const until = count >= 5 ? Date.now() + 30_000 * 2 ** (count - 5) : 0;
-      writeAttempts({ count, until });
-      return count >= 5 ? `Неверный PIN. Пауза ${Math.round((until - Date.now()) / 1000)} с` : "Неверный PIN";
-    }
-    writeAttempts({ count: 0, until: 0 });
-    keyRef.current = key;
-    await loadItems(key);
-    setPhase("unlocked");
-    return null;
-  };
-
-  /* ── сохранение записи ── */
   const saveItem = async (category: VaultCategory, secret: VaultSecret, existing?: BunkerVaultRow) => {
-    const key = keyRef.current;
-    if (!key) return false;
-    const { ciphertext, iv } = await encryptSecret(key, category, secret);
-    const query = existing
-      ? supabase.from("bunker_vault").update({ category, ciphertext, iv, title: null }).eq("id", existing.id)
-      : supabase.from("bunker_vault").insert({ category, ciphertext, iv, title: null });
-    const { data, error } = await query.select("*").single();
-    if (error) {
-      notify(errorText(error), { tone: "error" });
+    const { ciphertext, iv } = await encryptSecret(vaultKey, category, secret);
+    const values = { category, ciphertext, iv, title: null };
+    const res = existing
+      ? await bunkerDb<BunkerVaultRow>({ kind: "update", table: "bunker_vault", id: existing.id, patch: values })
+      : await bunkerDb<BunkerVaultRow>({ kind: "insert", table: "bunker_vault", values });
+    if (res.error || !res.data) {
+      if (!res.locked) notify(errorText(res.error), { tone: "error" });
       return false;
     }
-    const item = { row: data as BunkerVaultRow, secret };
+    const item = { row: res.data, secret };
     setItems((list) => (existing ? list.map((i) => (i.row.id === existing.id ? item : i)) : [item, ...list]));
     notify("Зашифровано и сохранено");
     return true;
   };
 
   const deleteItem = async (id: string) => {
-    const { error } = await supabase.from("bunker_vault").delete().eq("id", id);
-    if (error) return notify(errorText(error), { tone: "error" });
+    const res = await bunkerDb({ kind: "delete", table: "bunker_vault", id });
+    if (res.error) return void (!res.locked && notify(errorText(res.error), { tone: "error" }));
     setItems((list) => list.filter((i) => i.row.id !== id));
     setOpen(null);
   };
 
-  /* ── смена PIN: перешифровываем всё одной транзакцией ── */
-  const changePin = async (newPin: string) => {
-    const { key, row } = await createVaultKeyMaterial(newPin, pepper);
-    const payload = [];
-    for (const item of items) {
-      const enc = await encryptSecret(key, item.row.category, item.secret);
-      payload.push({ id: item.row.id, ...enc });
-    }
-    const { error } = await supabase.rpc("bunker_vault_rekey", {
-      p_salt: row.salt,
-      p_iterations: row.iterations,
-      p_check_ciphertext: row.check_ciphertext,
-      p_check_iv: row.check_iv,
-      p_uses_pepper: row.uses_pepper,
-      p_items: payload,
-    });
-    if (error) {
-      notify(errorText(error), { tone: "error" });
-      return false;
-    }
-    keyRef.current = key;
-    setKeys((k) => (k ? { ...k, ...row } : k));
-    await loadItems(key);
-    notify("PIN изменён, всё перешифровано");
-    return true;
-  };
-
+  // Сброс: удаляем записи и ключ; новый ключ создастся из PIN при следующем входе.
   const resetVault = async () => {
-    const del = await supabase.from("bunker_vault").delete().not("id", "is", null);
-    const delKeys = await supabase.from("bunker_vault_keys").delete().not("user_id", "is", null);
-    if (del.error || delKeys.error) return notify(errorText(del.error ?? delKeys.error), { tone: "error" });
-    keyRef.current = null;
-    setItems([]);
-    setKeys(null);
-    setSettingsOpen(false);
-    writeAttempts({ count: 0, until: 0 });
-    setPhase("setup");
-    notify("Сейф сброшен");
+    const del = await bunkerDb({ kind: "deleteAll", table: "bunker_vault" });
+    const delKeys = await bunkerDb({ kind: "deleteAll", table: "bunker_vault_keys" });
+    if (del.error || delKeys.error) return void notify(errorText(del.error ?? delKeys.error), { tone: "error" });
+    lock();
   };
 
   const filtered = useMemo(() => {
@@ -298,35 +184,12 @@ export default function VaultClient() {
       .sort((a, b) => a.secret.title.localeCompare(b.secret.title, "ru"));
   }, [items, tab, query]);
 
-  /* ═══════════════ экраны ═══════════════ */
-
-  if (phase === "loading") {
-    return (
-      <>
-        <PageHeader eyebrow="Zero-knowledge" title="Сейф" />
-        <Skeleton className="mx-auto h-[420px] max-w-sm" />
-      </>
-    );
-  }
-
-  if (phase === "error") {
-    return (
-      <>
-        <PageHeader eyebrow="Zero-knowledge" title="Сейф" />
-        <Empty icon={<X className="h-5 w-5" />} title="Сейф недоступен" text={fatal ?? undefined} />
-      </>
-    );
-  }
-
-  if (phase === "setup") return <SetupScreen onDone={setup} hasPepper={!!pepper} />;
-  if (phase === "locked") return <LockScreen onSubmit={unlock} />;
-
   return (
     <>
       <PageHeader
         eyebrow="Открыт · AES-256-GCM"
         title="Сейф"
-        subtitle={`${items.length} ${plural(items.length, ["запись", "записи", "записей"])} · авто-блокировка через 3 мин`}
+        subtitle={`${items.length} ${plural(items.length, ["запись", "записи", "записей"])} · закрывается вместе с бункером`}
         action={
           <div className="flex gap-1">
             <IconButton label="Настройки сейфа" onClick={() => setSettingsOpen(true)}>
@@ -338,7 +201,6 @@ export default function VaultClient() {
           </div>
         }
       />
-
       <div className="flex items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#121215] px-4 focus-within:border-[#c9a961]/50">
         <Search className="h-4 w-4 shrink-0 text-zinc-500" />
         <input
@@ -352,7 +214,7 @@ export default function VaultClient() {
       </div>
 
       <div className="bunker-scroll-x -mx-4 mt-3 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <Segmented
+        <Segmented<VaultCategory | "all">
           className="w-max min-w-full"
           value={tab}
           onChange={setTab}
@@ -368,7 +230,9 @@ export default function VaultClient() {
       </div>
 
       <div className="mt-5 space-y-2">
-        {filtered.length === 0 ? (
+        {loading ? (
+          [0, 1, 2].map((i) => <Skeleton key={i} className="h-[66px]" />)
+        ) : filtered.length === 0 ? (
           <Empty
             icon={<ShieldCheck className="h-5 w-5" />}
             title={query ? "Ничего не найдено" : "Сейф пуст"}
@@ -403,8 +267,7 @@ export default function VaultClient() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         keys={keys}
-        hasPepper={!!pepper}
-        onChangePin={changePin}
+        hasPepper={hasPepper}
         onReset={resetVault}
       />
     </>
@@ -498,182 +361,78 @@ function VaultRow({ item, onOpen }: { item: Item; onOpen: () => void }) {
   );
 }
 
-/* ═══════════════ PIN-экраны ═══════════════ */
+/* ═══════════════ перенос сейфа со старого PIN ═══════════════ */
 
-function PinPad({
-  onSubmit,
-  minLength = 4,
-  maxLength = 6,
-  busy,
-  error,
-  errorTick = 0,
-}: {
-  onSubmit: (pin: string) => void;
-  minLength?: number;
-  maxLength?: number;
-  busy?: boolean;
-  error?: string | null;
-  /** растёт при каждой ошибке — даже если текст тот же */
-  errorTick?: number;
-}) {
-  const [pin, setPin] = useState("");
-  const controls = useAnimationControls();
-
-  useEffect(() => {
-    if (!errorTick) return;
-    void controls.start({ x: [0, -12, 12, -8, 8, -4, 0], transition: { duration: 0.42 } });
-  }, [errorTick, controls]);
-
-  const press = useCallback(
-    (d: string) => {
-      if (busy) return;
-      if (d === "del") return setPin((p) => p.slice(0, -1));
-      if (d === "ok") {
-        if (pin.length < minLength) return;
-        onSubmit(pin);
-        return setPin("");
-      }
-      setPin((p) => (p.length < maxLength ? p + d : p));
-    },
-    [busy, pin, minLength, maxLength, onSubmit],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (/^\d$/.test(e.key)) press(e.key);
-      else if (e.key === "Backspace") press("del");
-      else if (e.key === "Enter") press("ok");
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [press]);
-
-  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "del", "0", "ok"];
-
-  return (
-    <div className="mx-auto w-full max-w-[300px]">
-      <motion.div animate={controls} className="mb-3 flex justify-center gap-3.5">
-        {Array.from({ length: maxLength }).map((_, i) => (
-          <motion.span
-            key={i}
-            animate={{ scale: i < pin.length ? 1 : 0.8, backgroundColor: i < pin.length ? "#c9a961" : "rgba(255,255,255,0)" }}
-            transition={{ type: "spring", stiffness: 600, damping: 26 }}
-            className={cx("h-3.5 w-3.5 rounded-full border", i < minLength ? "border-[#c9a961]/70" : "border-white/20")}
-          />
-        ))}
-      </motion.div>
-      <p className={cx("mb-6 h-5 text-center text-sm", error ? "text-red-300" : "text-zinc-600")}>
-        {busy ? "Проверяю…" : error ?? `${minLength}–${maxLength} цифр`}
-      </p>
-      <div className="grid grid-cols-3 gap-4">
-        {keys.map((k) => (
-          <motion.button
-            key={k}
-            whileTap={{ scale: 0.86, backgroundColor: "rgba(201,169,97,0.25)" }}
-            onClick={() => press(k)}
-            disabled={busy || (k === "ok" && pin.length < minLength)}
-            aria-label={k === "del" ? "Стереть" : k === "ok" ? "Готово" : k}
-            className={cx(
-              "flex aspect-square items-center justify-center rounded-full text-2xl font-light transition-colors disabled:opacity-30",
-              k === "ok"
-                ? "bg-[#c9a961] text-black"
-                : k === "del"
-                  ? "text-zinc-400"
-                  : "border border-white/[0.08] bg-white/[0.03] text-white",
-            )}
-          >
-            {k === "del" ? <Delete className="h-6 w-6" /> : k === "ok" ? <LockOpen className="h-6 w-6" /> : k}
-          </motion.button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function LockScreen({ onSubmit }: { onSubmit: (pin: string) => Promise<string | null> }) {
+/**
+ * Сейф создан в прошлой версии своим PIN, который не совпадает с Master PIN.
+ * Шаг 1 — старый PIN сейфа (расшифровываем всё в памяти), шаг 2 — Master PIN
+ * (перешифровываем и сохраняем одной транзакцией вместе с проверкой PIN).
+ */
+function VaultMigration() {
+  const notify = useBunkerToast();
+  const { vault, setVault, lock } = useBunkerLock();
+  const [step, setStep] = useState<"old" | "master">("old");
+  const [items, setItems] = useState<Item[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-
-  return (
-    <div className="flex min-h-[calc(100dvh-10rem)] flex-col items-center justify-center py-6">
-      <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-[#c9a961]/30 bg-[#c9a961]/10 text-[#c9a961] shadow-[0_0_40px_-8px_rgba(201,169,97,0.5)]"
-      >
-        <Lock className="h-7 w-7" strokeWidth={1.5} />
-      </motion.div>
-      <h1 className="voyage-cormorant text-4xl text-white">Сейф закрыт</h1>
-      <p className="mb-8 mt-1 text-sm text-zinc-500">Введи Master PIN</p>
-      <PinPad
-        busy={busy}
-        error={error}
-        errorTick={tick}
-        onSubmit={async (pin) => {
-          setBusy(true);
-          setError(null);
-          // даём кадру отрисовать «Проверяю…»: PBKDF2 занимает ~0.5 с
-          await new Promise((r) => setTimeout(r, 30));
-          const err = await onSubmit(pin).catch((e: unknown) => errorText(e));
-          setBusy(false);
-          if (err) {
-            setError(err);
-            setTick((t) => t + 1);
-          }
-        }}
-      />
-    </div>
-  );
-}
-
-function SetupScreen({ onDone, hasPepper }: { onDone: (pin: string) => Promise<void>; hasPepper: boolean }) {
-  const [first, setFirst] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
-  const [busy, setBusy] = useState(false);
   const fail = (text: string) => {
     setError(text);
     setTick((t) => t + 1);
   };
 
+  const onOld = async (pin: string) => {
+    if (!vault?.keys) return;
+    setBusy(true);
+    setError(null);
+    const key = await unlockVault(pin, vault.keys, vault.keys.uses_pepper ? vault.pepper : null);
+    if (!key) {
+      setBusy(false);
+      return fail("Не подходит");
+    }
+    const res = await loadRows();
+    const { items: list, broken } = await decryptAll(key, res.data ?? []);
+    setBusy(false);
+    if (res.error || broken) return fail("Не всё расшифровалось, перенос остановлен");
+    setItems(list);
+    setStep("master");
+  };
+
+  const onMaster = async (pin: string) => {
+    setBusy(true);
+    setError(null);
+    const { key, row } = await createVaultKeyMaterial(pin, vault?.pepper ?? null);
+    const payload = [];
+    for (const item of items) payload.push({ id: item.row.id, ...(await encryptSecret(key, item.row.category, item.secret)) });
+    const res = await changeMasterPin(pin, pin, { ...row, items: payload });
+    setBusy(false);
+    if (res.status !== "ok") return fail(res.status === "error" ? res.message : "Неверный Master PIN");
+    setVault({ key, keys: vault?.keys ? { ...vault.keys, ...row } : null, pepper: vault?.pepper ?? null, status: "ready" });
+    notify("Сейф перешифрован под Master PIN");
+  };
+
   return (
-    <div className="flex min-h-[calc(100dvh-10rem)] flex-col items-center justify-center py-6">
-      <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-[#c9a961]/30 bg-[#c9a961]/10 text-[#c9a961]">
-        <ShieldCheck className="h-7 w-7" strokeWidth={1.5} />
+    <>
+      <PageHeader eyebrow="Zero-knowledge" title="Сейф" />
+      <Card className="mb-6 p-4 text-sm text-zinc-400">
+        {step === "old"
+          ? "Сейф зашифрован старым PIN сейфа из прошлой версии. Введи его один раз — дальше сейф будет открываться Master PIN."
+          : "Теперь Master PIN: под него перешифруем все записи."}
+      </Card>
+      <PinPad busy={busy} error={error} errorTick={tick} hint={step === "old" ? "Старый PIN сейфа" : "Master PIN"} onSubmit={step === "old" ? onOld : onMaster} />
+      <div className="mt-8 text-center">
+        <ConfirmButton
+          confirmLabel="Удалить сейф безвозвратно?"
+          onConfirm={async () => {
+            await bunkerDb({ kind: "deleteAll", table: "bunker_vault" });
+            await bunkerDb({ kind: "deleteAll", table: "bunker_vault_keys" });
+            lock();
+          }}
+        >
+          <Trash2 className="h-4 w-4" /> Не помню — сбросить сейф
+        </ConfirmButton>
       </div>
-      <h1 className="voyage-cormorant text-center text-4xl text-white">{first ? "Повтори PIN" : "Задай Master PIN"}</h1>
-      <p className="mb-6 mt-2 max-w-xs text-center text-sm text-zinc-500">
-        PIN не хранится нигде — ни в базе, ни на сервере. Если забудешь, записи не восстановить.
-        {hasPepper ? " Ключ дополнительно усилен серверным pepper." : ""}
-      </p>
-      <PinPad
-        busy={busy}
-        error={error}
-        errorTick={tick}
-        onSubmit={async (pin) => {
-          if (!isValidPin(pin)) return fail("Только цифры, 4–6 штук");
-          if (!first) {
-            setError(null);
-            return setFirst(pin);
-          }
-          if (pin !== first) {
-            setFirst(null);
-            return fail("Не совпало, начнём заново");
-          }
-          setBusy(true);
-          await new Promise((r) => setTimeout(r, 30));
-          try {
-            await onDone(pin);
-          } catch (e) {
-            setFirst(null);
-            fail(errorText(e));
-          } finally {
-            setBusy(false);
-          }
-        }}
-      />
-    </div>
+    </>
   );
 }
 
@@ -903,22 +662,15 @@ function SettingsSheet({
   onClose,
   keys,
   hasPepper,
-  onChangePin,
   onReset,
 }: {
   open: boolean;
   onClose: () => void;
   keys: BunkerVaultKeys | null;
   hasPepper: boolean;
-  onChangePin: (pin: string) => Promise<boolean>;
   onReset: () => Promise<void>;
 }) {
-  const [pin, setPin] = useState("");
-  const [pin2, setPin2] = useState("");
-  const [busy, setBusy] = useState(false);
   const [confirmReset, setConfirmReset] = useState("");
-
-  const valid = isValidPin(pin) && pin === pin2;
 
   return (
     <Sheet open={open} onClose={onClose} title="Настройки сейфа">
@@ -929,55 +681,18 @@ function SettingsSheet({
           </p>
           <ul className="mt-2 space-y-1 text-[13px] leading-relaxed">
             <li>• AES-256-GCM, случайный iv на каждую запись.</li>
-            <li>• Ключ из PIN: PBKDF2-SHA256, {keys?.iterations.toLocaleString("ru-RU")} итераций, своя соль.</li>
-            <li>• Pepper сервера: {keys?.uses_pepper ? "используется" : hasPepper ? "задан, применится после смены PIN" : "не задан"}.</li>
+            <li>• Ключ из Master PIN: PBKDF2-SHA256, {keys?.iterations.toLocaleString("ru-RU")} итераций, своя соль.</li>
+            <li>• Pepper сервера: {keys?.uses_pepper ? "используется" : hasPepper ? "задан, применится после смены Master PIN" : "не задан"}.</li>
             <li>• В базе — только шифротекст. Названия тоже зашифрованы.</li>
+            <li>• Master PIN меняется в «Безопасности» на главном экране — сейф перешифруется сам.</li>
           </ul>
-        </div>
-
-        <div className="space-y-3">
-          <p className="text-sm font-medium text-zinc-200">Сменить PIN</p>
-          <input
-            type="password"
-            inputMode="numeric"
-            maxLength={6}
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-            placeholder="Новый PIN (4–6 цифр)"
-            className={cx(inputClass, "font-mono tracking-[0.4em]")}
-            autoComplete="off"
-          />
-          <input
-            type="password"
-            inputMode="numeric"
-            maxLength={6}
-            value={pin2}
-            onChange={(e) => setPin2(e.target.value.replace(/\D/g, ""))}
-            placeholder="Ещё раз"
-            className={cx(inputClass, "font-mono tracking-[0.4em]")}
-            autoComplete="off"
-          />
-          <Button
-            className="w-full"
-            disabled={!valid || busy}
-            onClick={async () => {
-              setBusy(true);
-              const ok = await onChangePin(pin);
-              setBusy(false);
-              if (ok) {
-                setPin("");
-                setPin2("");
-                onClose();
-              }
-            }}
-          >
-            {busy ? "Перешифровываю…" : "Сменить и перешифровать"}
-          </Button>
         </div>
 
         <div className="space-y-3 rounded-2xl border border-red-500/20 bg-red-500/[0.04] p-4">
           <p className="text-sm font-medium text-red-200">Сбросить сейф</p>
-          <p className="text-[13px] text-zinc-500">Удалит все записи и ключ. Отменить нельзя. Напиши УДАЛИТЬ, чтобы подтвердить.</p>
+          <p className="text-[13px] text-zinc-500">
+            Удалит все записи и ключ, бункер закроется. При следующем входе сейф создастся заново. Отменить нельзя. Напиши УДАЛИТЬ.
+          </p>
           <input value={confirmReset} onChange={(e) => setConfirmReset(e.target.value)} className={inputClass} placeholder="УДАЛИТЬ" />
           {confirmReset.trim() === "УДАЛИТЬ" ? (
             <ConfirmButton onConfirm={() => void onReset()} confirmLabel="Удалить всё безвозвратно">

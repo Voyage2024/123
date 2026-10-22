@@ -156,3 +156,15 @@
   background: linear-gradient(90deg, transparent, rgba(201, 169, 97, 0.4), transparent);
   margin: 1.4em 0;
 }
+
+/* ── Шторка приватности (переключатель приложений iOS) ─────────── */
+.bunker-curtain-layer {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  background: #000;
+}
+html.bunker-curtain .bunker-curtain-layer {
+  display: block;
+}

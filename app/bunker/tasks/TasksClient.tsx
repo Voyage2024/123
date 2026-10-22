@@ -37,7 +37,7 @@ import {
 import { ProjectsSheet, useProjects, type ProjectsApi } from "@/app/bunker/_lib/projects";
 import { useBunkerRows } from "@/app/bunker/_lib/useBunkerRows";
 import { addDays, daysBetween, humanDay, isoDay, uid, weekdayShort } from "@/lib/bunker/format";
-import { BUILTIN_PROJECT_HINTS, PRIORITY_META, type BunkerTask, type Subtask, type TaskPriority } from "@/lib/bunker/types";
+import { PRIORITY_META, type BunkerTask, type Subtask, type TaskPriority } from "@/lib/bunker/types";
 
 /* ──────────────────────────────────────────────────────────────────────
  * /bunker/tasks — планер в духе Things 3.
@@ -47,7 +47,7 @@ import { BUILTIN_PROJECT_HINTS, PRIORITY_META, type BunkerTask, type Subtask, ty
  *   Входящие    — без проекта и без даты (быстрые мысли);
  *   Все         — открытые по проектам.
  *
- * Быстрый ввод понимает «!1 / !2 / !3» (приоритет) и «#voyage» (проект).
+ * Быстрый ввод понимает «!1 / !2 / !3» (приоритет) и «#проект».
  * Свайп вправо — выполнено, влево — закрепить.
  * ──────────────────────────────────────────────────────────────────── */
 
@@ -233,9 +233,6 @@ export default function TasksClient() {
           <Plus className="h-3.5 w-3.5" /> Проект
         </Chip>
       </div>
-      {project && BUILTIN_PROJECT_HINTS[project] && (
-        <p className="mt-2 text-xs text-zinc-600">{BUILTIN_PROJECT_HINTS[project]}</p>
-      )}
 
       {/* Быстрый ввод */}
       <form
@@ -255,7 +252,7 @@ export default function TasksClient() {
               ? "Мысль на лету…"
               : view === "upcoming"
                 ? `Задача на ${humanDay(pickedDay ?? addDays(today, 1)).toLowerCase()}…`
-                : "Новая задача на сегодня…  !1  #voyage"
+                : "Новая задача на сегодня…  !1  #дом"
           }
           className="h-10 min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-zinc-600"
           enterKeyHint="done"

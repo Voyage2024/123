@@ -2,7 +2,7 @@
   "id": "/bunker",
   "name": "Bunker — личный планер и сейф",
   "short_name": "Bunker",
-  "description": "Приватный планер, финансы, заметки и сейф владельца Voyage.",
+  "description": "Личный планер, финансы, заметки и пароли.",
   "lang": "ru",
   "dir": "ltr",
   "start_url": "/bunker",

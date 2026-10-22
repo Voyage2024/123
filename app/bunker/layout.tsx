@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 
+import BunkerLock from "@/app/bunker/_components/BunkerLock";
 import BunkerShell from "@/app/bunker/_components/BunkerShell";
 import { getBunkerViewer } from "@/lib/bunker/access";
 import "@/app/bunker/bunker.css";
@@ -12,6 +13,9 @@ import "@/app/bunker/bunker.css";
  * Остальным notFound() — снаружи раздел выглядит как несуществующий.
  * Та же проверка стоит в middleware (lib/bunker/middleware.ts), а данные
  * дополнительно закрыты RLS.
+ *
+ * Дальше — PIN-замок (BunkerLock): пока Master PIN не введён, ни оболочка,
+ * ни страницы не рендерятся и не делают ни одного запроса за данными.
  *
  * PWA: свой manifest (scope /bunker) и метатеги iOS — «На экран Домой»
  * в Safari открывает бункер как отдельное приложение без панелей браузера.
@@ -53,7 +57,9 @@ export default async function BunkerLayout({ children }: { children: React.React
   // Корневой layout даёт <main className="pt-24"> под шапку Voyage — здесь шапки нет.
   return (
     <div className="-mt-24">
-      <BunkerShell>{children}</BunkerShell>
+      <BunkerLock>
+        <BunkerShell>{children}</BunkerShell>
+      </BunkerLock>
     </div>
   );
 }

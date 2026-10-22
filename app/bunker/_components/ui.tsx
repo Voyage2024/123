@@ -91,7 +91,7 @@ export function Button({
         tones[tone],
         className,
       )}
-      {...(rest as React.ComponentProps<typeof motion.button>)}
+      {...(rest as unknown as React.ComponentProps<typeof motion.button>)}
     >
       {children}
     </motion.button>
@@ -113,7 +113,7 @@ export function IconButton({
         "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-white",
         className,
       )}
-      {...(rest as React.ComponentProps<typeof motion.button>)}
+      {...(rest as unknown as React.ComponentProps<typeof motion.button>)}
     >
       {children}
     </motion.button>

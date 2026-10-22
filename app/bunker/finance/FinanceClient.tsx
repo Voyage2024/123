@@ -22,10 +22,10 @@ import {
   inputClass,
   progressColor,
 } from "@/app/bunker/_components/ui";
+import { bunkerDb } from "@/app/bunker/_lib/db";
 import { errorText, useBunkerRows } from "@/app/bunker/_lib/useBunkerRows";
 import { daysBetween, humanDay, isoDay, money, percent, shortDate } from "@/lib/bunker/format";
 import { renderMarkdown } from "@/lib/bunker/markdown";
-import { supabase } from "@/lib/supabase";
 import {
   CURRENCIES,
   INVESTMENT_CATEGORIES,
@@ -52,7 +52,7 @@ export default function FinanceClient() {
   return (
     <>
       <PageHeader eyebrow="Капитал" title="Финансы" subtitle={tab === "debts" ? "Погашение обязательств" : "Портфель и стратегия"} />
-      <Segmented
+      <Segmented<Tab>
         value={tab}
         onChange={setTab}
         options={[
@@ -263,15 +263,15 @@ function PaymentSheet({ debt, onClose, onSaved }: { debt: BunkerDebt | null; onC
   const submit = async () => {
     if (!debt || !(value > 0)) return;
     setBusy(true);
-    const { data, error } = await supabase.rpc("bunker_debt_add_payment", {
-      p_debt_id: debt.id,
-      p_amount: value,
-      p_paid_on: date,
-      p_note: note || null,
+    const { data, error, locked } = await bunkerDb<BunkerDebt>({
+      kind: "rpc",
+      fn: "bunker_debt_add_payment",
+      args: { p_debt_id: debt.id, p_amount: value, p_paid_on: date, p_note: note || null },
     });
     setBusy(false);
-    if (error) return notify(errorText(error), { tone: "error" });
-    const row = data as BunkerDebt;
+    if (locked) return;
+    if (error || !data) return notify(errorText(error), { tone: "error" });
+    const row = data;
     notify(row.status === "paid" ? "Долг закрыт полностью 🎉" : `Взнос ${money(value, debt.currency)} записан`);
     onSaved(row);
   };

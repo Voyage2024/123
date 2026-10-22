@@ -12,20 +12,8 @@ export type BunkerProject = {
   sort: number;
 };
 
-/** Встроенные проекты: в базе не хранятся, slug пишется в category. */
-export const BUILTIN_PROJECTS: BunkerProject[] = [
-  { id: "builtin-personal", slug: "personal", name: "Личное", emoji: "🏠", color: "#6ee7b7", sort: 0 },
-  { id: "builtin-voyage", slug: "voyage", name: "VOYAGE", emoji: "✈️", color: "#c9a961", sort: 1 },
-  { id: "builtin-status", slug: "status", name: "STATUS INTERNATIONAL", emoji: "👑", color: "#c4b5fd", sort: 2 },
-  { id: "builtin-russia", slug: "russia", name: "Дела в России", emoji: "🇷🇺", color: "#93c5fd", sort: 3 },
-];
-
-export const BUILTIN_PROJECT_HINTS: Record<string, string> = {
-  personal: "Дананг, спорт, здоровье, покупки, семья",
-  voyage: "Клуб, бот, туры, резидентки, консьерж",
-  status: "Модели, скаутинг, контракты, SMM, клиенты",
-  russia: "Недвижимость, документы, юр. вопросы, поручения",
-};
+/* Проекты хранятся в bunker_projects: базовые создаёт база при первом
+ * Master PIN, у камуфляжа свои. Названий в клиентском коде нет. */
 
 export type Subtask = { id: string; title: string; done: boolean };
 
