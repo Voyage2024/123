@@ -9,7 +9,9 @@
  *
  *   CastingBriefFields   — контролируемые поля (value / onChange)
  *   briefErrors(v)       — проверка до отправки, ключи переводятся на языке формы
- *   createCasting(v)     — insert в partner_castings; manager_id ставит база
+ *   createCasting(v, o)  — insert в partner_castings; manager_id ставит база,
+ *                          owner/admin передают организатора (VOYAGE Management или партнёр)
+ *   updateCasting(id, v) — правка брифа; rowToBrief(row) — строка базы → значения формы
  *
  * Колонки и ограничения — миграция 20261015120000_partner_resident_feed.sql
  * ──────────────────────────────────────────────────────────────────── */
@@ -120,16 +122,82 @@ export function briefToRow(v: BriefValues) {
 
 export type CreateResult = { ok: true; id: string } | { ok: false; reason: "invalid" | "forbidden" | "network" };
 
-/** insert в partner_castings. Права проверяет RLS: только свои, только штат */
-export async function createCasting(v: BriefValues): Promise<CreateResult> {
+/**
+ * insert в partner_castings. Права проверяет RLS: менеджер — только от себя,
+ * owner/admin — от имени VOYAGE Management или любого действующего партнёра.
+ */
+export async function createCasting(v: BriefValues, organizerId?: string | null): Promise<CreateResult> {
   if (briefErrors(v).length > 0) return { ok: false, reason: "invalid" };
+  const row = organizerId ? { ...briefToRow(v), manager_id: organizerId } : briefToRow(v);
   const { data, error } = await supabase
     .from("partner_castings")
-    .insert(briefToRow(v))
+    .insert(row)
     .select("id")
     .single();
   if (error) return { ok: false, reason: error.code === "42501" ? "forbidden" : "network" };
   return { ok: true, id: data.id as string };
+}
+
+export type CastingStatus = "open" | "shortlist" | "closed" | "cancelled";
+export type UpdateResult = { ok: true } | { ok: false; reason: "invalid" | "forbidden" | "has_tour" | "network" };
+
+/** Правка кастинга. organizerId меняет только owner/admin и только до появления тура. */
+export async function updateCasting(
+  id: string,
+  v: BriefValues,
+  extra: { status?: CastingStatus; organizerId?: string | null } = {},
+): Promise<UpdateResult> {
+  if (editErrors(v, extra.status).length > 0) return { ok: false, reason: "invalid" };
+  const row: Record<string, unknown> = { ...briefToRow(v) };
+  if (extra.status) row.status = extra.status;
+  if (extra.organizerId) row.manager_id = extra.organizerId;
+  const { data, error } = await supabase
+    .from("partner_castings")
+    .update(row)
+    .eq("id", id)
+    .select("id");
+  if (error) {
+    if (error.message.includes("casting_has_tour")) return { ok: false, reason: "has_tour" };
+    return { ok: false, reason: error.code === "42501" ? "forbidden" : "network" };
+  }
+  if (!data || data.length === 0) return { ok: false, reason: "forbidden" };
+  return { ok: true };
+}
+
+/** Для правки: закрытый или отменённый кастинг можно сохранить с прошедшим сроком откликов. */
+export function editErrors(v: BriefValues, status?: CastingStatus): BriefErrorKey[] {
+  const closing = status === "closed" || status === "cancelled";
+  return briefErrors(v).filter((key) => !(key === "closesAt" && closing && v.closesAt));
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** Строка partner_castings → значения формы (closes_at в локальное datetime-local). */
+export function rowToBrief(row: Record<string, unknown>): BriefValues {
+  const closes = typeof row.closes_at === "string" ? new Date(row.closes_at) : null;
+  const closesAt = closes && Number.isFinite(closes.getTime())
+    ? `${closes.getFullYear()}-${pad(closes.getMonth() + 1)}-${pad(closes.getDate())}T${pad(closes.getHours())}:${pad(closes.getMinutes())}`
+    : "";
+  const project = PROJECT_TYPES.includes(row.project_type as ProjectKey) ? (row.project_type as ProjectKey) : "shoot";
+  const segment = AUDIENCE_SEGMENTS.includes(row.audience_segment as AudienceSegment) ? (row.audience_segment as AudienceSegment) : "working";
+  const currency = CURRENCIES.includes(row.fee_currency as (typeof CURRENCIES)[number]) ? (row.fee_currency as (typeof CURRENCIES)[number]) : "USD";
+  const payer = (value: unknown): Payer => (PAYERS.includes(value as Payer) ? (value as Payer) : "manager");
+  return {
+    city: typeof row.city === "string" ? row.city : "",
+    audienceSegment: segment,
+    project,
+    startsOn: typeof row.starts_on === "string" ? row.starts_on.slice(0, 10) : "",
+    endsOn: typeof row.ends_on === "string" ? row.ends_on.slice(0, 10) : "",
+    slots: Number.isInteger(Number(row.slots)) ? Number(row.slots) : 1,
+    closesAt,
+    feeAmount: row.fee_amount === null || row.fee_amount === undefined ? "" : String(row.fee_amount),
+    feeCurrency: currency,
+    flightPaidBy: payer(row.flight_paid_by),
+    hotelPaidBy: payer(row.hotel_paid_by),
+    heightMin: row.height_min === null || row.height_min === undefined ? "" : String(row.height_min),
+    languages: Array.isArray(row.languages) ? row.languages.filter((x): x is string => typeof x === "string") : [],
+    brief: typeof row.brief === "string" ? row.brief : "",
+  };
 }
 
 /* ── тексты ───────────────────────────────────────────────────────── */

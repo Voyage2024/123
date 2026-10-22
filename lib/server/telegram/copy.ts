@@ -5,6 +5,7 @@ type FaqTopic = "application" | "review" | "photos" | "access";
 type Copy = {
   welcome: string;
   register: string;
+  partnerButton: string;
   faqButton: string;
   support: string;
   languageButton: string;
@@ -25,7 +26,7 @@ type Copy = {
 const COPY: Record<TelegramLang, Copy> = {
   EN: {
     welcome: "Welcome to VOYAGE Concierge. Submit your initial profile here, get answers to common questions, and receive your approval notification in this chat.",
-    register: "Start application", faqButton: "FAQ", support: "Contact support", languageButton: "Language", cancel: "Application cancelled. Send /start to begin again.",
+    register: "Start application", partnerButton: "I am a partner / manager", faqButton: "FAQ", support: "Contact support", languageButton: "Language", cancel: "Application cancelled. Send /start to begin again.",
     alreadyPending: "We already have your application and it is waiting for review. We will message you here when its status changes.",
     alreadyApproved: "Your VOYAGE account is approved. Use the login details sent in this chat. Change your temporary password after signing in.",
     alreadyRejected: "A previous application is linked to this Telegram account. Contact support if you want to appeal or update it.",
@@ -58,7 +59,7 @@ const COPY: Record<TelegramLang, Copy> = {
   },
   RU: {
     welcome: "Добро пожаловать в VOYAGE Concierge. Здесь можно отправить первичную анкету, получить ответы на частые вопросы и получить уведомление об одобрении в этом чате.",
-    register: "Заполнить анкету", faqButton: "Частые вопросы", support: "Связаться с поддержкой", languageButton: "Язык", cancel: "Анкета отменена. Отправьте /start, чтобы начать заново.",
+    register: "Заполнить анкету", partnerButton: "Я партнёр / менеджер", faqButton: "Частые вопросы", support: "Связаться с поддержкой", languageButton: "Язык", cancel: "Анкета отменена. Отправьте /start, чтобы начать заново.",
     alreadyPending: "Ваша анкета уже получена и ожидает проверки. Мы сообщим сюда, когда статус изменится.",
     alreadyApproved: "Ваш аккаунт VOYAGE одобрен. Используйте данные для входа, отправленные в этом чате. После входа сразу смените временный пароль.",
     alreadyRejected: "С этим Telegram уже связана предыдущая заявка. Чтобы обжаловать решение или обновить данные, обратитесь в поддержку.",
@@ -91,7 +92,7 @@ const COPY: Record<TelegramLang, Copy> = {
   },
   ES: {
     welcome: "Te damos la bienvenida a VOYAGE Concierge. Envía aquí tu solicitud inicial, consulta preguntas frecuentes y recibe en este chat la notificación de aprobación.",
-    register: "Iniciar solicitud", faqButton: "Preguntas frecuentes", support: "Contactar soporte", languageButton: "Idioma", cancel: "Solicitud cancelada. Envía /start para comenzar de nuevo.",
+    register: "Iniciar solicitud", partnerButton: "Soy socio / mánager", faqButton: "Preguntas frecuentes", support: "Contactar soporte", languageButton: "Idioma", cancel: "Solicitud cancelada. Envía /start para comenzar de nuevo.",
     alreadyPending: "Ya recibimos tu solicitud y está pendiente de revisión. Te avisaremos en este chat cuando cambie el estado.",
     alreadyApproved: "Tu cuenta VOYAGE está aprobada. Usa los datos enviados en este chat y cambia la contraseña temporal después de iniciar sesión.",
     alreadyRejected: "Ya hay una solicitud vinculada a esta cuenta de Telegram. Contacta con soporte para apelar o actualizarla.",
@@ -124,7 +125,7 @@ const COPY: Record<TelegramLang, Copy> = {
   },
   PT: {
     welcome: "Bem-vinda ao VOYAGE Concierge. Envie aqui sua solicitação inicial, consulte as perguntas frequentes e receba a notificação de aprovação neste chat.",
-    register: "Iniciar solicitação", faqButton: "Perguntas frequentes", support: "Falar com suporte", languageButton: "Idioma", cancel: "Solicitação cancelada. Envie /start para começar novamente.",
+    register: "Iniciar solicitação", partnerButton: "Sou parceiro / gerente", faqButton: "Perguntas frequentes", support: "Falar com suporte", languageButton: "Idioma", cancel: "Solicitação cancelada. Envie /start para começar novamente.",
     alreadyPending: "Já recebemos sua solicitação e ela está aguardando análise. Avisaremos neste chat quando o status mudar.",
     alreadyApproved: "Sua conta VOYAGE foi aprovada. Use os dados enviados neste chat e altere a senha temporária depois de entrar.",
     alreadyRejected: "Já existe uma solicitação vinculada a esta conta do Telegram. Fale com o suporte para recorrer ou atualizar os dados.",
@@ -165,6 +166,7 @@ export function mainMenu(lang: TelegramLang) {
   const t = COPY[lang];
   return new InlineKeyboard()
     .text(t.register, "menu:register").row()
+    .text(t.partnerButton, "menu:partner").row()
     .text(t.faqButton, "menu:faq").text(t.support, "menu:support").row()
     .text(t.languageButton, "menu:language");
 }

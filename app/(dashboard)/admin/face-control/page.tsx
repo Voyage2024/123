@@ -184,7 +184,8 @@ export default function FaceControlPage() {
                 </div>
               </div>
               <button type="button" onClick={() => void navigator.clipboard.writeText(`Login: ${manualCredentials.login}
-Password: ${manualCredentials.password}`)} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-200/20 bg-amber-200/[0.08] px-3 py-2 text-xs font-medium text-amber-100 transition hover:bg-amber-200/[0.13]"><Check size={14}/> Copy both credentials</button>
+Password: ${manualCredentials.password}
+🌐 ${(process.env.NEXT_PUBLIC_SITE_URL || "https://voyage-models.com").replace(/\/+$/, "")}/login`)} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-200/20 bg-amber-200/[0.08] px-3 py-2 text-xs font-medium text-amber-100 transition hover:bg-amber-200/[0.13]"><Check size={14}/> Copy both credentials</button>
               <p className="mt-3 text-[10px] text-zinc-600">Profile ID: <code>{manualCredentials.profileId}</code></p>
             </div>
           </div>

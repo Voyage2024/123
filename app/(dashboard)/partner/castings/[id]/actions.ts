@@ -19,6 +19,9 @@ function messageFor(error: { code?: string; message: string }) {
   if (error.message.includes("tour_casting_mismatch")) return "Тур не совпадает с городом или типом проекта кастинга.";
   if (error.message.includes("casting_closed")) return "Кастинг закрыт или срок откликов истёк.";
   if (error.message.includes("response_not_declineable")) return "Этот отклик уже обработан и не может быть отклонён повторно.";
+  if (error.message.includes("invalid_iata")) return "Код аэропорта — три латинские буквы, например DXB.";
+  if (error.message.includes("invalid_dates")) return "Проверьте даты: возвращение не раньше вылета.";
+  if (error.message.includes("casting_cancelled")) return "Кастинг отменён — тур создать нельзя.";
   return error.message || "Не удалось выполнить действие.";
 }
 
@@ -69,6 +72,32 @@ export async function completeCastingHandshake(
     p_casting_id: castingId,
     p_tour_id: tourId,
     p_resident_id: residentId,
+  });
+  return error ? { ok: false, error: messageFor(error) } : { ok: true };
+}
+
+/** Подтверждённый тур из кастинга: организатор, город и тип проекта берутся из кастинга. */
+export async function createTourFromCasting(
+  castingId: string,
+  input: { departsAt: string; returnsAt: string | null; flightNo?: string; iata?: string },
+): Promise<CastingActionResult> {
+  if (inputError(castingId)) return { ok: false, error: "Некорректный идентификатор кастинга." };
+  const departs = Date.parse(input.departsAt);
+  const returns = input.returnsAt ? Date.parse(input.returnsAt) : null;
+  if (!Number.isFinite(departs) || (returns !== null && (!Number.isFinite(returns) || returns < departs))) {
+    return { ok: false, error: "Проверьте даты: возвращение не раньше вылета." };
+  }
+  const iata = (input.iata ?? "").trim().toUpperCase();
+  if (iata && !/^[A-Z]{3}$/.test(iata)) return { ok: false, error: "Код аэропорта — три латинские буквы, например DXB." };
+  const flightNo = (input.flightNo ?? "").trim().slice(0, 12);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("partner_create_tour", {
+    p_casting: castingId,
+    p_departs_at: new Date(departs).toISOString(),
+    p_returns_at: returns === null ? null : new Date(returns).toISOString(),
+    p_flight_no: flightNo || null,
+    p_iata: iata || null,
   });
   return error ? { ok: false, error: messageFor(error) } : { ok: true };
 }

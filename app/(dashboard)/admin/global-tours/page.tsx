@@ -19,6 +19,8 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/app/context/LanguageContext';
 import { cormorant } from "@/app/components/profile/fonts";
+import OrganizerSelect, { OrganizerBadgePill, usePublishers } from "@/app/components/organizer/OrganizerSelect";
+import { ORGANIZER_TEXT, VOYAGE_MANAGEMENT_ID } from "@/lib/organizer";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -33,6 +35,7 @@ type GlobalEvent = {
   description: string | null;
   conditions: string | null;
   is_active: boolean;
+  organizer_id?: string | null;
   created_at: string;
 };
 
@@ -42,6 +45,7 @@ type FormState = {
   description: string;
   conditions: string;
   is_active: boolean;
+  organizer_id: string;
 };
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
@@ -54,6 +58,7 @@ const EMPTY_FORM: FormState = {
   description: '',
   conditions: '',
   is_active: true,
+  organizer_id: VOYAGE_MANAGEMENT_ID,
 };
 
 /* ------------------------------------------------------------------ */
@@ -291,6 +296,8 @@ export default function GlobalToursAdminPage() {
   const { lang: rawLang } = useLanguage();
   const lang = normalizeLang(rawLang);
   const t = T[lang];
+  const { publishers } = usePublishers();
+  const publisherById = useMemo(() => new Map(publishers.map((p) => [p.id, p])), [publishers]);
 
   const [events, setEvents] = useState<GlobalEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -388,6 +395,7 @@ export default function GlobalToursAdminPage() {
       description: ev.description ?? '',
       conditions: ev.conditions ?? '',
       is_active: ev.is_active,
+      organizer_id: ev.organizer_id || VOYAGE_MANAGEMENT_ID,
     });
     setErrors({});
     setModalOpen(true);
@@ -426,6 +434,7 @@ export default function GlobalToursAdminPage() {
       description: form.description.trim() || null,
       conditions: form.conditions.trim() || null,
       is_active: form.is_active,
+      organizer_id: form.organizer_id || VOYAGE_MANAGEMENT_ID,
     };
 
     if (editingId) {
@@ -619,6 +628,16 @@ export default function GlobalToursAdminPage() {
                       <MapPin className="h-3.5 w-3.5" />
                       {ev.region}
                     </div>
+                    {(() => {
+                      const organizer = publisherById.get(ev.organizer_id || VOYAGE_MANAGEMENT_ID);
+                      return (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-400">
+                          <span className="text-neutral-500">{ORGANIZER_TEXT[lang].publishedBy}:</span>
+                          <span className="text-neutral-200">{organizer?.name ?? ORGANIZER_TEXT[lang].partner}</span>
+                          <OrganizerBadgePill badge={organizer?.badge ?? null} lang={lang} />
+                        </div>
+                      );
+                    })()}
                   </div>
                   <span
                     className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider ${
@@ -720,6 +739,13 @@ export default function GlobalToursAdminPage() {
             </div>
 
             <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+              <OrganizerSelect
+                id="tour-organizer"
+                value={form.organizer_id}
+                onChange={(organizerId) => setForm((f) => ({ ...f, organizer_id: organizerId }))}
+                lang={lang}
+                disabled={saving}
+              />
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">

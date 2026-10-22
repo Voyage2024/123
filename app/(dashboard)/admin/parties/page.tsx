@@ -21,6 +21,8 @@ import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/app/context/LanguageContext';
 import { cormorant } from "@/app/components/profile/fonts";
 import PartyApplicationsDialog from "@/app/(dashboard)/admin/parties/PartyApplicationsDialog";
+import OrganizerSelect, { OrganizerBadgePill, usePublishers } from "@/app/components/organizer/OrganizerSelect";
+import { ORGANIZER_TEXT, VOYAGE_MANAGEMENT_ID } from "@/lib/organizer";
 import {
   getEventApplicationSummaries,
   type PartyApplicationSummary,
@@ -44,6 +46,8 @@ type GlobalEvent = {
   minimum_kyc_level?: number | null;
   capacity?: number | null;
   application_closes_at?: string | null;
+  /** От чьего имени опубликовано; null в старых записях = VOYAGE Management */
+  organizer_id?: string | null;
   created_at: string;
 };
 
@@ -58,6 +62,7 @@ type FormState = {
   minimum_kyc_level: number;
   capacity: string;
   application_closes_at: string;
+  organizer_id: string;
 };
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
@@ -83,6 +88,7 @@ const EMPTY_FORM: FormState = {
   minimum_kyc_level: 2,
   capacity: '',
   application_closes_at: '',
+  organizer_id: VOYAGE_MANAGEMENT_ID,
 };
 
 /* ------------------------------------------------------------------ */
@@ -380,6 +386,8 @@ export default function PartiesAdminPage() {
   const { lang: rawLang } = useLanguage();
   const lang = normalizeLang(rawLang);
   const t = T[lang];
+  const { publishers } = usePublishers();
+  const publisherById = useMemo(() => new Map(publishers.map((p) => [p.id, p])), [publishers]);
 
   const [events, setEvents] = useState<GlobalEvent[]>([]);
   const [applicationSummaries, setApplicationSummaries] = useState<Record<string, PartyApplicationSummary>>({});
@@ -492,6 +500,7 @@ export default function PartiesAdminPage() {
       minimum_kyc_level: Number.isInteger(ev.minimum_kyc_level) ? Number(ev.minimum_kyc_level) : 0,
       capacity: ev.capacity == null ? '' : String(ev.capacity),
       application_closes_at: toDatetimeLocal(ev.application_closes_at),
+      organizer_id: ev.organizer_id || VOYAGE_MANAGEMENT_ID,
     });
     setErrors({});
     setModalOpen(true);
@@ -545,6 +554,7 @@ export default function PartiesAdminPage() {
       minimum_kyc_level: form.minimum_kyc_level,
       capacity: capacityValue,
       application_closes_at: deadlineValue,
+      organizer_id: form.organizer_id || VOYAGE_MANAGEMENT_ID,
     };
 
     if (editingId) {
@@ -746,6 +756,16 @@ export default function PartiesAdminPage() {
                       <MapPin className="h-3.5 w-3.5" />
                       {ev.region}
                     </div>
+                    {(() => {
+                      const organizer = publisherById.get(ev.organizer_id || VOYAGE_MANAGEMENT_ID);
+                      return (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-400">
+                          <span className="text-neutral-500">{ORGANIZER_TEXT[lang].publishedBy}:</span>
+                          <span className="text-neutral-200">{organizer?.name ?? ORGANIZER_TEXT[lang].partner}</span>
+                          <OrganizerBadgePill badge={organizer?.badge ?? null} lang={lang} />
+                        </div>
+                      );
+                    })()}
                   </div>
                   <span
                     className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider ${
@@ -865,6 +885,14 @@ export default function PartiesAdminPage() {
             </div>
 
             <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+              <OrganizerSelect
+                id="party-organizer"
+                value={form.organizer_id}
+                onChange={(organizerId) => setForm((f) => ({ ...f, organizer_id: organizerId }))}
+                lang={lang}
+                disabled={saving}
+              />
+
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-neutral-400">

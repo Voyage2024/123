@@ -49,6 +49,8 @@ export type CastingBrief = {
   responders: Responder[];
   /** Закрытый кастинг → тур, который из него родился */
   tourId: string | null;
+  /** От чьего имени опубликован: VOYAGE Management (official) или партнёр */
+  organizer: { id: string; name: string; official: boolean; badge: "official_club" | "verified" | null } | null;
 };
 
 export type CastingsData = { generatedAt: number; castings: CastingBrief[] };
@@ -85,6 +87,17 @@ export function parseCastings(raw: unknown): CastingsData {
       note: str(r.brief),
       responders: list<Responder>(r.responders, parseResponder),
       tourId: str(r.tour_id),
+      organizer: (() => {
+        const o = obj(r.organizer);
+        const organizerId = str(o.id);
+        if (!organizerId) return null;
+        return {
+          id: organizerId,
+          name: str(o.name) ?? "—",
+          official: o.official === true,
+          badge: oneOf(o.badge, ["official_club", "verified"] as const),
+        };
+      })(),
     };
   });
   return { generatedAt: time(root.generated_at) ?? Date.now(), castings };

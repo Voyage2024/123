@@ -19,9 +19,17 @@ import {
   type BriefErrorKey,
   type BriefValues,
 } from "@/app/(dashboard)/partner/_components/CastingBriefFields";
+import OrganizerSelect from "@/app/components/organizer/OrganizerSelect";
+import { useAuth } from "@/app/context/AuthContext";
+import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
+import { VOYAGE_MANAGEMENT_ID } from "@/lib/organizer";
 
 export default function NewCastingPage() {
   const router = useRouter();
+  const { role } = useAuth();
+  // owner/admin публикуют от имени клуба (по умолчанию) или выбранного партнёра.
+  const canChooseOrganizer = role === "owner" || role === "admin";
+  const [organizerId, setOrganizerId] = useState<string>(VOYAGE_MANAGEMENT_ID);
 
   const [values, setValues] = useState<BriefValues>(EMPTY_BRIEF);
   const [errors, setErrors] = useState<BriefErrorKey[]>([]);
@@ -55,7 +63,7 @@ export default function NewCastingPage() {
 
     try {
       // 2. Создаём кастинг через готовую функцию компонента.
-      const result = await createCasting(values);
+      const result = await createCasting(values, canChooseOrganizer ? organizerId : null);
 
       if (!result.ok) {
         const messages: Record<typeof result.reason, string> = {
@@ -78,13 +86,13 @@ export default function NewCastingPage() {
         return;
       }
 
-      // 3. Кастинг создан - переходим в ленту менеджера.
+      // 3. Кастинг создан — открываем его доску: там создаётся тур и идут отклики.
       setNotice({
         type: "success",
-        message: "Кастинг создан. Перенаправляем в ленту...",
+        message: "Кастинг опубликован. Открываем доску откликов...",
       });
 
-      router.push("/partner/castings");
+      router.push(ROUTES.casting(result.id));
       router.refresh();
     } catch (error) {
       console.error("[NewCastingPage] Failed to create casting:", error);
@@ -150,6 +158,18 @@ export default function NewCastingPage() {
 
               <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-zinc-500" />
             </div>
+
+            {canChooseOrganizer && (
+              <div className="mb-7 rounded-xl border border-amber-200/15 bg-amber-200/[0.03] p-4">
+                <OrganizerSelect
+                  id="casting-organizer"
+                  value={organizerId}
+                  onChange={setOrganizerId}
+                  lang="ru"
+                  disabled={isSubmitting}
+                />
+              </div>
+            )}
 
             <CastingBriefFields
               value={values}

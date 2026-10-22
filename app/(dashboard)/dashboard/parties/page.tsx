@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import Link from "next/link";
 import { submitEventApplication } from "@/app/actions/event-applications";
 import { motion } from "framer-motion";
-import { Check, Clock, Gem, GlassWater, Loader2, MapPin, ScrollText, Send, Ticket } from "lucide-react";
+import { BadgeCheck, Check, Clock, Gem, GlassWater, Loader2, MapPin, ScrollText, Send, Ticket } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -35,6 +35,8 @@ type GlobalEvent = {
   conditions: string | null;
   is_active: boolean;
   created_at: string;
+  /** Подпись организатора из voyage_event_organizers(): имя только у клуба */
+  organizer?: { official: boolean; badge: "official_club" | "verified" | null; name: string | null };
 };
 
 type ApplicationStatus = "pending" | "approved" | "rejected";
@@ -151,6 +153,7 @@ const T = {
     subtitle: "Exclusive gatherings available to club residents.",
     activeEvents: "Active events",
     privateEvent: "Private event",
+    officialEvent: "Official club event",
     empty: "There are no active events at the moment.",
     loading: "Loading...",
     authRequired: "Authorization is required to submit an application.",
@@ -180,6 +183,7 @@ const T = {
     subtitle: "Эксклюзивные мероприятия, доступные резидентам клуба.",
     activeEvents: "Актуальные мероприятия",
     privateEvent: "Закрытое мероприятие",
+    officialEvent: "Официальный ивент клуба",
     empty: "Сейчас активных мероприятий нет.",
     loading: "Загрузка...",
     authRequired: "Для подачи заявки необходимо авторизоваться.",
@@ -209,6 +213,7 @@ const T = {
     subtitle: "Eventos exclusivos disponibles para los residentes del club.",
     activeEvents: "Eventos activos",
     privateEvent: "Evento privado",
+    officialEvent: "Evento oficial del club",
     empty: "No hay eventos activos en este momento.",
     loading: "Cargando...",
     authRequired: "Debes iniciar sesión para enviar una solicitud.",
@@ -238,6 +243,7 @@ const T = {
     subtitle: "Eventos exclusivos disponíveis para residentes do clube.",
     activeEvents: "Eventos ativos",
     privateEvent: "Evento privado",
+    officialEvent: "Evento oficial do clube",
     empty: "Não há eventos ativos no momento.",
     loading: "Carregando...",
     authRequired: "É necessário estar autenticado para enviar uma solicitação.",
@@ -521,9 +527,21 @@ function PartyCard({ event, userId, lang, t }: PartyCardProps) {
         <div className="relative p-6 xl:p-7">
           <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-amber-200/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-          <div className="mb-4 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.2em] text-amber-200/70">
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-[0.2em] text-amber-200/70">
             <GlassWater className="h-3.5 w-3.5" />
-            {t.privateEvent}
+            {event.organizer?.official ? t.officialEvent : t.privateEvent}
+            {event.organizer?.official && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200/35 bg-amber-200/10 px-2 py-0.5 tracking-[0.14em] text-amber-100">
+                <BadgeCheck className="h-3 w-3" />
+                {event.organizer.name ?? "VOYAGE Management"} · Official Club
+              </span>
+            )}
+            {!event.organizer?.official && event.organizer?.badge === "verified" && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-2 py-0.5 tracking-[0.14em] text-emerald-100">
+                <BadgeCheck className="h-3 w-3" />
+                Verified
+              </span>
+            )}
           </div>
 
           <h2
@@ -679,7 +697,19 @@ export default function PartiesPage() {
         setEvents([]);
         setError("load");
       } else {
-        setEvents((data || []) as GlobalEvent[]);
+        // Подпись организатора: «VOYAGE Management · Official Club» или бейдж партнёра.
+        const { data: organizers } = await supabase.rpc("voyage_event_organizers");
+        if (!mounted) return;
+        const byEvent = new Map<string, NonNullable<GlobalEvent["organizer"]>>();
+        for (const row of (Array.isArray(organizers) ? organizers : []) as Record<string, unknown>[]) {
+          if (typeof row.event_id !== "string") continue;
+          byEvent.set(row.event_id, {
+            official: row.official === true,
+            badge: row.badge === "official_club" || row.badge === "verified" ? row.badge : null,
+            name: typeof row.display_name === "string" ? row.display_name : null,
+          });
+        }
+        setEvents(((data || []) as GlobalEvent[]).map((event) => ({ ...event, organizer: byEvent.get(event.id) })));
       }
 
       setEventsLoading(false);

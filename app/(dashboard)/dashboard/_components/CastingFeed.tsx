@@ -28,6 +28,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
+  BadgeCheck,
   Banknote,
   BedDouble,
   Check,
@@ -95,6 +96,7 @@ type Dict = {
   fits: string;
   manager: string;
   managerNew: string;
+  organizerClub: string;
   tours: (n: number) => string;
   closesIn: (d: string) => string;
   apply: string;
@@ -139,6 +141,7 @@ const T: Record<Lang, Dict> = {
     fits: "matches your profile",
     manager: "Club manager",
     managerNew: "new",
+    organizerClub: "Official club tour",
     tours: (n) => `${n} ${pl(n, "tour", "tours")}`,
     closesIn: (d) => `Replies close in ${d}`,
     apply: "Ready for the tour",
@@ -185,6 +188,7 @@ const T: Record<Lang, Dict> = {
     fits: "подходит под ваш профиль",
     manager: "Менеджер клуба",
     managerNew: "новый",
+    organizerClub: "Официальный тур клуба",
     tours: (n) => `${n} ${ru(n, "тур", "тура", "туров")}`,
     closesIn: (d) => `Приём откликов закроется через ${d}`,
     apply: "Готова в тур",
@@ -231,6 +235,7 @@ const T: Record<Lang, Dict> = {
     fits: "encaja con tu perfil",
     manager: "Gerente del club",
     managerNew: "nuevo",
+    organizerClub: "Tour oficial del club",
     tours: (n) => `${n} ${pl(n, "tour", "tours")}`,
     closesIn: (d) => `Las respuestas cierran en ${d}`,
     apply: "Lista para el tour",
@@ -277,6 +282,7 @@ const T: Record<Lang, Dict> = {
     fits: "combina com seu perfil",
     manager: "Gerente do clube",
     managerNew: "novo",
+    organizerClub: "Tour oficial do clube",
     tours: (n) => `${n} ${pl(n, "tour", "tours")}`,
     closesIn: (d) => `As respostas fecham em ${d}`,
     apply: "Pronta para o tour",
@@ -577,8 +583,28 @@ function TicketCard({
 
         {c.note && <p className={`${cormorant.className} mt-4 text-[17px] leading-snug text-zinc-200`}>«{c.note}»</p>}
 
-        {/* менеджер — только репутация, без имени */}
-        <p className="mt-4 text-[10px] uppercase tracking-[0.22em] text-zinc-500">{t.manager}</p>
+        {/* тур клуба — имя и Official Club; партнёр — только репутация, без имени */}
+        {c.organizer.official ? (
+          <div className="mt-4 rounded-xl border border-amber-200/25 bg-amber-200/[0.05] px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-amber-100/70">{t.organizerClub}</p>
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-zinc-100">
+              {c.organizer.name ?? "VOYAGE Management"}
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200/35 bg-amber-200/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100">
+                <BadgeCheck className="size-3" aria-hidden />
+                Official Club
+              </span>
+            </p>
+          </div>
+        ) : null}
+        <p className="mt-4 flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+          {t.manager}
+          {!c.organizer.official && c.organizer.badge === "verified" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-[0.14em] text-emerald-100">
+              <BadgeCheck className="size-3" aria-hidden />
+              Verified
+            </span>
+          )}
+        </p>
         <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
           <KeyRound className="size-3.5 shrink-0 text-amber-200/70" aria-hidden />
           <span className={`bg-gradient-to-r ${TIER_TEXT[c.manager.tier]} bg-clip-text font-medium text-transparent`}>

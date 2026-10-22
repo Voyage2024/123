@@ -32,6 +32,7 @@ import {
   type ClubInviteRow,
   type PatronageRuleRow,
 } from "@/lib/patronage";
+import PartnerAccessPanel from "@/app/(dashboard)/admin/invites/PartnerAccessPanel";
 import AdminInvitesClient, { cormorant, useInvitesI18n } from "@/app/(dashboard)/admin/invites/AdminInvitesClient";
 
 const RELOAD_DEBOUNCE_MS = 400;
@@ -315,6 +316,8 @@ export default function AdminInvitesPage() {
           onChanged={handleChanged}
         />
       ) : null}
+
+      <PartnerAccessPanel isOwner={auth.role === "owner"} />
     </div>
   );
 }

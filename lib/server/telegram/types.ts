@@ -7,7 +7,13 @@ export type RegistrationStage =
   | "location"
   | "measurements"
   | "photos"
-  | "submitting";
+  | "submitting"
+  // Партнёрская анкета (/start partner, /partner)
+  | "partner_name"
+  | "partner_regions"
+  | "partner_contact"
+  | "partner_email"
+  | "partner_submitting";
 
 export interface RegistrationAnswers {
   email?: string;
@@ -15,6 +21,10 @@ export interface RegistrationAnswers {
   birth_date?: string;
   location?: string;
   measurements?: string;
+  partner_name?: string;
+  partner_regions?: string;
+  partner_contact?: string;
+  partner_email?: string;
 }
 
 export interface TelegramConversationState {
@@ -24,6 +34,7 @@ export interface TelegramConversationState {
   stage: RegistrationStage;
   answers: RegistrationAnswers;
   photo_urls: string[];
+  /** Резидентки — код VYG-… приглашения; партнёры — код VYP-… инвайта владельца. */
   referral_code?: string | null;
   updated_at?: string;
   expires_at: string;

@@ -60,6 +60,8 @@ export type FeedCasting = {
   note: string | null;
   /** Менеджер без имени — только репутация */
   manager: { tier: KeyTier; rating: number | null; tours: number };
+  /** Организатор: у клуба — имя и Official Club, у партнёра — только бейдж (имя после рукопожатия) */
+  organizer: { official: boolean; badge: "official_club" | "verified" | null; name: string | null };
   /** Кастинг опубликован после последнего визита резидентки */
   fresh: boolean;
   response: { status: ResponseStatus; at: number; optionUntil: number | null } | null;
@@ -150,6 +152,14 @@ function parseCasting(r: Raw): FeedCasting | null {
       rating: num(m.rating),
       tours: num(m.tours) ?? 0,
     },
+    organizer: (() => {
+      const o = obj(r.organizer);
+      return {
+        official: o.official === true,
+        badge: oneOf(o.badge, ["official_club", "verified"] as const),
+        name: str(o.name),
+      };
+    })(),
     fresh: r.fresh === true,
     response: parseResponse(r.response),
   };

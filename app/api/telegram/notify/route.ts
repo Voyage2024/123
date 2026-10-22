@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { processPartnerNotificationQueue } from "@/lib/server/telegram/partner-notifications";
 
@@ -6,13 +6,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function constantTimeSecretEqual(received: string, expected: string): boolean {
-  const left = Buffer.from(received, "utf8");
-  const right = Buffer.from(expected, "utf8");
-  if (!left.length || left.length !== right.length) return false;
+  if (!received || !expected) return false;
+  // Сравниваем SHA-256: одинаковая длина буферов, длина секрета не утекает по времени.
+  const left = createHash("sha256").update(received, "utf8").digest();
+  const right = createHash("sha256").update(expected, "utf8").digest();
   return timingSafeEqual(left, right);
 }
 
-/** Endpoint for Supabase Database Webhooks and an optional 30-second queue poller. */
+/**
+ * Endpoint for the partner_notifications webhook (pg_net trigger, secret from Vault)
+ * and an optional 30-second queue poller.
+ *
+ * Secret: PARTNER_NOTIFICATIONS_WEBHOOK_SECRET. Accepted headers, in order:
+ *   x-webhook-secret            — new trigger (migration 20261022092000)
+ *   x-voyage-webhook-secret     — legacy header, kept for the poller during rotation
+ *   Authorization: Bearer <secret>
+ */
 export async function POST(request: Request) {
   const expectedSecret = (process.env.PARTNER_NOTIFICATIONS_WEBHOOK_SECRET ?? "").trim();
   if (!expectedSecret) {
@@ -20,9 +29,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Webhook is not configured" }, { status: 503 });
   }
 
-  const receivedSecret = request.headers.get("x-voyage-webhook-secret")
+  const receivedSecret = (
+    request.headers.get("x-webhook-secret")
+    ?? request.headers.get("x-voyage-webhook-secret")
     ?? request.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
-    ?? "";
+    ?? ""
+  ).trim();
   if (!constantTimeSecretEqual(receivedSecret, expectedSecret)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
@@ -42,6 +54,15 @@ export async function POST(request: Request) {
 
   if (!isSchedulerPing && ((table && table !== "partner_notifications") || (schema && schema !== "public") || (eventType && eventType !== "INSERT"))) {
     return NextResponse.json({ ok: true, ignored: true, reason: "unrelated_event" });
+  }
+
+  const insertedRecord = body.record && typeof body.record === "object" && !Array.isArray(body.record)
+    ? body.record as Record<string, unknown>
+    : null;
+  // Служебные строки (skipped / opted_out / sent) сайт не будят, даже если
+  // старый вебхук без условия ещё не удалён.
+  if (!isSchedulerPing && insertedRecord && typeof insertedRecord.status === "string" && insertedRecord.status !== "queued") {
+    return NextResponse.json({ ok: true, ignored: true, reason: "not_queued" });
   }
 
   try {

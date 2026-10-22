@@ -3,6 +3,7 @@ import "server-only";
 import { Api } from "grammy";
 import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
 import type { TelegramLang } from "@/lib/server/telegram/types";
+import { siteLoginKeyboard, siteLoginLine } from "@/lib/server/telegram/site-login";
 
 export type ApprovedCredentials = {
   deliveryId: string;
@@ -11,6 +12,8 @@ export type ApprovedCredentials = {
   login: string;
   password: string;
   fullName: string | null;
+  /** partner — текст про партнёрский кабинет вместо «анкета одобрена». */
+  audience?: "resident" | "partner";
 };
 
 export type CredentialDeliveryResult =
@@ -39,12 +42,19 @@ function approvedMessage(lang: TelegramLang, input: ApprovedCredentials): string
   const safeName = input.fullName?.trim() ? ` ${escapeHtml(input.fullName.trim())}` : "";
   const safeLogin = escapeHtml(input.login);
   const safePassword = escapeHtml(input.password);
-  const greeting: Record<TelegramLang, string> = {
-    EN: `Hello${safeName}! Your VOYAGE profile has been approved.`,
-    RU: `Здравствуйте${safeName}! Ваша анкета VOYAGE одобрена.`,
-    ES: `¡Hola${safeName}! Tu perfil de VOYAGE ha sido aprobado.`,
-    PT: `Olá${safeName}! Seu perfil VOYAGE foi aprovado.`,
-  };
+  const greeting: Record<TelegramLang, string> = input.audience === "partner"
+    ? {
+        EN: `Hello${safeName}! Your VOYAGE partner workspace is open.`,
+        RU: `Здравствуйте${safeName}! Ваш партнёрский кабинет VOYAGE открыт.`,
+        ES: `¡Hola${safeName}! Tu panel de socio de VOYAGE está abierto.`,
+        PT: `Olá${safeName}! Seu painel de parceiro VOYAGE está aberto.`,
+      }
+    : {
+        EN: `Hello${safeName}! Your VOYAGE profile has been approved.`,
+        RU: `Здравствуйте${safeName}! Ваша анкета VOYAGE одобрена.`,
+        ES: `¡Hola${safeName}! Tu perfil de VOYAGE ha sido aprobado.`,
+        PT: `Olá${safeName}! Seu perfil VOYAGE foi aprovado.`,
+      };
   const labels: Record<TelegramLang, { login: string; password: string; security: string; site: string }> = {
     EN: { login: "Login", password: "Temporary password", security: "Sign in and change this password immediately. For your safety, do not forward this message.", site: "VOYAGE account access" },
     RU: { login: "Логин", password: "Временный пароль", security: "Войдите и сразу смените этот пароль. В целях безопасности не пересылайте это сообщение.", site: "Доступ к аккаунту VOYAGE" },
@@ -54,7 +64,7 @@ function approvedMessage(lang: TelegramLang, input: ApprovedCredentials): string
   const text = labels[lang];
   // Telegram HTML <code> displays a copy-friendly monospace credential. All
   // untrusted inserted values are escaped to prevent markup injection.
-  return `✅ ${greeting[lang]}\n\n<b>${text.site}</b>\n${text.login}: <code>${safeLogin}</code>\n${text.password}: <code>${safePassword}</code>\n\n${text.security}`;
+  return `✅ ${greeting[lang]}\n\n<b>${text.site}</b>\n${text.login}: <code>${safeLogin}</code>\n${text.password}: <code>${safePassword}</code>\n${siteLoginLine(lang)}\n\n${text.security}`;
 }
 
 /** Sends credentials directly via Telegram Bot API from the Next.js server runtime. */
@@ -74,7 +84,7 @@ export async function sendApprovedCredentialsTelegram(input: ApprovedCredentials
   const db = getTelegramServiceClient();
   const { data: profile, error: profileError } = await db
     .from("profiles")
-    .select("id,telegram_id,status,kyc_level,credential_issue_id,full_name,telegram_language,banned_until,ban_permanent")
+    .select("id,role,telegram_id,status,kyc_level,credential_issue_id,full_name,telegram_language,banned_until,ban_permanent")
     .eq("id", input.profileId)
     .maybeSingle();
   if (profileError || !profile) return { sent: false, error: "Profile not found for Telegram delivery." };
@@ -100,10 +110,12 @@ export async function sendApprovedCredentialsTelegram(input: ApprovedCredentials
     const message = approvedMessage(lang, {
       ...input,
       fullName: profile.full_name ?? input.fullName,
+      audience: input.audience ?? (profile.role === "manager" ? "partner" : "resident"),
     });
     await new Api(token).sendMessage(Number(input.telegramId), message, {
       parse_mode: "HTML",
       link_preview_options: { is_disabled: true },
+      reply_markup: siteLoginKeyboard(lang),
     });
 
     const now = new Date().toISOString();

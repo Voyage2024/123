@@ -322,6 +322,12 @@ function BriefCard({ c, t, cm, fmt }: { c: CastingBrief; t: Dict; cm: Common; fm
             {fmt.city(c.city)}
           </h3>
           <p className="mt-0.5 text-xs text-zinc-400">{fmt.range(c.startsAt, c.endsAt)}</p>
+          {c.organizer?.official && (
+            <p className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-amber-200/35 bg-amber-200/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100">
+              <BadgeCheck className="size-3" aria-hidden />
+              {c.organizer.name} · Official Club
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <Pill tone={stageTone(c, closingSoon)}>{closingSoon ? t.closing : t.stage[c.stage]}</Pill>
@@ -589,11 +595,8 @@ function CastingsView({ data }: { data: CastingsData }) {
         {all.length === 0 ? (
           <div className="flex flex-col items-start gap-4 rounded-2xl border border-dashed border-amber-200/20 bg-amber-200/[0.03] p-6 sm:flex-row sm:items-center">
             <Sparkles className="size-5 shrink-0 text-amber-200/70" strokeWidth={1.5} aria-hidden />
+            {/* Кнопка «Создать» уже есть в шапке страницы — здесь только подсказка. */}
             <p className="min-w-0 flex-1 text-sm leading-relaxed text-zinc-300">{t.firstCasting}</p>
-            <Link href={ROUTES.newCasting} className={BTN_GOLD}>
-              <Plus className="size-4" aria-hidden />
-              {t.create}
-            </Link>
           </div>
         ) : visible.length === 0 ? (
           <EmptyFilter
