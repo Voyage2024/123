@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarClock, Coins, Plus, TrendingDown, TrendingUp, Trash2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useBunkerToast } from "@/app/bunker/_components/toast";
 import {
@@ -17,17 +17,17 @@ import {
   ProgressBar,
   Segmented,
   Sheet,
-  Skeleton,
   cx,
   inputClass,
   progressColor,
 } from "@/app/bunker/_components/ui";
 import { bunkerDb } from "@/app/bunker/_lib/db";
+import Incomes from "@/app/bunker/finance/Incomes";
+import { CurrencySelect, ListSkeleton, Stat, num } from "@/app/bunker/finance/shared";
 import { errorText, useBunkerRows } from "@/app/bunker/_lib/useBunkerRows";
 import { daysBetween, humanDay, isoDay, money, percent, shortDate } from "@/lib/bunker/format";
 import { renderMarkdown } from "@/lib/bunker/markdown";
 import {
-  CURRENCIES,
   INVESTMENT_CATEGORIES,
   type BunkerDebt,
   type BunkerInvestment,
@@ -36,31 +36,49 @@ import {
 } from "@/lib/bunker/types";
 
 /* ──────────────────────────────────────────────────────────────────────
- * /bunker/finance — долги и инвестиции.
+ * /bunker/finance — приходы (Incomes.tsx), долги и инвестиции.
  *
  * Долги: взнос пишется RPC bunker_debt_add_payment (атомарно в history),
  * paid_amount и статус пересчитывает триггер в базе.
  * Инвестиции: итоги считаются по каждой валюте отдельно (без курсов).
  * ──────────────────────────────────────────────────────────────────── */
 
-type Tab = "debts" | "investments";
+const TABS = ["incomes", "debts", "investments"] as const;
+type Tab = (typeof TABS)[number];
 
-const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0)) || 0;
+const SUBTITLES: Record<Tab, string> = {
+  incomes: "Кто, сколько и когда переведёт",
+  debts: "Погашение обязательств",
+  investments: "Портфель и стратегия",
+};
 
 export default function FinanceClient() {
-  const [tab, setTab] = useState<Tab>("debts");
+  const [tab, setTab] = useState<Tab>("incomes");
+
+  // /bunker/finance?tab=debts — ссылки с хаба ведут сразу на нужную вкладку
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("tab");
+    if (fromUrl && (TABS as readonly string[]).includes(fromUrl)) setTab(fromUrl as Tab);
+  }, []);
+
+  const select = (next: Tab) => {
+    setTab(next);
+    window.history.replaceState(null, "", next === "incomes" ? "/bunker/finance" : `/bunker/finance?tab=${next}`);
+  };
+
   return (
     <>
-      <PageHeader eyebrow="Капитал" title="Финансы" subtitle={tab === "debts" ? "Погашение обязательств" : "Портфель и стратегия"} />
+      <PageHeader eyebrow="Капитал" title="Финансы" subtitle={SUBTITLES[tab]} />
       <Segmented<Tab>
         value={tab}
-        onChange={setTab}
+        onChange={select}
         options={[
+          { value: "incomes", label: "📥 Приходы" },
           { value: "debts", label: "📉 Долги" },
           { value: "investments", label: "📈 Инвестиции" },
         ]}
       />
-      <div className="mt-5">{tab === "debts" ? <Debts /> : <Investments />}</div>
+      <div className="mt-5">{tab === "incomes" ? <Incomes /> : tab === "debts" ? <Debts /> : <Investments />}</div>
     </>
   );
 }
@@ -238,15 +256,6 @@ function DebtCard({ debt, onOpen, onPay }: { debt: BunkerDebt; onOpen: () => voi
         )}
       </Card>
     </motion.div>
-  );
-}
-
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="min-w-0 rounded-xl bg-white/[0.03] px-2.5 py-2">
-      <p className="text-[10px] uppercase tracking-wider text-zinc-600">{label}</p>
-      <p className={cx("truncate font-medium tabular-nums", accent ? "text-[#e9d7a8]" : "text-zinc-200")}>{value}</p>
-    </div>
   );
 }
 
@@ -454,18 +463,6 @@ function DebtSheet({
         )}
       </div>
     </Sheet>
-  );
-}
-
-function CurrencySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={cx(inputClass, "w-28 [color-scheme:dark]")}>
-      {CURRENCIES.map((c) => (
-        <option key={c} value={c}>
-          {c}
-        </option>
-      ))}
-    </select>
   );
 }
 
@@ -743,14 +740,3 @@ function InvestmentSheet({
   );
 }
 
-function ListSkeleton() {
-  return (
-    <div className="space-y-3">
-      <Skeleton className="h-36" />
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Skeleton className="h-44" />
-        <Skeleton className="h-44" />
-      </div>
-    </div>
-  );
-}

@@ -7,6 +7,7 @@ export const BUNKER_TABLES = [
   "bunker_projects",
   "bunker_tasks",
   "bunker_debts",
+  "bunker_incomes",
   "bunker_investments",
   "bunker_notes",
   "bunker_vault",

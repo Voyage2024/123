@@ -1,16 +1,24 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Check, Inbox, KeyRound, ListTodo, NotebookPen, Pin, Plus, TrendingUp, Wallet } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, Check, Inbox, KeyRound, ListTodo, NotebookPen, Pin, Plus, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { useBunkerToast } from "@/app/bunker/_components/toast";
 import { Card, ProgressBar, Skeleton, cx, progressColor } from "@/app/bunker/_components/ui";
 import { useBunkerRows } from "@/app/bunker/_lib/useBunkerRows";
-import { humanDay, isoDay, money, percent, relativeTime } from "@/lib/bunker/format";
+import { currencyRank } from "@/app/bunker/finance/shared";
+import { addDays, humanDay, isoDay, money, percent, relativeTime } from "@/lib/bunker/format";
 import { plainPreview } from "@/lib/bunker/markdown";
-import { PRIORITY_META, type BunkerDebt, type BunkerInvestment, type BunkerNote, type BunkerTask } from "@/lib/bunker/types";
+import {
+  PRIORITY_META,
+  type BunkerDebt,
+  type BunkerIncome,
+  type BunkerInvestment,
+  type BunkerNote,
+  type BunkerTask,
+} from "@/lib/bunker/types";
 
 /* ──────────────────────────────────────────────────────────────────────
  * /bunker — хаб: фокус дня, быстрая запись во Входящие, сводка по
@@ -35,6 +43,7 @@ export default function HubClient({ name }: { name: string | null }) {
   const tasks = useBunkerRows<BunkerTask>("bunker_tasks", [{ column: "created_at", ascending: false }]);
   const debts = useBunkerRows<BunkerDebt>("bunker_debts");
   const investments = useBunkerRows<BunkerInvestment>("bunker_investments");
+  const incomes = useBunkerRows<BunkerIncome>("bunker_incomes", [{ column: "expected_on", ascending: true }]);
   const notes = useBunkerRows<BunkerNote>("bunker_notes", [{ column: "updated_at", ascending: false }]);
   const [quick, setQuick] = useState("");
 
@@ -72,6 +81,19 @@ export default function HubClient({ name }: { name: string | null }) {
     }
     return [...map.entries()].sort((a, b) => b[1].current - a[1].current);
   }, [investments.rows]);
+
+  // Приходы на 30 дней вперёд (и просроченные) — по валютам, плюс ближайший
+  const incoming = useMemo(() => {
+    const horizon = addDays(today, 30);
+    const soon = incomes.rows.filter((i) => i.status === "expected" && (!i.expected_on || i.expected_on <= horizon));
+    const map = new Map<string, number>();
+    for (const i of soon) map.set(i.currency, (map.get(i.currency) ?? 0) + num(i.amount));
+    const next = soon
+      .filter((i) => i.expected_on)
+      .sort((a, b) => a.expected_on!.localeCompare(b.expected_on!))[0];
+    const overdue = soon.filter((i) => i.expected_on && i.expected_on < today).length;
+    return { sums: [...map.entries()].sort((a, b) => currencyRank(a[0]) - currencyRank(b[0])), next, overdue };
+  }, [incomes.rows, today]);
 
   const pinnedNotes = notes.rows.filter((n) => n.is_pinned).slice(0, 4);
   const shownNotes = pinnedNotes.length ? pinnedNotes : notes.rows.slice(0, 2);
@@ -130,7 +152,7 @@ export default function HubClient({ name }: { name: string | null }) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Фокус дня */}
-        <motion.div variants={itemAnim} className="md:row-span-2">
+        <motion.div variants={itemAnim} className="md:row-span-3">
           <Card className="h-full p-5">
             <div className="flex items-center justify-between">
               <SectionTitle icon={<ListTodo className="h-4 w-4" />} title="Фокус дня" href="/bunker/tasks" />
@@ -193,10 +215,42 @@ export default function HubClient({ name }: { name: string | null }) {
           </Card>
         </motion.div>
 
+        {/* Приходы */}
+        <motion.div variants={itemAnim}>
+          <Card className="h-full p-5">
+            <div className="flex items-center justify-between">
+              <SectionTitle icon={<ArrowDownToLine className="h-4 w-4" />} title="Приходы · 30 дней" href="/bunker/finance" />
+              {incoming.overdue > 0 && <span className="text-[11px] text-red-400">просрочено {incoming.overdue}</span>}
+            </div>
+            {incomes.loading ? (
+              <Skeleton className="mt-4 h-16" />
+            ) : incoming.sums.length === 0 ? (
+              <p className="mt-4 text-sm text-zinc-500">Ничего не ожидается.</p>
+            ) : (
+              <div className="mt-3 space-y-1">
+                {incoming.sums.slice(0, 2).map(([cur, v]) => (
+                  <p key={cur} className="voyage-cormorant text-2xl text-white">
+                    {money(v, cur)}
+                  </p>
+                ))}
+                {incoming.next && (
+                  <p className="truncate pt-1 text-xs text-zinc-500">
+                    ближайший: <span className="text-zinc-300">{incoming.next.counterparty}</span> ·{" "}
+                    {money(num(incoming.next.amount), incoming.next.currency, { compact: true })} ·{" "}
+                    <span className={incoming.next.expected_on! < today ? "text-red-400" : "text-[#e9d7a8]"}>
+                      {humanDay(incoming.next.expected_on!, today)}
+                    </span>
+                  </p>
+                )}
+              </div>
+            )}
+          </Card>
+        </motion.div>
+
         {/* Долги */}
         <motion.div variants={itemAnim}>
           <Card className="h-full p-5">
-            <SectionTitle icon={<Wallet className="h-4 w-4" />} title="Долги" href="/bunker/finance" />
+            <SectionTitle icon={<Wallet className="h-4 w-4" />} title="Долги" href="/bunker/finance?tab=debts" />
             {debts.loading ? (
               <Skeleton className="mt-4 h-16" />
             ) : debtByCurrency.length === 0 ? (
@@ -225,7 +279,7 @@ export default function HubClient({ name }: { name: string | null }) {
         {/* Портфель */}
         <motion.div variants={itemAnim}>
           <Card className="h-full p-5">
-            <SectionTitle icon={<TrendingUp className="h-4 w-4" />} title="Портфель" href="/bunker/finance" />
+            <SectionTitle icon={<TrendingUp className="h-4 w-4" />} title="Портфель" href="/bunker/finance?tab=investments" />
             {investments.loading ? (
               <Skeleton className="mt-4 h-16" />
             ) : portfolio.length === 0 ? (

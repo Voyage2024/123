@@ -1,6 +1,7 @@
 /* ──────────────────────────────────────────────────────────────────────
  * Личный бункер — типы строк и справочники.
- * Совпадают с supabase/migrations/20261022120000_personal_bunker.sql.
+ * Совпадают с supabase/migrations/20261022120000_personal_bunker.sql
+ * и 20261023090000_bunker_incomes.sql.
  * ──────────────────────────────────────────────────────────────────── */
 
 export type BunkerProject = {
@@ -55,6 +56,25 @@ export type BunkerDebt = {
   monthly_payment: number | null;
   status: DebtStatus;
   history: DebtPayment[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IncomeStatus = "expected" | "received";
+
+/** Приход / ожидаемое поступление (bunker_incomes). */
+export type BunkerIncome = {
+  id: string;
+  counterparty: string; // от кого
+  title: string | null; // за что
+  amount: number;
+  currency: string;
+  status: IncomeStatus;
+  expected_on: string | null; // YYYY-MM-DD, когда ждём
+  received_on: string | null; // YYYY-MM-DD, когда пришло
+  received_amount: number | null; // фактически пришло (база ставит amount, если не задано)
+  category: string | null; // slug проекта
   notes: string | null;
   created_at: string;
   updated_at: string;

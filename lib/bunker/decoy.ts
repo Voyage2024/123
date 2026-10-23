@@ -112,6 +112,31 @@ export async function buildDecoySeed(duressPin: string, pepper: string | null) {
     },
   ];
 
+  const income = (counterparty: string, title: string, amount: number, inDays: number, extra: Record<string, unknown> = {}, age = 5) => ({
+    id: uid(),
+    counterparty,
+    title,
+    amount,
+    currency: "RUB",
+    status: "expected",
+    expected_on: addDays(today, inDays),
+    received_on: null,
+    received_amount: null,
+    category: null,
+    notes: null,
+    created_at: daysAgo(age),
+    updated_at: daysAgo(Math.max(0, age - 1)),
+    ...extra,
+  });
+
+  const incomes = [
+    income("Дима", "вернуть за кофе и сэндвич", 450, 2, {}, 3),
+    income("Банк", "кэшбэк за октябрь", 870, 9, { notes: "Придёт до 10-го числа" }, 12),
+    income("Маркетплейс", "возврат за чехол", 1290, 5, { category: "shopping", notes: "Заявку одобрили" }, 6),
+    income("Аня", "половина за такси", 600, -4, { status: "received", received_on: addDays(today, -4), received_amount: 600 }, 7),
+    income("Работа", "компенсация проезда", 1500, -19, { status: "received", received_on: addDays(today, -18), received_amount: 1500 }, 25),
+  ];
+
   const note = (title: string, content: string, age: number, extra: Record<string, unknown> = {}) => ({
     id: uid(),
     title,
@@ -147,6 +172,7 @@ export async function buildDecoySeed(duressPin: string, pepper: string | null) {
     tasks,
     debts,
     investments,
+    incomes,
     notes,
     vault,
     vault_keys: { ...row, created_at: daysAgo(64), updated_at: daysAgo(64) },
