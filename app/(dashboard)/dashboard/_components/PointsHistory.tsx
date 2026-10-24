@@ -32,6 +32,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { projectLabel } from "@/lib/project-types";
 
 export type HistoryLang = "en" | "ru" | "es" | "pt";
 type Category = "tour" | "event" | "stamp" | "combo" | "achievement" | "adjustment";
@@ -78,7 +79,6 @@ const ICONS: Record<SourceKind, LucideIcon> = {
 const COPY: Record<HistoryLang, {
   categories: Record<Category, string>;
   kinds: Record<SourceKind, string>;
-  projects: Record<string, string>;
   all: string;
   empty: string;
   emptyFilter: string;
@@ -99,7 +99,6 @@ const COPY: Record<HistoryLang, {
       tour: "Тур на карте", partner_tour: "Тур менеджера", party: "Тусовка", event: "Тусовка",
       passport: "Паспорт", stamp: "Штамп страны", combo: "Легендарное комбо", achievement: "Достижение", adjustment: "Решение клуба",
     },
-    projects: { shoot: "съёмка", show: "показ", campaign: "кампейн", event: "ивент" },
     all: "Все",
     empty: "Начислений пока нет. Первый завершённый тур откроет выписку.",
     emptyFilter: "В этой категории начислений нет.",
@@ -120,7 +119,6 @@ const COPY: Record<HistoryLang, {
       tour: "Map tour", partner_tour: "Manager tour", party: "Party", event: "Party",
       passport: "Passport", stamp: "Country stamp", combo: "Legendary combo", achievement: "Achievement", adjustment: "Club decision",
     },
-    projects: { shoot: "shoot", show: "show", campaign: "campaign", event: "event" },
     all: "All",
     empty: "No points yet. Your first completed tour opens the statement.",
     emptyFilter: "Nothing in this category yet.",
@@ -141,7 +139,6 @@ const COPY: Record<HistoryLang, {
       tour: "Tour del mapa", partner_tour: "Tour de gerente", party: "Fiesta", event: "Fiesta",
       passport: "Pasaporte", stamp: "Sello de país", combo: "Combo legendario", achievement: "Logro", adjustment: "Decisión del club",
     },
-    projects: { shoot: "sesión", show: "desfile", campaign: "campaña", event: "evento" },
     all: "Todo",
     empty: "Aún no hay puntos. Tu primer tour completado abrirá el extracto.",
     emptyFilter: "No hay movimientos en esta categoría.",
@@ -162,7 +159,6 @@ const COPY: Record<HistoryLang, {
       tour: "Tour do mapa", partner_tour: "Tour do gerente", party: "Festa", event: "Festa",
       passport: "Passaporte", stamp: "Carimbo de país", combo: "Combo lendário", achievement: "Conquista", adjustment: "Decisão do clube",
     },
-    projects: { shoot: "ensaio", show: "desfile", campaign: "campanha", event: "evento" },
     all: "Tudo",
     empty: "Ainda não há pontos. Seu primeiro tour concluído abre o extrato.",
     emptyFilter: "Nada nesta categoria ainda.",
@@ -416,7 +412,7 @@ export default function PointsHistory({
                   const date = new Date(item.at).toLocaleDateString(LOCALE[lang], { day: "numeric", month: "short" });
                   const subtitle = [
                     t.kinds[item.kind] ?? t.categories[item.category],
-                    item.project ? t.projects[item.project] ?? item.project : null,
+                    item.project ? projectLabel(item.project, lang.toUpperCase(), { lower: true }) : null,
                     item.country,
                     date,
                   ].filter(Boolean).join(" · ");

@@ -12,7 +12,7 @@
 
 import { DAY } from "@/app/(dashboard)/partner/_lib/clock";
 import {
-  PROJECTS,
+  toProjectKey,
   list,
   num,
   obj,
@@ -59,7 +59,7 @@ export function parseKeys(raw: unknown): KeysData {
   const root = obj(raw);
   const counted = list<CountedTour>(root.counted, (r) => {
     const id = str(r.id);
-    const project = oneOf(r.project, PROJECTS);
+    const project = toProjectKey(r.project);
     const departsAt = time(r.departs_at);
     if (!id || !project || departsAt === null) return null;
     return { id, city: str(r.city) ?? "—", project, departsAt, expiresAt: time(r.expires_at) ?? departsAt + YEAR };

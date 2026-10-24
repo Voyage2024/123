@@ -12,12 +12,15 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DAY, HOUR, MIN } from "@/app/(dashboard)/partner/_lib/clock";
+import { PROJECTS, toProjectKey, type ProjectKey } from "@/lib/project-types";
+
+/* Типы проектов (tour / event) живут в lib/project-types.ts */
+export { PROJECTS, toProjectKey, type ProjectKey };
 
 /* ══════════════════════════════════════════════════════════════════
  * ТИПЫ
  * ══════════════════════════════════════════════════════════════════ */
 
-export type ProjectKey = "shoot" | "show" | "campaign" | "event";
 export type KeyTier = "silver" | "gold" | "platinum";
 export type Payer = "manager" | "participant" | "split";
 
@@ -214,15 +217,15 @@ export function buildMock(): CommandData {
       reviews: 19,
     },
     alerts: [
-      { id: "al-1", kind: "option", city: "Milan", project: "show", code: "#A-417", at: t + HOUR + 58 * MIN, castingId: "cs-mxp-02" },
-      { id: "al-2", kind: "contract", city: "Paris", project: "shoot", signed: 1, required: 4, at: t + 9 * DAY, tourId: "tr-cdg-09" },
-      { id: "al-3", kind: "docs", city: "Sydney", project: "shoot", count: 2, at: t + 46 * HOUR, tourId: "tr-syd-03" },
+      { id: "al-1", kind: "option", city: "Milan", project: "event", code: "#A-417", at: t + HOUR + 58 * MIN, castingId: "cs-mxp-02" },
+      { id: "al-2", kind: "contract", city: "Paris", project: "tour", signed: 1, required: 4, at: t + 9 * DAY, tourId: "tr-cdg-09" },
+      { id: "al-3", kind: "docs", city: "Sydney", project: "tour", count: 2, at: t + 46 * HOUR, tourId: "tr-syd-03" },
       { id: "al-4", kind: "replacement", city: "Dubai", project: "event", at: t - 35 * MIN, tourId: "tr-dxb-05" },
-      { id: "al-5", kind: "responses", city: "Dubai", project: "campaign", count: 3, at: t - 12 * MIN, castingId: "cs-dxb-01" },
+      { id: "al-5", kind: "responses", city: "Dubai", project: "tour", count: 3, at: t - 12 * MIN, castingId: "cs-dxb-01" },
     ],
     castings: [
       {
-        id: "cs-dxb-01", city: "Dubai", project: "campaign",
+        id: "cs-dxb-01", city: "Dubai", project: "tour",
         startsAt: d0 + 9 * DAY, endsAt: d0 + 13 * DAY,
         slots: 4, fresh: 3, closesAt: t + 18 * HOUR, stage: "open",
         responders: [
@@ -236,7 +239,7 @@ export function buildMock(): CommandData {
         ],
       },
       {
-        id: "cs-mxp-02", city: "Milan", project: "show",
+        id: "cs-mxp-02", city: "Milan", project: "event",
         startsAt: d0 + 14 * DAY, endsAt: d0 + 16 * DAY,
         slots: 2, fresh: 0, closesAt: t + 5 * HOUR + 20 * MIN, stage: "shortlist",
         responders: [
@@ -249,7 +252,7 @@ export function buildMock(): CommandData {
         ],
       },
       {
-        id: "cs-cdg-03", city: "Paris", project: "shoot",
+        id: "cs-cdg-03", city: "Paris", project: "tour",
         startsAt: d0 + 21 * DAY, endsAt: d0 + 22 * DAY,
         slots: 3, fresh: 1, closesAt: t + 2 * DAY + 4 * HOUR, stage: "open",
         responders: [blind("#F-018", t - 40 * MIN, false)],
@@ -269,7 +272,7 @@ export function buildMock(): CommandData {
         contract: { version: 2, signed: 4, required: 4, sealedAt: t - 30 * MIN, terms: STANDARD_TERMS },
       },
       {
-        id: "tr-syd-03", city: "Sydney", iata: "SYD", project: "shoot", flightNo: "QF 2",
+        id: "tr-syd-03", city: "Sydney", iata: "SYD", project: "tour", flightNo: "QF 2",
         departsAt: t + 46 * HOUR, status: "docs",
         crew: [
           { id: "rs-1042", name: "Alina S.", docs: true, signed: true },
@@ -282,7 +285,7 @@ export function buildMock(): CommandData {
         contract: { version: 1, signed: 5, required: 5, sealedAt: t - 6 * DAY, terms: { ...STANDARD_TERMS, hotelPaidBy: "split" } },
       },
       {
-        id: "tr-mxp-07", city: "Milan", iata: "MXP", project: "show", flightNo: "EK 205",
+        id: "tr-mxp-07", city: "Milan", iata: "MXP", project: "event", flightNo: "EK 205",
         departsAt: t + 63 * HOUR, status: "contract",
         crew: [
           { id: "rs-1039", name: "Veronika M.", docs: true, signed: true },
@@ -368,7 +371,6 @@ export const day = (v: unknown): number | null => {
 export const oneOf = <T extends string>(v: unknown, allowed: readonly T[]): T | null =>
   typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : null;
 
-export const PROJECTS = ["shoot", "show", "campaign", "event"] as const;
 export const TIERS = ["silver", "gold", "platinum"] as const;
 export const PAYERS = ["manager", "participant", "split"] as const;
 const ALERT_KINDS = ["option", "contract", "docs", "replacement", "responses"] as const;
@@ -482,7 +484,7 @@ export function parseSnapshot(raw: unknown): CommandData {
   const alerts = list<AlertItem>(root.alerts, (r) => {
     const id = str(r.id);
     const kind = oneOf(r.kind, ALERT_KINDS);
-    const project = oneOf(r.project, PROJECTS);
+    const project = toProjectKey(r.project);
     const at = time(r.at);
     if (!id || !kind || !project || at === null) return null;
     return {
@@ -502,7 +504,7 @@ export function parseSnapshot(raw: unknown): CommandData {
 
   const castings = list<CastingItem>(root.castings, (r) => {
     const id = str(r.id);
-    const project = oneOf(r.project, PROJECTS);
+    const project = toProjectKey(r.project);
     const startsAt = day(r.starts_on);
     const endsAt = day(r.ends_on);
     const closesAt = time(r.closes_at);
@@ -523,7 +525,7 @@ export function parseSnapshot(raw: unknown): CommandData {
 
   const flights = list<FlightItem>(root.tours, (r) => {
     const id = str(r.id);
-    const project = oneOf(r.project, PROJECTS);
+    const project = toProjectKey(r.project);
     const departsAt = time(r.departs_at);
     if (!id || !project || departsAt === null) return null;
     return {

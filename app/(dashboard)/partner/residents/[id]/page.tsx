@@ -18,7 +18,7 @@ import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
 import { usePartnerFormat, type Common, type Fmt } from "@/app/(dashboard)/partner/_lib/format";
 import { usePartnerFeed } from "@/app/(dashboard)/partner/_lib/usePartnerFeed";
 import { parseResidentCard, type ResidentCard } from "@/app/(dashboard)/partner/_lib/residents";
-import { PROJECTS } from "@/app/(dashboard)/partner/_lib/command";
+import { toProjectKey } from "@/lib/project-types";
 import { TrustBadge } from "@/app/(dashboard)/partner/_components/TrustSignals";
 import {
   FeedGate,
@@ -222,9 +222,8 @@ function ResidentCardView({ card, t, c, fmt }: { card: ResidentCard; t: Dict; c:
           ) : (
             <ul className="mt-4 grid gap-2">
               {card.tours.map((tour) => {
-                const project = (PROJECTS as readonly string[]).includes(tour.project ?? "")
-                  ? c.projects[tour.project as (typeof PROJECTS)[number]]
-                  : tour.project;
+                const key = toProjectKey(tour.project);
+                const project = key ? c.projects[key] : tour.project;
                 return (
                   <li key={tour.tourId}>
                     <Link

@@ -69,6 +69,7 @@ import { ContractEditor } from "@/app/(dashboard)/partner/_components/ContractEd
 import { CloseTourPanel } from "@/app/(dashboard)/partner/_components/CloseTourPanel";
 import { PartnerGuide } from "@/app/(dashboard)/partner/_components/PartnerGuide";
 import { cormorant } from "@/app/components/profile/fonts";
+import { projectLabels } from "@/lib/project-types";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПЕРЕВОДЫ
@@ -173,7 +174,7 @@ const T: Record<Lang, Dict> = {
     departsIn: (d) => `in ${d}`,
     departed: "departed",
     status: { confirmed: "Confirmed", in_tour: "On tour", closed: "Closed", cancelled: "Cancelled" },
-    projects: { shoot: "shoot", show: "show", campaign: "campaign", event: "event" },
+    projects: projectLabels("EN", { lower: true }),
     readOnly: "The tour is closed — this room is read-only. Terms and the log are kept.",
     state: {
       loading: "Loading the room…",
@@ -261,7 +262,7 @@ const T: Record<Lang, Dict> = {
     departsIn: (d) => `через ${d}`,
     departed: "вылетели",
     status: { confirmed: "Подтверждён", in_tour: "В туре", closed: "Закрыт", cancelled: "Отменён" },
-    projects: { shoot: "съёмка", show: "показ", campaign: "кампейн", event: "ивент" },
+    projects: projectLabels("RU", { lower: true }),
     readOnly: "Тур закрыт — комната только для чтения. Условия и лог сохранены.",
     state: {
       loading: "Загружаем комнату…",
@@ -350,7 +351,7 @@ const T: Record<Lang, Dict> = {
     departsIn: (d) => `en ${d}`,
     departed: "ya salió",
     status: { confirmed: "Confirmado", in_tour: "En tour", closed: "Cerrado", cancelled: "Cancelado" },
-    projects: { shoot: "sesión", show: "desfile", campaign: "campaña", event: "evento" },
+    projects: projectLabels("ES", { lower: true }),
     readOnly: "El tour está cerrado: la sala es de solo lectura. Las condiciones y el registro se conservan.",
     state: {
       loading: "Cargando la sala…",
@@ -438,7 +439,7 @@ const T: Record<Lang, Dict> = {
     departsIn: (d) => `em ${d}`,
     departed: "já partiu",
     status: { confirmed: "Confirmado", in_tour: "Em tour", closed: "Encerrado", cancelled: "Cancelado" },
-    projects: { shoot: "ensaio", show: "desfile", campaign: "campanha", event: "evento" },
+    projects: projectLabels("PT", { lower: true }),
     readOnly: "O tour foi encerrado — a sala é só leitura. Condições e registro ficam salvos.",
     state: {
       loading: "Carregando a sala…",

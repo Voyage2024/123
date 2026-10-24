@@ -18,6 +18,7 @@ import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import { MIN, UNITS, fmtDur, useNow, type Units } from "@/app/(dashboard)/partner/_lib/clock";
 import { cityLabel } from "@/app/(dashboard)/partner/_lib/cities";
 import type { Payer, ProjectKey } from "@/app/(dashboard)/partner/_lib/command";
+import { projectLabels } from "@/lib/project-types";
 
 /** Русское склонение: 1 тур · 2 тура · 5 туров */
 export function ru(n: number, one: string, few: string, many: string) {
@@ -57,7 +58,7 @@ export const COMMON: Record<Lang, Common> = {
     locale: "en-GB",
     demo: "Demo data",
     demoHint: "The screen shows sample data until it is connected to the database.",
-    projects: { shoot: "shoot", show: "show", campaign: "campaign", event: "event" },
+    projects: projectLabels("EN", { lower: true }),
     payer: { manager: "manager", participant: "participant", split: "split" },
     ago: (d) => `${d} ago`,
     in: (d) => `in ${d}`,
@@ -82,7 +83,7 @@ export const COMMON: Record<Lang, Common> = {
     locale: "ru-RU",
     demo: "Демо-данные",
     demoHint: "Экран показывает пример данных, пока его не подключили к базе.",
-    projects: { shoot: "съёмка", show: "показ", campaign: "кампейн", event: "ивент" },
+    projects: projectLabels("RU", { lower: true }),
     payer: { manager: "менеджер", participant: "участница", split: "пополам" },
     ago: (d) => `${d} назад`,
     in: (d) => `через ${d}`,
@@ -107,7 +108,7 @@ export const COMMON: Record<Lang, Common> = {
     locale: "es-ES",
     demo: "Datos de demostración",
     demoHint: "La pantalla muestra datos de ejemplo hasta conectarla a la base.",
-    projects: { shoot: "sesión", show: "desfile", campaign: "campaña", event: "evento" },
+    projects: projectLabels("ES", { lower: true }),
     payer: { manager: "gerente", participant: "participante", split: "a medias" },
     ago: (d) => `hace ${d}`,
     in: (d) => `en ${d}`,
@@ -132,7 +133,7 @@ export const COMMON: Record<Lang, Common> = {
     locale: "pt-BR",
     demo: "Dados de demonstração",
     demoHint: "A tela mostra dados de exemplo até ser conectada ao banco.",
-    projects: { shoot: "ensaio", show: "desfile", campaign: "campanha", event: "evento" },
+    projects: projectLabels("PT", { lower: true }),
     payer: { manager: "gerente", participant: "participante", split: "dividido" },
     ago: (d) => `há ${d}`,
     in: (d) => `em ${d}`,

@@ -326,9 +326,7 @@ function rank(c: FeedCasting) {
 }
 
 const PROJECT_GLOW: Record<ProjectKey, string> = {
-  show: "from-amber-200/[0.09]",
-  campaign: "from-amber-400/[0.08]",
-  shoot: "from-zinc-200/[0.06]",
+  tour: "from-amber-200/[0.09]",
   event: "from-amber-300/[0.07]",
 };
 

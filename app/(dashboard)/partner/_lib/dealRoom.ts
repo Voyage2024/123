@@ -14,7 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DAY, HOUR, MIN } from "@/app/(dashboard)/partner/_lib/clock";
 import {
   CommandError,
-  PROJECTS,
+  toProjectKey,
   list,
   num,
   obj,
@@ -253,7 +253,7 @@ export function buildRoomMock(tourId: string): DealRoomData {
       generatedAt: t,
       me: { id: ME.id, role: "manager" },
       readOnly: false,
-      tour: { id: tourId, city: "Sydney", iata: "SYD", project: "shoot", flightNo: "QF 2", departsAt: t + 46 * HOUR, returnsAt: t + 9 * DAY, status: "confirmed" },
+      tour: { id: tourId, city: "Sydney", iata: "SYD", project: "tour", flightNo: "QF 2", departsAt: t + 46 * HOUR, returnsAt: t + 9 * DAY, status: "confirmed" },
       parties: [manager(t - 7 * DAY), a, m, r, k],
       versions: [
         { version: 1, terms, createdAt: t - 7 * DAY, createdBy: ME.name, signatures: [
@@ -282,7 +282,7 @@ export function buildRoomMock(tourId: string): DealRoomData {
     generatedAt: t,
     me: { id: ME.id, role: "manager" },
     readOnly: false,
-    tour: { id: tourId, city: "Milan", iata: "MXP", project: "show", flightNo: "EK 205", departsAt: t + 63 * HOUR, returnsAt: t + 6 * DAY, status: "confirmed" },
+    tour: { id: tourId, city: "Milan", iata: "MXP", project: "event", flightNo: "EK 205", departsAt: t + 63 * HOUR, returnsAt: t + 6 * DAY, status: "confirmed" },
     parties: [manager(t - 9 * DAY), v, l],
     versions: [
       { version: 1, terms, createdAt: t - 9 * DAY, createdBy: ME.name, signatures: [
@@ -367,7 +367,7 @@ export function parseDealRoom(raw: unknown): DealRoomData {
     id: str(tr.id) ?? "",
     city: str(tr.city) ?? "—",
     iata: str(tr.iata),
-    project: oneOf(tr.project, PROJECTS) ?? "shoot",
+    project: toProjectKey(tr.project) ?? "tour",
     flightNo: str(tr.flight_no),
     departsAt: time(tr.departs_at) ?? Date.now(),
     returnsAt: time(tr.returns_at),

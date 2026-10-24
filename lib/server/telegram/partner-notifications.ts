@@ -4,6 +4,7 @@ import { Bot, InlineKeyboard, type Context } from "grammy";
 import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
 import { getPreferredTelegramLanguage } from "@/lib/server/telegram/preferences";
 import type { TelegramLang } from "@/lib/server/telegram/types";
+import { projectLabels, toProjectKey, type ProjectKey } from "@/lib/project-types";
 
 type JsonRecord = Record<string, unknown>;
 type NotificationRow = JsonRecord & {
@@ -219,7 +220,7 @@ type ClubCopy = {
   reviewWithComment: string;
   applyUntil: string;
   departure: string;
-  projects: Record<"shoot" | "show" | "campaign" | "event", string>;
+  projects: Record<ProjectKey, string>;
   categories: Record<"tour" | "event" | "stamp" | "combo" | "achievement" | "adjustment", string>;
   openMap: string;
   openParties: string;
@@ -249,7 +250,7 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     reviewWithComment: "Отзыв с комментарием — появится после модерации.",
     applyUntil: "Заявки до",
     departure: "Вылет",
-    projects: { shoot: "Съёмка", show: "Показ", campaign: "Кампейн", event: "Ивент" },
+    projects: projectLabels("RU"),
     categories: { tour: "Тур", event: "Тусовка", stamp: "Штамп", combo: "Комбо", achievement: "Достижение", adjustment: "Корректировка" },
     openMap: "Открыть карту",
     openParties: "Смотреть тусовки",
@@ -277,7 +278,7 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     reviewWithComment: "The comment will appear after moderation.",
     applyUntil: "Applications until",
     departure: "Departure",
-    projects: { shoot: "Shoot", show: "Show", campaign: "Campaign", event: "Event" },
+    projects: projectLabels("EN"),
     categories: { tour: "Tour", event: "Party", stamp: "Stamp", combo: "Combo", achievement: "Achievement", adjustment: "Adjustment" },
     openMap: "Open the map",
     openParties: "See parties",
@@ -305,7 +306,7 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     reviewWithComment: "El comentario aparecerá tras la moderación.",
     applyUntil: "Solicitudes hasta",
     departure: "Salida",
-    projects: { shoot: "Sesión", show: "Desfile", campaign: "Campaña", event: "Evento" },
+    projects: projectLabels("ES"),
     categories: { tour: "Tour", event: "Fiesta", stamp: "Sello", combo: "Combo", achievement: "Logro", adjustment: "Ajuste" },
     openMap: "Abrir el mapa",
     openParties: "Ver fiestas",
@@ -333,7 +334,7 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     reviewWithComment: "O comentário aparecerá após a moderação.",
     applyUntil: "Candidaturas até",
     departure: "Partida",
-    projects: { shoot: "Ensaio", show: "Desfile", campaign: "Campanha", event: "Evento" },
+    projects: projectLabels("PT"),
     categories: { tour: "Tour", event: "Festa", stamp: "Carimbo", combo: "Combo", achievement: "Conquista", adjustment: "Ajuste" },
     openMap: "Abrir o mapa",
     openParties: "Ver festas",
@@ -362,8 +363,8 @@ function localizedText(value: unknown, lang: TelegramLang): string {
 }
 
 function projectLabel(value: unknown, copy: ClubCopy): string {
-  const key = valueText(value) as keyof ClubCopy["projects"];
-  return copy.projects[key] ?? valueText(value);
+  const key = toProjectKey(valueText(value));
+  return key ? copy.projects[key] : valueText(value);
 }
 
 function formatDate(value: unknown, lang: TelegramLang): string {
@@ -514,10 +515,16 @@ function formatPayer(value: unknown, labels: LanguageText): string {
   return key in labels.payer ? labels.payer[key] : valueText(value);
 }
 
+/** tour / event (и старые shoot / show / campaign) → подпись на языке получателя */
+function typeLabel(value: string, lang: TelegramLang): string {
+  const key = toProjectKey(value);
+  return key ? clubText[lang].projects[key] : value;
+}
+
 function notificationBody(template: string, payload: JsonRecord, lang: TelegramLang): string {
   const labels = text[lang];
   const city = pickText(payload.city);
-  const project = pickText(payload.project);
+  const project = typeLabel(pickText(payload.project), lang);
   const departure = pickText(payload.departs_at);
   const terms = record(payload.terms);
   const lines: string[] = [];
@@ -569,7 +576,7 @@ function currentContractBody(contract: JsonRecord, oldPayload: JsonRecord, lang:
   const labels = text[lang];
   const terms = record(contract.terms ?? contract.payload ?? oldPayload.terms);
   const payloadCity = pickText(contract.city, oldPayload.city);
-  const payloadProject = pickText(contract.project, oldPayload.project);
+  const payloadProject = typeLabel(pickText(contract.project, oldPayload.project), lang);
   const payloadDeparture = pickText(contract.departs_at, contract.departure_at, oldPayload.departs_at);
   const version = pickText(contract.version);
   const lines: string[] = [labels.outdated];

@@ -12,7 +12,7 @@
  * ──────────────────────────────────────────────────────────────────── */
 
 import {
-  PROJECTS,
+  toProjectKey,
   arr,
   day,
   list,
@@ -104,7 +104,7 @@ export function parsePulse(raw: unknown): PulseData {
     const id = str(r.id);
     const rating = num(r.rating);
     const at = time(r.at);
-    const project = oneOf(r.project, PROJECTS);
+    const project = toProjectKey(r.project);
     if (!id || rating === null || at === null || !project) return null;
     return {
       id,
@@ -118,7 +118,7 @@ export function parsePulse(raw: unknown): PulseData {
   });
   const pending = list<PendingReview>(root.pending, (r) => {
     const tourId = str(r.tour_id);
-    const project = oneOf(r.project, PROJECTS);
+    const project = toProjectKey(r.project);
     const returnedAt = time(r.returned_at);
     if (!tourId || !project || returnedAt === null) return null;
     const participants = list<PendingReview["participants"][number]>(r.participants, (x) => {

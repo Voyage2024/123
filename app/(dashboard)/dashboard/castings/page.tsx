@@ -23,7 +23,7 @@ const COPY: ExplainerDict = {
     eyebrow: "Closed casting",
     title: "Castings",
     subtitle:
-      "Club managers put together crews for tours, shoots and shows. You see the full brief — city, dates, fee, who covers the flight and hotel — and reply in a single tap.",
+      "Club managers put together crews for tours and events. You see the full brief — city, dates, fee, who covers the flight and hotel — and reply in a single tap.",
     steps: ["Switch on “Open to tours”", "Tap “Ready for the tour”", "Handshake & contract in Telegram"],
     cards: [
       {
@@ -41,7 +41,7 @@ const COPY: ExplainerDict = {
     eyebrow: "Закрытый кастинг",
     title: "Кастинги",
     subtitle:
-      "Менеджеры клуба собирают составы на туры, съёмки и показы. Вы видите бриф целиком — город, даты, гонорар, кто оплачивает перелёт и отель — и отвечаете в одно касание.",
+      "Менеджеры клуба собирают составы на туры и ивенты. Вы видите бриф целиком — город, даты, гонорар, кто оплачивает перелёт и отель — и отвечаете в одно касание.",
     steps: ["Включите «Открыта к турам»", "Нажмите «Готова в тур»", "Рукопожатие и контракт в Telegram"],
     cards: [
       {
@@ -59,7 +59,7 @@ const COPY: ExplainerDict = {
     eyebrow: "Casting privado",
     title: "Castings",
     subtitle:
-      "Los gerentes del club forman equipos para tours, sesiones de fotos y desfiles. Ves el brief completo —ciudad, fechas, honorarios, quién paga el vuelo y el hotel— y respondes con un toque.",
+      "Los gerentes del club forman equipos para tours y eventos. Ves el brief completo —ciudad, fechas, honorarios, quién paga el vuelo y el hotel— y respondes con un toque.",
     steps: ["Activa “Disponible para tours”", "Pulsa “Lista para el tour”", "Apretón de manos y contrato en Telegram"],
     cards: [
       {
@@ -77,7 +77,7 @@ const COPY: ExplainerDict = {
     eyebrow: "Casting fechado",
     title: "Castings",
     subtitle:
-      "Os gerentes do clube montam equipes para tours, ensaios e desfiles. Você vê o brief completo — cidade, datas, cachê, quem paga voo e hotel — e responde com um toque.",
+      "Os gerentes do clube montam equipes para tours e eventos. Você vê o brief completo — cidade, datas, cachê, quem paga voo e hotel — e responde com um toque.",
     steps: ["Ative “Disponível para tours”", "Toque em “Pronta para o tour”", "Aperto de mão e contrato no Telegram"],
     cards: [
       {

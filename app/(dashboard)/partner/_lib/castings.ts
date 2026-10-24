@@ -9,7 +9,7 @@
 
 import {
   PAYERS,
-  PROJECTS,
+  toProjectKey,
   arr,
   day,
   list,
@@ -62,7 +62,7 @@ export function parseCastings(raw: unknown): CastingsData {
   const root = obj(raw);
   const castings = list<CastingBrief>(root.castings, (r) => {
     const id = str(r.id);
-    const project = oneOf(r.project, PROJECTS);
+    const project = toProjectKey(r.project);
     const startsAt = day(r.starts_on);
     const endsAt = day(r.ends_on);
     const closesAt = time(r.closes_at);

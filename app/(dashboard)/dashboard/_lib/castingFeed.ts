@@ -18,7 +18,7 @@
 import { supabase } from "@/lib/supabase";
 import {
   PAYERS,
-  PROJECTS,
+  toProjectKey,
   arr,
   num,
   obj,
@@ -122,7 +122,7 @@ function parseResponse(v: unknown): FeedCasting["response"] {
 
 function parseCasting(r: Raw): FeedCasting | null {
   const id = str(r.id);
-  const project = oneOf(r.project, PROJECTS);
+  const project = toProjectKey(r.project);
   const startsAt = day(r.starts_on);
   const endsAt = day(r.ends_on);
   const closesAt = time(r.closes_at);

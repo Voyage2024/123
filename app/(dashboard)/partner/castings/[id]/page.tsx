@@ -41,6 +41,8 @@ import {
 import { createTourFromCasting } from "@/app/(dashboard)/partner/castings/[id]/actions";
 import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
 import { useAuth } from "@/app/context/AuthContext";
+import { useLanguage } from "@/app/context/LanguageContext";
+import { projectLabel } from "@/lib/project-types";
 import { OrganizerBadgePill, usePublishers } from "@/app/components/organizer/OrganizerSelect";
 import { ORGANIZER_TEXT, VOYAGE_MANAGEMENT_ID } from "@/lib/organizer";
 
@@ -151,6 +153,7 @@ export default function CastingResponsesPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { role } = useAuth();
+  const { lang } = useLanguage();
   const isAdmin = role === "owner" || role === "admin";
   const { publishers } = usePublishers(isAdmin);
   const [tourForm, setTourForm] = useState({ departsAt: "", returnsAt: "", flightNo: "", iata: "" });
@@ -278,7 +281,7 @@ export default function CastingResponsesPage() {
           <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-amber-100/60">Partner workspace · Response board</p>
-              <h1 className="mt-3 font-serif text-3xl text-zinc-50 sm:text-4xl">{casting.city} <span className="text-amber-100/50">/</span> {casting.project_type}</h1>
+              <h1 className="mt-3 font-serif text-3xl text-zinc-50 sm:text-4xl">{casting.city} <span className="text-amber-100/50">/</span> {projectLabel(casting.project_type, lang)}</h1>
               <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-400"><span className="inline-flex items-center gap-1.5"><CalendarClock size={13} /> {date(casting.starts_on)} – {date(casting.ends_on)}</span><span className="inline-flex items-center gap-1.5"><MapPin size={13} /> {casting.slots} мест</span><span className="inline-flex items-center gap-1.5"><Clock size={13} /> Закрытие: {date(casting.closes_at, true)}</span></p>
               {isAdmin && organizer && (
                 <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
@@ -309,7 +312,7 @@ export default function CastingResponsesPage() {
     <ul className="mt-4 space-y-2">
       {tours.map((tour) => (
         <li key={tour.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-black/20 px-3 py-2.5 text-xs text-zinc-300">
-          <span>{tour.city} · {tour.project_type} · вылет {date(tour.departs_at, true)}</span>
+          <span>{tour.city} · {projectLabel(tour.project_type, lang)} · вылет {date(tour.departs_at, true)}</span>
           <Link href={ROUTES.dealRoom(tour.id)} className="text-amber-100 underline-offset-4 hover:underline">Комната тура</Link>
         </li>
       ))}
@@ -389,7 +392,7 @@ export default function CastingResponsesPage() {
                     <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.035] p-3">
                       <label htmlFor={`tour-${row.resident_id}`} className="mb-2 block text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-100/60">Тур для рукопожатия</label>
                       <div className="flex flex-col gap-2 sm:flex-row">
-                        <div className="relative min-w-0 flex-1"><select id={`tour-${row.resident_id}`} value={tourId} onChange={(event) => setTourSelection((prev) => ({ ...prev, [row.resident_id]: event.target.value }))} disabled={!tours.length || busy} className="w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 pr-9 text-xs text-zinc-200 outline-none focus:border-emerald-300/30 disabled:opacity-50"><option value="">{tours.length ? "Выберите тур" : "Нет подходящего подтверждённого тура"}</option>{tours.map((tour) => <option key={tour.id} value={tour.id}>{tour.city} · {tour.project_type} · {date(tour.departs_at)}</option>)}</select><ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" /></div>
+                        <div className="relative min-w-0 flex-1"><select id={`tour-${row.resident_id}`} value={tourId} onChange={(event) => setTourSelection((prev) => ({ ...prev, [row.resident_id]: event.target.value }))} disabled={!tours.length || busy} className="w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 pr-9 text-xs text-zinc-200 outline-none focus:border-emerald-300/30 disabled:opacity-50"><option value="">{tours.length ? "Выберите тур" : "Нет подходящего подтверждённого тура"}</option>{tours.map((tour) => <option key={tour.id} value={tour.id}>{tour.city} · {projectLabel(tour.project_type, lang)} · {date(tour.departs_at)}</option>)}</select><ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" /></div>
                         <button type="button" disabled={busy || !canProcess || !tourId} onClick={() => { if (window.confirm(`Подтвердить рукопожатие с ${row.full_name || "резиденткой"}? Будет создан участник тура.`)) void runAction(`${row.resident_id}:handshake`, () => completeCastingHandshake(id, tourId, row.resident_id), "Рукопожатие завершено: резидентка добавлена в состав тура."); }} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-4 py-2.5 text-xs font-medium text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-not-allowed disabled:opacity-40"><Handshake size={14} /> Рукопожатие / утвердить</button>
                       </div>
                       {!tours.length && <p className="mt-2 text-[10px] leading-4 text-zinc-500">Сначала нажмите «Создать тур» в блоке «Тур по этому кастингу» выше. Рукопожатие проверяет соответствие тура, KYC, Blacklist и лимит мест.</p>}

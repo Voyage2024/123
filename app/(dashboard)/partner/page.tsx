@@ -85,6 +85,7 @@ import {
   snapState,
 } from "@/app/(dashboard)/partner/_components/TrustSignals";
 import { cormorant } from "@/app/components/profile/fonts";
+import { projectLabels } from "@/lib/project-types";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПЕРЕВОДЫ
@@ -224,7 +225,7 @@ const T: Record<Lang, Dict> = {
     in: (d) => `in ${d}`,
     ago: (d) => `${d} ago`,
     left: (d) => `${d} left`,
-    projects: { shoot: "shoot", show: "show", campaign: "campaign", event: "event" },
+    projects: projectLabels("EN", { lower: true }),
     state: {
       loading: "Loading your desk…",
       retry: "Retry",
@@ -351,7 +352,7 @@ const T: Record<Lang, Dict> = {
     in: (d) => `через ${d}`,
     ago: (d) => `${d} назад`,
     left: (d) => `осталось ${d}`,
-    projects: { shoot: "съёмка", show: "показ", campaign: "кампейн", event: "ивент" },
+    projects: projectLabels("RU", { lower: true }),
     state: {
       loading: "Загружаем пульт…",
       retry: "Повторить",
@@ -479,7 +480,7 @@ const T: Record<Lang, Dict> = {
     in: (d) => `en ${d}`,
     ago: (d) => `hace ${d}`,
     left: (d) => `quedan ${d}`,
-    projects: { shoot: "sesión", show: "desfile", campaign: "campaña", event: "evento" },
+    projects: projectLabels("ES", { lower: true }),
     state: {
       loading: "Cargando tu panel…",
       retry: "Reintentar",
@@ -605,7 +606,7 @@ const T: Record<Lang, Dict> = {
     in: (d) => `em ${d}`,
     ago: (d) => `há ${d}`,
     left: (d) => `faltam ${d}`,
-    projects: { shoot: "ensaio", show: "desfile", campaign: "campanha", event: "evento" },
+    projects: projectLabels("PT", { lower: true }),
     state: {
       loading: "Carregando seu painel…",
       retry: "Tentar de novo",

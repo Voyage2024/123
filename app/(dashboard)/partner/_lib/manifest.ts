@@ -8,7 +8,7 @@
  * ──────────────────────────────────────────────────────────────────── */
 
 import {
-  PROJECTS,
+  toProjectKey,
   list,
   num,
   obj,
@@ -58,7 +58,7 @@ export function parseManifest(raw: unknown): ManifestData {
   const root = obj(raw);
   const tours = list<TourRow>(root.tours, (r) => {
     const id = str(r.id);
-    const project = oneOf(r.project, PROJECTS);
+    const project = toProjectKey(r.project);
     const departsAt = time(r.departs_at);
     if (!id || !project || departsAt === null) return null;
     const outcome = obj(r.outcome);

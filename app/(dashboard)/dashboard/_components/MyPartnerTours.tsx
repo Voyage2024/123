@@ -16,7 +16,7 @@ import Link from "next/link";
 import { Check, Loader2, Plane, PlaneLanding, Star } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Lang } from "@/app/context/LanguageContext";
-import { PROJECTS, TIERS, list, num, obj, oneOf, str, time, type KeyTier, type ProjectKey } from "@/app/(dashboard)/partner/_lib/command";
+import { TIERS, list, num, obj, oneOf, toProjectKey, str, time, type KeyTier, type ProjectKey } from "@/app/(dashboard)/partner/_lib/command";
 import { usePartnerFormat, type Fmt } from "@/app/(dashboard)/partner/_lib/format";
 import { usePartnerFeed } from "@/app/(dashboard)/partner/_lib/usePartnerFeed";
 
@@ -42,7 +42,7 @@ type MyTour = {
 function parseTours(raw: unknown): MyTour[] {
   return list<MyTour>(obj(raw).tours, (r) => {
     const id = str(r.id);
-    const project = oneOf(r.project, PROJECTS);
+    const project = toProjectKey(r.project);
     const departsAt = time(r.departs_at);
     if (!id || !project || departsAt === null) return null;
     const m = obj(r.manager);

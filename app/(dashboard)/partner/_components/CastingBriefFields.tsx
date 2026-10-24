@@ -20,8 +20,10 @@ import { useId, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import type { Payer, ProjectKey } from "@/app/(dashboard)/partner/_lib/command";
+import { PROJECTS, projectHint, projectLabels, toProjectKey } from "@/lib/project-types";
 
-export const PROJECT_TYPES: ProjectKey[] = ["shoot", "show", "campaign", "event"];
+/** Тур (1–2 недели) и Ивент (до 1 дня) — lib/project-types.ts */
+export const PROJECT_TYPES: readonly ProjectKey[] = PROJECTS;
 export const AUDIENCE_SEGMENTS = ["all", "working", "elite"] as const;
 export type AudienceSegment = (typeof AUDIENCE_SEGMENTS)[number];
 export const CURRENCIES = ["USD", "EUR", "AED", "AUD", "GBP"] as const;
@@ -50,7 +52,7 @@ export type BriefValues = {
 export const EMPTY_BRIEF: BriefValues = {
   city: "",
   audienceSegment: "working",
-  project: "shoot",
+  project: "tour",
   startsOn: "",
   endsOn: "",
   slots: 1,
@@ -178,7 +180,7 @@ export function rowToBrief(row: Record<string, unknown>): BriefValues {
   const closesAt = closes && Number.isFinite(closes.getTime())
     ? `${closes.getFullYear()}-${pad(closes.getMonth() + 1)}-${pad(closes.getDate())}T${pad(closes.getHours())}:${pad(closes.getMinutes())}`
     : "";
-  const project = PROJECT_TYPES.includes(row.project_type as ProjectKey) ? (row.project_type as ProjectKey) : "shoot";
+  const project = toProjectKey(row.project_type) ?? "tour";
   const segment = AUDIENCE_SEGMENTS.includes(row.audience_segment as AudienceSegment) ? (row.audience_segment as AudienceSegment) : "working";
   const currency = CURRENCIES.includes(row.fee_currency as (typeof CURRENCIES)[number]) ? (row.fee_currency as (typeof CURRENCIES)[number]) : "USD";
   const payer = (value: unknown): Payer => (PAYERS.includes(value as Payer) ? (value as Payer) : "manager");
@@ -236,7 +238,7 @@ const T: Record<Lang, Dict> = {
     project: "Project type",
     audienceSegment: "Target audience",
     audiences: { all: "All residents", working: "Working", elite: "Elite" },
-    projects: { shoot: "Shoot", show: "Show", campaign: "Campaign", event: "Event" },
+    projects: projectLabels("EN"),
     dates: "Dates",
     from: "From",
     to: "To",
@@ -271,7 +273,7 @@ const T: Record<Lang, Dict> = {
     project: "Тип проекта",
     audienceSegment: "Целевая аудитория",
     audiences: { all: "Все резидентки", working: "Working", elite: "Elite" },
-    projects: { shoot: "Съёмка", show: "Показ", campaign: "Кампейн", event: "Ивент" },
+    projects: projectLabels("RU"),
     dates: "Даты",
     from: "С",
     to: "По",
@@ -306,7 +308,7 @@ const T: Record<Lang, Dict> = {
     project: "Tipo de proyecto",
     audienceSegment: "Audiencia objetivo",
     audiences: { all: "Todas las residentes", working: "Working", elite: "Elite" },
-    projects: { shoot: "Sesión", show: "Desfile", campaign: "Campaña", event: "Evento" },
+    projects: projectLabels("ES"),
     dates: "Fechas",
     from: "Desde",
     to: "Hasta",
@@ -341,7 +343,7 @@ const T: Record<Lang, Dict> = {
     project: "Tipo de projeto",
     audienceSegment: "Público-alvo",
     audiences: { all: "Todas as residentes", working: "Working", elite: "Elite" },
-    projects: { shoot: "Ensaio", show: "Desfile", campaign: "Campanha", event: "Evento" },
+    projects: projectLabels("PT"),
     dates: "Datas",
     from: "De",
     to: "Até",
@@ -423,6 +425,46 @@ function Choice<T extends string>({
   );
 }
 
+/** Тип проекта: название + подсказка о длительности на языке интерфейса */
+function ProjectChoice({
+  label,
+  value,
+  render,
+  hint,
+  onChange,
+}: {
+  label: string;
+  value: ProjectKey;
+  render: (v: ProjectKey) => string;
+  hint: (v: ProjectKey) => string;
+  onChange: (v: ProjectKey) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="grid grid-cols-2 gap-1.5">
+      {PROJECT_TYPES.map((o) => {
+        const on = o === value;
+        return (
+          <button
+            key={o}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o)}
+            className={`flex min-h-14 flex-col items-start justify-center gap-0.5 rounded-xl border px-3 py-2 text-left transition ${
+              on
+                ? "border-amber-200/50 bg-amber-200/10 text-amber-100"
+                : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:border-zinc-600"
+            }`}
+          >
+            <span className="text-xs tracking-wide">{render(o)}</span>
+            <span className={`text-[10.5px] leading-snug ${on ? "text-amber-100/60" : "text-zinc-500"}`}>{hint(o)}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CastingBriefFields({
   value,
   onChange,
@@ -469,11 +511,11 @@ export function CastingBriefFields({
 
       <div className="space-y-2">
         <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-zinc-400">{t.project}</p>
-        <Choice
+        <ProjectChoice
           label={t.project}
           value={value.project}
-          options={PROJECT_TYPES}
           render={(p) => t.projects[p]}
+          hint={(p) => projectHint(p, lang)}
           onChange={(p) => set({ project: p })}
         />
       </div>

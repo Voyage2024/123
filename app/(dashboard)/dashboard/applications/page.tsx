@@ -22,6 +22,7 @@ import Link from "next/link";
 import MyApplications from "@/app/components/MyApplications";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/app/context/LanguageContext";
+import { projectLabel } from "@/lib/project-types";
 import PageExplainerHeader, {
   ResidentPageShell,
   type ExplainerDict,
@@ -176,7 +177,7 @@ function CastingResponsesPanel({ lang }: { lang: string }) {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500"><MapPin size={12} className="text-amber-200/60" /> {row.city}</div>
-                    <h3 className="mt-2 truncate font-serif text-xl text-zinc-100">{row.project_type.replaceAll("_", " ")}</h3>
+                    <h3 className="mt-2 truncate font-serif text-xl text-zinc-100">{projectLabel(row.project_type, lang)}</h3>
                   </div>
                   <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium ${STATUS_TONE[status] ?? STATUS_TONE.withdrawn}`}>
                     {status === "selected" ? <BadgeCheck size={12} /> : status === "option" ? <Clock3 size={12} /> : <Hourglass size={12} />}
