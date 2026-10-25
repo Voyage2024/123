@@ -33,6 +33,13 @@ import { useAuth } from "@/app/context/AuthContext";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import { updateResidentLifestylePreference } from "@/app/actions/map-locations";
+import {
+  attachPortfolioPhotos,
+  createPortfolioUploadSlots,
+  removePortfolioPhoto,
+  type PortfolioError,
+  type PortfolioPhoto,
+} from "@/app/actions/resident-portfolio";
 import { fmtPoints, type CircleConfig, type CircleKey } from "@/lib/gamification";
 
 import { cormorant } from "@/app/components/profile/fonts";
@@ -65,7 +72,10 @@ import ProfileIdentityQuickEdit from "@/app/components/profile/ProfileIdentityQu
  *    Единицы (cm / kg) показываются отдельно и НЕ пишутся в БД.
  *
  * 4. Для записи нужны корректные RLS-политики на таблице `profiles`
- *    и на бакете `user-uploads`.
+ *    и на бакете `user-uploads`. Портфолио (загрузка/удаление) идёт через
+ *    Server Actions в app/actions/resident-portfolio.ts: политики бакета
+ *    пускают резидента только к файлам avatar-*, а сервер к тому же
+ *    атомарно обновляет photo_urls и возвращает актуальный массив из БД.
  *
  * 5. Кардхолдер красится по Circle из v_global_leaderboard (useClubStanding,
  *    realtime) — тот же расчёт, что в «Паспорте» и лидерборде.
@@ -134,6 +144,9 @@ const en = {
   uploadingShort: "Uploading…",
   deletePhoto: "Delete photo",
   uploadError: "Photo upload failed. Check the console (F12).",
+  deleteError: "Could not delete the photo. Refresh the page and try again.",
+  photoLimit: "Photo limit reached (max 12). Delete one to add a new one.",
+  photoMissing: "File not found",
 
   vault: "Personal Vault",
   encrypted: "— Encrypted",
@@ -204,6 +217,9 @@ const T: Record<Lang, Dict> = {
     uploadingShort: "Загрузка…",
     deletePhoto: "Удалить фото",
     uploadError: "Ошибка при загрузке фото. Проверь консоль (F12).",
+    deleteError: "Не удалось удалить фото. Обнови страницу и попробуй ещё раз.",
+    photoLimit: "Достигнут лимит фото (максимум 12). Удали одно, чтобы добавить новое.",
+    photoMissing: "Файл не найден",
 
     vault: "Личный сейф",
     encrypted: "— Зашифровано",
@@ -268,6 +284,9 @@ const T: Record<Lang, Dict> = {
     uploadingShort: "Subiendo…",
     deletePhoto: "Eliminar foto",
     uploadError: "Error al subir la foto. Revisa la consola (F12).",
+    deleteError: "No se pudo eliminar la foto. Actualiza la página e inténtalo de nuevo.",
+    photoLimit: "Has alcanzado el límite de fotos (máx. 12). Elimina una para añadir otra.",
+    photoMissing: "Archivo no encontrado",
 
     vault: "Bóveda personal",
     encrypted: "— Cifrado",
@@ -332,6 +351,9 @@ const T: Record<Lang, Dict> = {
     uploadingShort: "Enviando…",
     deletePhoto: "Excluir foto",
     uploadError: "Falha ao enviar a foto. Verifique o console (F12).",
+    deleteError: "Não foi possível excluir a foto. Atualize a página e tente novamente.",
+    photoLimit: "Limite de fotos atingido (máx. 12). Exclua uma para adicionar outra.",
+    photoMissing: "Arquivo não encontrado",
 
     vault: "Cofre pessoal",
     encrypted: "— Criptografado",
@@ -996,10 +1018,16 @@ export default function ResidentProfilePage() {
   // UI-проверка; настоящая защита — RLS и триггер в базе
   const isAdmin = hasRole(["owner", "admin"]) || user?.email === LEGACY_ADMIN_EMAIL;
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [photoSrcs, setPhotoSrcs] = useState<string[]>([]);
+  // Пары «значение из photo_urls → картинка» в том же порядке, что и в БД.
+  // Удаление идёт по entry, а не по индексу на экране.
+  const [photos, setPhotos] = useState<PortfolioPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deletingEntry, setDeletingEntry] = useState<string | null>(null);
+  // Синхронный замок: пока идёт загрузка/удаление, новые операции с фото
+  // не стартуют (иначе вторая операция могла бы перезаписать первую).
+  const photoBusyRef = useRef(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1034,28 +1062,30 @@ export default function ResidentProfilePage() {
   }, [user?.id]);
 
   // ── Генерация signed URL для приватного бакета ──────────────────────
+  // Порядок и длина совпадают с photo_urls: «битый» путь остаётся в списке
+  // (src = null), чтобы его можно было увидеть и удалить.
   const resolvePhotos = useCallback(async (entries: string[]) => {
     if (!entries || entries.length === 0) {
-      setPhotoSrcs([]);
+      setPhotos([]);
       return;
     }
-    const direct: string[] = [];
-    const paths: string[] = [];
-    entries.forEach((e) =>
-      /^https?:\/\//.test(e) ? direct.push(e) : paths.push(e)
-    );
-
-    let signed: string[] = [];
+    const paths = entries.filter((e) => !/^https?:\/\//.test(e));
+    const signedByPath = new Map<string, string>();
     if (paths.length) {
       const { data, error } = await supabase.storage
         .from("user-uploads")
         .createSignedUrls(paths, 60 * 60); // 1 час
       if (error) console.error("createSignedUrls error:", error.message);
-      signed = (data ?? [])
-        .map((d) => d.signedUrl)
-        .filter(Boolean) as string[];
+      (data ?? []).forEach((d) => {
+        if (d.path && d.signedUrl && !d.error) signedByPath.set(d.path, d.signedUrl);
+      });
     }
-    setPhotoSrcs([...direct, ...signed]);
+    setPhotos(
+      entries.map((entry) => ({
+        entry,
+        src: /^https?:\/\//.test(entry) ? entry : signedByPath.get(entry) ?? null,
+      }))
+    );
   }, []);
 
   // ── Загрузка профиля при монтировании ───────────────────────────────
@@ -1160,60 +1190,102 @@ export default function ResidentProfilePage() {
     [user]
   );
 
-  // ── Загрузка фото портфолио в Storage (с защитой от кэша) ───────────
-  const handleFiles = useCallback(
-    async (files: FileList | null) => {
-      if (!files || !user || !profile) return;
-      setUploading(true);
+  // Ответ сервера — истина из БД: кладём его и в профиль, и в галерею.
+  const applyPortfolio = useCallback((photoUrls: string[], next: PortfolioPhoto[]) => {
+    setProfile((prev) => (prev ? { ...prev, photo_urls: photoUrls } : prev));
+    setPhotos(next);
+  }, []);
 
-      const existing = profile.photo_urls ?? [];
-      const added: string[] = [];
-
-      for (const file of Array.from(files)) {
-        const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-        const uniqueFileName = `${Date.now()}_${safeName}`;
-        const path = `${user.id}/${uniqueFileName}`;
-
-        const { error } = await supabase.storage
-          .from("user-uploads")
-          .upload(path, file, { upsert: true, cacheControl: "3600" });
-
-        if (error) {
-          console.error("Загрузка не удалась:", error.message);
-          alert(t.uploadError);
-          continue;
-        }
-
-        if (!existing.includes(path) && !added.includes(path)) {
-          added.push(path);
-        }
-      }
-
-      if (added.length) {
-        const next = [...existing, ...added];
-        await updateProfile({ photo_urls: next });
-        await resolvePhotos(next);
-      }
-      setUploading(false);
-    },
-    [user, profile, updateProfile, resolvePhotos, t]
+  const portfolioErrorText = useCallback(
+    (reason: PortfolioError, fallback: string) => (reason === "too_many" ? t.photoLimit : fallback),
+    [t]
   );
 
-  // ── Удаление фото (владелец) ────────────────────────────────────────
-  const removePhoto = useCallback(
-    async (index: number) => {
-      if (!profile || !user) return;
-      const entries = profile.photo_urls ?? [];
-      const target = entries[index];
-      const next = entries.filter((_, i) => i !== index);
+  // ── Загрузка фото портфолио: signed upload URL → Storage → photo_urls ─
+  const handleFiles = useCallback(
+    async (fileList: FileList | null) => {
+      const files = fileList ? Array.from(fileList) : [];
+      if (!files.length || !user || !profile || photoBusyRef.current) return;
+      photoBusyRef.current = true;
+      setUploading(true);
 
-      if (target && !/^https?:\/\//.test(target)) {
-        await supabase.storage.from("user-uploads").remove([target]);
+      try {
+        const slotsResult = await createPortfolioUploadSlots(
+          files.map((f) => ({ size: f.size, type: f.type, name: f.name }))
+        );
+        if (!slotsResult.ok) {
+          console.error("Загрузка не удалась:", slotsResult.reason);
+          alert(portfolioErrorText(slotsResult.reason, t.uploadError));
+          return;
+        }
+
+        const uploaded: string[] = [];
+        let failed = false;
+        for (let i = 0; i < files.length; i += 1) {
+          const slot = slotsResult.slots[i];
+          const { error } = await supabase.storage
+            .from("user-uploads")
+            .uploadToSignedUrl(slot.path, slot.token, files[i], { cacheControl: "3600" });
+          if (error) {
+            console.error("Загрузка не удалась:", error.message);
+            failed = true;
+            continue;
+          }
+          uploaded.push(slot.path);
+        }
+
+        if (uploaded.length) {
+          const result = await attachPortfolioPhotos(uploaded);
+          if (result.ok) {
+            applyPortfolio(result.photoUrls, result.photos);
+          } else {
+            console.error("Не удалось сохранить фото в анкете:", result.reason);
+            failed = true;
+          }
+        }
+        if (failed) alert(t.uploadError);
+      } catch (err) {
+        console.error("Загрузка не удалась:", err);
+        alert(t.uploadError);
+      } finally {
+        photoBusyRef.current = false;
+        setUploading(false);
       }
-      await updateProfile({ photo_urls: next });
-      await resolvePhotos(next);
     },
-    [profile, user, updateProfile, resolvePhotos]
+    [user, profile, applyPortfolio, portfolioErrorText, t]
+  );
+
+  // ── Удаление фото (владелец): по значению из photo_urls ─────────────
+  const removePhoto = useCallback(
+    async (entry: string) => {
+      if (!profile || !user || photoBusyRef.current) return;
+      photoBusyRef.current = true;
+      setDeletingEntry(entry);
+
+      // Оптимистично убираем плитку; при ошибке вернём состояние как было.
+      const beforePhotos = photos;
+      const beforeUrls = profile.photo_urls ?? [];
+      setPhotos((cur) => cur.filter((p) => p.entry !== entry));
+
+      try {
+        const result = await removePortfolioPhoto(entry);
+        if (result.ok) {
+          applyPortfolio(result.photoUrls, result.photos);
+        } else {
+          console.error("Не удалось удалить фото:", result.reason);
+          applyPortfolio(beforeUrls, beforePhotos);
+          alert(t.deleteError);
+        }
+      } catch (err) {
+        console.error("Не удалось удалить фото:", err);
+        applyPortfolio(beforeUrls, beforePhotos);
+        alert(t.deleteError);
+      } finally {
+        photoBusyRef.current = false;
+        setDeletingEntry(null);
+      }
+    },
+    [profile, user, photos, applyPortfolio, t]
   );
 
   const openFilePicker = () => fileInputRef.current?.click();
@@ -1656,17 +1728,24 @@ export default function ResidentProfilePage() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {photoSrcs.map((src, i) => (
+            {photos.map(({ entry, src }, i) => (
               <div
-                key={`${src}-${i}`}
+                key={entry}
                 className="relative aspect-[3/4] rounded-xl bg-zinc-900/50 border border-zinc-800/40 overflow-hidden group"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={src}
-                  alt={`${t.photo} ${i + 1}`}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
+                {src ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={src}
+                    alt={`${t.photo} ${i + 1}`}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-zinc-600">
+                    <ImageIcon className="w-6 h-6" />
+                    <span className="text-[10px] tracking-[0.12em] uppercase">{t.photoMissing}</span>
+                  </div>
+                )}
                 <div
                   className="absolute inset-0 opacity-30 pointer-events-none"
                   style={{
@@ -1682,13 +1761,18 @@ export default function ResidentProfilePage() {
                 {canEditOwn && (
                   <button
                     type="button"
-                    onClick={() => removePhoto(i)}
+                    onClick={() => removePhoto(entry)}
+                    disabled={uploading || deletingEntry !== null}
                     aria-label={t.deletePhoto}
                     className="absolute top-1 right-1 w-9 h-9 rounded-full flex items-center justify-center text-zinc-300 opacity-100 transition-all [@media(hover:hover)]:opacity-0 group-hover:opacity-100 hover:text-red-400"
                     title={t.deletePhoto}
                   >
                     <span className="flex w-6 h-6 items-center justify-center rounded-full bg-zinc-950/70 border border-zinc-700/50">
-                      <X className="w-3.5 h-3.5" />
+                      {deletingEntry === entry ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <X className="w-3.5 h-3.5" />
+                      )}
                     </span>
                   </button>
                 )}
@@ -1700,7 +1784,7 @@ export default function ResidentProfilePage() {
               </div>
             ))}
 
-            {photoSrcs.length === 0 && (
+            {photos.length === 0 && (
               <div className="relative aspect-[3/4] rounded-xl bg-zinc-900/50 border border-zinc-800/40 overflow-hidden flex items-center justify-center">
                 <ImageIcon className="w-6 h-6 text-zinc-700" />
               </div>
@@ -1710,7 +1794,7 @@ export default function ResidentProfilePage() {
               <button
                 type="button"
                 onClick={openFilePicker}
-                disabled={uploading}
+                disabled={uploading || deletingEntry !== null}
                 className="relative aspect-[3/4] rounded-xl bg-transparent border border-dashed border-zinc-700 hover:border-amber-500/50 transition-all duration-300 flex flex-col items-center justify-center gap-2 group disabled:opacity-50"
               >
                 <div className="w-10 h-10 rounded-full bg-zinc-900/60 border border-zinc-700/40 group-hover:border-amber-500/30 group-hover:bg-amber-950/20 flex items-center justify-center transition-all duration-300">
