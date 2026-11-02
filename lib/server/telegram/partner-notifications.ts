@@ -210,6 +210,8 @@ type ClubCopy = {
   approvedTour: string;
   approvedParty: string;
   approvedCasting: string;
+  castingInvite: string;
+  dates: string;
   pointsTitle: (points: number) => string;
   castingResponse: string;
   responsesReady: (count: number, slots: number) => string;
@@ -240,6 +242,8 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     approvedTour: "Ваша заявка на тур одобрена",
     approvedParty: "Ваша заявка на тусовку одобрена",
     approvedCasting: "Вас выбрали в состав тура",
+    castingInvite: "Личное приглашение на кастинг VOYAGE",
+    dates: "Даты",
     pointsTitle: (n) => `+${n} к Influence Index`,
     castingResponse: "Новые отклики на кастинг",
     responsesReady: (c, s) => `Готовы в тур: ${c} · мест: ${s}`,
@@ -268,6 +272,8 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     approvedTour: "Your tour application is approved",
     approvedParty: "Your party application is approved",
     approvedCasting: "You have been selected for the crew",
+    castingInvite: "Personal invitation to a VOYAGE casting",
+    dates: "Dates",
     pointsTitle: (n) => `+${n} to your Influence Index`,
     castingResponse: "New casting responses",
     responsesReady: (c, s) => `Ready for the tour: ${c} · slots: ${s}`,
@@ -296,6 +302,8 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     approvedTour: "Tu solicitud para el tour fue aprobada",
     approvedParty: "Tu solicitud para la fiesta fue aprobada",
     approvedCasting: "Te han elegido para el equipo",
+    castingInvite: "Invitación personal a un casting de VOYAGE",
+    dates: "Fechas",
     pointsTitle: (n) => `+${n} a tu Influence Index`,
     castingResponse: "Nuevas respuestas al casting",
     responsesReady: (c, s) => `Listas para el tour: ${c} · plazas: ${s}`,
@@ -324,6 +332,8 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     approvedTour: "Sua candidatura ao tour foi aprovada",
     approvedParty: "Sua candidatura à festa foi aprovada",
     approvedCasting: "Você foi escolhida para a equipe",
+    castingInvite: "Convite pessoal para um casting VOYAGE",
+    dates: "Datas",
     pointsTitle: (n) => `+${n} no seu Influence Index`,
     castingResponse: "Novas respostas ao casting",
     responsesReady: (c, s) => `Prontas para o tour: ${c} · vagas: ${s}`,
@@ -351,6 +361,7 @@ const clubText: Record<TelegramLang, ClubCopy> = {
 const CLUB_TEMPLATES = new Set([
   "tour_published", "party_published", "application_approved", "points_awarded",
   "casting_response", "contract_signed", "docs_uploaded", "review_received",
+  "casting_invite",
 ]);
 
 /** Название из jsonb { RU, EN, … } или строка */
@@ -421,6 +432,20 @@ function clubNotificationBody(template: string, payload: JsonRecord, lang: Teleg
       }
       break;
     }
+    case "casting_invite": {
+      // Миграция 20261103090000: voyage_invite_residents → payload { ref_id, city, project, starts_on, ends_on, closes_at, title_i18n, message }
+      lines.push(`<b>${escapeHtml(copy.castingInvite)}</b>`);
+      if (title) lines.push(escapeHtml(title));
+      if (place) lines.push(escapeHtml(place));
+      const from = formatDate(payload.starts_on, lang);
+      const to = formatDate(payload.ends_on, lang);
+      if (from) lines.push(`${escapeHtml(copy.dates)}: ${escapeHtml(to && to !== from ? `${from} – ${to}` : from)}`);
+      const until = formatDate(payload.closes_at, lang);
+      if (until) lines.push(`${escapeHtml(copy.applyUntil)}: ${escapeHtml(until)}`);
+      const note = pickText(payload.message);
+      if (note) lines.push("", `<i>${escapeHtml(note)}</i>`);
+      break;
+    }
     case "casting_response": {
       lines.push(`<b>${escapeHtml(copy.castingResponse)}</b>`);
       if (place) lines.push(escapeHtml(place));
@@ -474,6 +499,8 @@ function clubKeyboard(template: string, payload: JsonRecord, lang: TelegramLang)
         : keyboard.url(copy.openApplications, getSiteLink("/dashboard/applications"));
     case "points_awarded":
       return keyboard.url(copy.openPoints, getSiteLink("/dashboard/gamification#points-history"));
+    case "casting_invite":
+      return keyboard.url(copy.openCastings, getSiteLink("/dashboard/castings"));
     case "casting_response":
       return keyboard.url(copy.openCasting, getSiteLink(ref ? `/partner/castings/${ref}` : "/partner/castings"));
     case "contract_signed":

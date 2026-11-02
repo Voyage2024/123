@@ -16,6 +16,16 @@ import { supabase } from "@/lib/supabase";
 export type ActionResult = { ok: true } | { ok: false; reason: "closed" | "forbidden" | "network" };
 
 /**
+ * «Не интересно» на личном приглашении — RPC partner_casting_invite_decline
+ * (миграция 20261103090000). Кастинг уходит из ленты, если она не проходит
+ * общий допуск.
+ */
+export async function declineInvite(castingId: string): Promise<ActionResult> {
+  const { error } = await supabase.rpc("partner_casting_invite_decline", { p_casting: castingId });
+  return error ? { ok: false, reason: reasonOf(error.code) } : { ok: true };
+}
+
+/**
  * 42501 — база не пустила. Из ленты резидентка видит только кастинги,
  * которые пускают, значит чаще всего кастинг уже закрыт или тумблер
  * выключили в другой вкладке.

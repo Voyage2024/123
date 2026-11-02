@@ -14,6 +14,8 @@ export const ROUTES = {
   command: "/partner",
   castings: "/partner/castings",
   newCasting: "/partner/castings/new",
+  /** Каталог статичных туров (Дубай, Сидней …): кастинги создаются под тур */
+  tourCatalog: "/partner/castings/tours",
   casting: (id: string) => `/partner/castings/${id}`,
   /** Слепая карточка кандидатки внутри кастинга — до рукопожатия имени нет */
   castingCandidate: (castingId: string, code: string) =>

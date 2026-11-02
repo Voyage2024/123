@@ -15,13 +15,13 @@ function messageFor(error: { code?: string; message: string }) {
   if (error.code === "P0002") return "Кастинг, отклик или тур не найден.";
   if (error.message.includes("casting_full")) return "Все места уже зарезервированы или заняты.";
   if (error.message.includes("candidate_not_eligible")) return "Кандидатка больше не проходит условия допуска (KYC / Blacklist).";
-  if (error.message.includes("tour_locked")) return "Для рукопожатия нужен подтверждённый тур.";
-  if (error.message.includes("tour_casting_mismatch")) return "Тур не совпадает с городом или типом проекта кастинга.";
+  if (error.message.includes("tour_locked")) return "Для рукопожатия нужны подтверждённые детали перелёта (логистика).";
+  if (error.message.includes("tour_casting_mismatch")) return "Детали перелёта не совпадают с городом или типом проекта кастинга.";
   if (error.message.includes("casting_closed")) return "Кастинг закрыт или срок откликов истёк.";
   if (error.message.includes("response_not_declineable")) return "Этот отклик уже обработан и не может быть отклонён повторно.";
   if (error.message.includes("invalid_iata")) return "Код аэропорта — три латинские буквы, например DXB.";
   if (error.message.includes("invalid_dates")) return "Проверьте даты: возвращение не раньше вылета.";
-  if (error.message.includes("casting_cancelled")) return "Кастинг отменён — тур создать нельзя.";
+  if (error.message.includes("casting_cancelled")) return "Кастинг отменён — детали перелёта добавить нельзя.";
   return error.message || "Не удалось выполнить действие.";
 }
 
@@ -76,7 +76,11 @@ export async function completeCastingHandshake(
   return error ? { ok: false, error: messageFor(error) } : { ok: true };
 }
 
-/** Подтверждённый тур из кастинга: организатор, город и тип проекта берутся из кастинга. */
+/**
+ * «Детали перелёта / Логистика» по кастингу (строка partner_tours): вылет,
+ * возвращение, рейс, аэропорт. Организатор, город и тип проекта берутся из
+ * кастинга. Не путать со статичным туром каталога (tour_catalog).
+ */
 export async function createTourFromCasting(
   castingId: string,
   input: { departsAt: string; returnsAt: string | null; flightNo?: string; iata?: string },

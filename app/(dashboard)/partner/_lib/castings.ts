@@ -5,6 +5,8 @@
  * RPC public.partner_castings_list(): кастинги менеджера (manager_id = me;
  * админ и владелец видят все) и слепые ответы — как в partner_command():
  * код вместо имени, пока нет рукопожатия, без контактов.
+ * С 03.11.2026 (миграция 20261103090000) — ещё тур из каталога, заголовок и
+ * бриф на RU/EN/ES/PT, число приглашений (только owner/admin).
  * ──────────────────────────────────────────────────────────────────── */
 
 import {
@@ -23,8 +25,10 @@ import {
   type ProjectKey,
   type Responder,
 } from "@/app/(dashboard)/partner/_lib/command";
+import { BRIEF_MAX, TITLE_MAX, pickI18n, toCastingLang, toI18n, type CastingLang, type I18nText } from "@/lib/casting-i18n";
+import { parseCatalogTourBrief, type CatalogTourBrief } from "@/lib/tour-catalog";
 
-export type CastingStage = "open" | "shortlist" | "closed" | "cancelled";
+export type CastingStage = "open" | "shortlist" | "closed" | "cancelled" | "archived";
 
 export type CastingBrief = {
   id: string;
@@ -46,6 +50,14 @@ export type CastingBrief = {
   languages: string[];
   /** Текст брифа — как его написал менеджер */
   note: string | null;
+  /** Заголовок и бриф на 4 языках; sourceLang — язык автора */
+  title: I18nText;
+  briefI18n: I18nText;
+  sourceLang: CastingLang;
+  /** Статичный тур, под который создан кастинг */
+  catalogTour: CatalogTourBrief | null;
+  /** Активные приглашения (только owner/admin; у партнёра — null) */
+  invites: number | null;
   responders: Responder[];
   /** Закрытый кастинг → тур, который из него родился */
   tourId: string | null;
@@ -55,7 +67,17 @@ export type CastingBrief = {
 
 export type CastingsData = { generatedAt: number; castings: CastingBrief[] };
 
-const STAGES = ["open", "shortlist", "closed", "cancelled"] as const;
+const STAGES = ["open", "shortlist", "closed", "cancelled", "archived"] as const;
+
+/** Заголовок на языке интерфейса → тур → «Город» */
+export function castingTitle(c: Pick<CastingBrief, "title" | "sourceLang" | "catalogTour" | "city">, lang: string): string {
+  return pickI18n(c.title, lang, c.sourceLang) ?? (c.catalogTour ? pickI18n(c.catalogTour.title, lang) : null) ?? c.city;
+}
+
+/** Бриф на языке интерфейса (или как написал автор) */
+export function castingNote(c: Pick<CastingBrief, "briefI18n" | "sourceLang" | "note">, lang: string): string | null {
+  return pickI18n(c.briefI18n, lang, c.sourceLang) ?? c.note;
+}
 
 /** Разбор public.partner_castings_list() — миграция 20261020094000_partner_live_pages.sql */
 export function parseCastings(raw: unknown): CastingsData {
@@ -85,6 +107,11 @@ export function parseCastings(raw: unknown): CastingsData {
       heightMin: num(r.height_min),
       languages: arr(r.languages).flatMap((x) => (typeof x === "string" ? [x] : [])),
       note: str(r.brief),
+      title: toI18n(r.title_i18n, TITLE_MAX),
+      briefI18n: toI18n(r.brief_i18n, BRIEF_MAX),
+      sourceLang: toCastingLang(r.source_lang),
+      catalogTour: parseCatalogTourBrief(r.catalog_tour),
+      invites: num(r.invites),
       responders: list<Responder>(r.responders, parseResponder),
       tourId: str(r.tour_id),
       organizer: (() => {

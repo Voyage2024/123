@@ -12,7 +12,9 @@
  *     кастинг открыт и не истёк.
  *
  * Данные — RPC public.partner_resident_feed(), миграция
- * supabase/migrations/20261015120000_partner_resident_feed.sql
+ * supabase/migrations/20261015120000_partner_resident_feed.sql;
+ * с 20261103090000 — заголовок и бриф на RU/EN/ES/PT, статичный тур и
+ * личное приглашение (приглашённая видит кастинг и без «Открыта к турам»).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { supabase } from "@/lib/supabase";
@@ -30,6 +32,8 @@ import {
   type ProjectKey,
   type Raw,
 } from "@/app/(dashboard)/partner/_lib/command";
+import { BRIEF_MAX, TITLE_MAX, toCastingLang, toI18n, type CastingLang, type I18nText } from "@/lib/casting-i18n";
+import { parseCatalogTourBrief, type CatalogTourBrief } from "@/lib/tour-catalog";
 
 /**
  * Отклик резидентки — partner_casting_responses.status, null — ещё не откликалась.
@@ -58,6 +62,14 @@ export type FeedCasting = {
   languages: string[];
   /** Текст брифа — как его написал менеджер */
   note: string | null;
+  /** Заголовок и бриф на 4 языках; показывается версия на языке интерфейса */
+  title: I18nText;
+  briefI18n: I18nText;
+  sourceLang: CastingLang;
+  /** Статичный тур, под который объявлен кастинг */
+  catalogTour: CatalogTourBrief | null;
+  /** Личное приглашение от клуба */
+  invite: { status: "invited" | "accepted"; at: number; message: string | null } | null;
   /** Менеджер без имени — только репутация */
   manager: { tier: KeyTier; rating: number | null; tours: number };
   /** Организатор: у клуба — имя и Official Club, у партнёра — только бейдж (имя после рукопожатия) */
@@ -147,6 +159,15 @@ function parseCasting(r: Raw): FeedCasting | null {
     heightMin: num(r.height_min),
     languages: langs(r.languages),
     note: str(r.brief),
+    title: toI18n(r.title_i18n, TITLE_MAX),
+    briefI18n: toI18n(r.brief_i18n, BRIEF_MAX),
+    sourceLang: toCastingLang(r.source_lang),
+    catalogTour: parseCatalogTourBrief(r.catalog_tour),
+    invite: (() => {
+      const i = obj(r.invite);
+      const status = oneOf(i.status, ["invited", "accepted"] as const);
+      return status ? { status, at: time(i.at) ?? Date.now(), message: str(i.message) } : null;
+    })(),
     manager: {
       tier: oneOf(m.tier, TIERS) ?? "silver",
       rating: num(m.rating),

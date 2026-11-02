@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -14,8 +14,10 @@ import {
 import {
   CastingBriefFields,
   EMPTY_BRIEF,
+  applyTourDefaults,
   briefErrors,
   createCasting,
+  useCatalogTours,
   type BriefErrorKey,
   type BriefValues,
 } from "@/app/(dashboard)/partner/_components/CastingBriefFields";
@@ -32,6 +34,18 @@ export default function NewCastingPage() {
   const [organizerId, setOrganizerId] = useState<string>(VOYAGE_MANAGEMENT_ID);
 
   const [values, setValues] = useState<BriefValues>(EMPTY_BRIEF);
+  // Кастинг создаётся под статичный тур из каталога (если каталог не пуст).
+  const { tours, loading: toursLoading } = useCatalogTours();
+  const checkOptions = { requireTour: tours.length > 0 };
+
+  // /partner/castings/new?tour=<id> — кнопка «Кастинг под этот тур» в каталоге.
+  // window.location вместо useSearchParams: страница не требует Suspense при сборке.
+  useEffect(() => {
+    if (toursLoading || tours.length === 0) return;
+    const wanted = new URLSearchParams(window.location.search).get("tour");
+    const tour = wanted ? tours.find((x) => x.id === wanted) : undefined;
+    if (tour) setValues((current) => (current.catalogTourId ? current : applyTourDefaults(current, tour)));
+  }, [tours, toursLoading]);
   const [errors, setErrors] = useState<BriefErrorKey[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState<{
@@ -47,7 +61,7 @@ export default function NewCastingPage() {
     setNotice(null);
 
     // 1. Проверяем форму до обращения к базе.
-    const validationErrors = briefErrors(values);
+    const validationErrors = briefErrors(values, checkOptions);
 
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
@@ -63,7 +77,7 @@ export default function NewCastingPage() {
 
     try {
       // 2. Создаём кастинг через готовую функцию компонента.
-      const result = await createCasting(values, canChooseOrganizer ? organizerId : null);
+      const result = await createCasting(values, canChooseOrganizer ? organizerId : null, checkOptions);
 
       if (!result.ok) {
         const messages: Record<typeof result.reason, string> = {
@@ -73,14 +87,15 @@ export default function NewCastingPage() {
             : "Недостаточно прав для создания кастинга. Обратитесь к администратору.",
           organizer:
             "Организатор не найден или заблокирован. Выберите VOYAGE Management или другого партнёра.",
+          tour: "Выбранный тур скрыт или удалён из каталога. Выберите другой тур.",
           schema:
-            "База данных не обновлена под эту версию формы (типы «Тур»/«Ивент»). Примените последние миграции.",
+            "База данных не обновлена под эту версию формы (тур, тексты на 4 языках). Примените миграцию 20261103090000_tour_catalog_casting_i18n_invites.sql.",
           network:
             "Не удалось создать кастинг. Проверьте соединение и попробуйте ещё раз.",
         };
 
         if (result.reason === "invalid") {
-          setErrors(briefErrors(values));
+          setErrors(briefErrors(values, checkOptions));
         }
 
         setNotice({
@@ -143,8 +158,8 @@ export default function NewCastingPage() {
           </h1>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-            Заполните условия проекта, укажите сроки и гонорар.
-            После публикации кастинг появится в ленте резидентов.
+            Выберите статичный тур, задайте даты и напишите бриф на одном языке —
+            «✨ Автоперевод» сделает версии для резиденток на RU, EN, ES и PT.
           </p>
         </div>
 
@@ -187,6 +202,8 @@ export default function NewCastingPage() {
                 }
               }}
               errors={errors}
+              tours={tours}
+              toursLoading={toursLoading}
             />
 
             {/* Уведомление о результате */}

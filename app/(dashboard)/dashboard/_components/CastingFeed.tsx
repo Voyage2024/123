@@ -23,6 +23,11 @@
  *
  * Все обращения к базе: лента — в _lib/castingFeed.ts (RPC partner_resident_feed),
  * отклики и тумблер — в _lib/actions.ts.
+ *
+ * С 03.11.2026: заголовок и бриф показываются на языке интерфейса (RU/EN/ES/PT),
+ * над городом — статичный тур; личное приглашение клуба — золотая плашка
+ * с сообщением и кнопкой «Не интересно». Приглашения видны и при выключенном
+ * «Открыта к турам».
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useEffect, useMemo, useState } from "react";
@@ -70,7 +75,8 @@ import {
   type ResidentProfile,
   type ResponseStatus,
 } from "@/app/(dashboard)/dashboard/_lib/castingFeed";
-import { applyToCasting, markCastingsSeen, setOpenToTours, withdrawResponse, type ActionResult } from "@/app/(dashboard)/dashboard/_lib/actions";
+import { applyToCasting, declineInvite, markCastingsSeen, setOpenToTours, withdrawResponse, type ActionResult } from "@/app/(dashboard)/dashboard/_lib/actions";
+import { pickI18n, pickedLang } from "@/lib/casting-i18n";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПЕРЕВОДЫ
@@ -97,6 +103,10 @@ type Dict = {
   manager: string;
   managerNew: string;
   organizerClub: string;
+  invited: string;
+  invitedText: string;
+  decline: string;
+  originalLang: (code: string) => string;
   tours: (n: number) => string;
   closesIn: (d: string) => string;
   apply: string;
@@ -142,6 +152,10 @@ const T: Record<Lang, Dict> = {
     manager: "Club manager",
     managerNew: "new",
     organizerClub: "Official club tour",
+    invited: "Personal invitation",
+    invitedText: "VOYAGE invites you to this casting. Reply “Ready” if the dates work for you.",
+    decline: "Not interested",
+    originalLang: (code) => `Original in ${code}`,
     tours: (n) => `${n} ${pl(n, "tour", "tours")}`,
     closesIn: (d) => `Replies close in ${d}`,
     apply: "Ready for the tour",
@@ -189,6 +203,10 @@ const T: Record<Lang, Dict> = {
     manager: "Менеджер клуба",
     managerNew: "новый",
     organizerClub: "Официальный тур клуба",
+    invited: "Личное приглашение",
+    invitedText: "VOYAGE приглашает вас на этот кастинг. Нажмите «Готова», если даты подходят.",
+    decline: "Не интересно",
+    originalLang: (code) => `Оригинал на ${code}`,
     tours: (n) => `${n} ${ru(n, "тур", "тура", "туров")}`,
     closesIn: (d) => `Приём откликов закроется через ${d}`,
     apply: "Готова в тур",
@@ -236,6 +254,10 @@ const T: Record<Lang, Dict> = {
     manager: "Gerente del club",
     managerNew: "nuevo",
     organizerClub: "Tour oficial del club",
+    invited: "Invitación personal",
+    invitedText: "VOYAGE te invita a este casting. Responde «Lista» si las fechas te vienen bien.",
+    decline: "No me interesa",
+    originalLang: (code) => `Original en ${code}`,
     tours: (n) => `${n} ${pl(n, "tour", "tours")}`,
     closesIn: (d) => `Las respuestas cierran en ${d}`,
     apply: "Lista para el tour",
@@ -283,6 +305,10 @@ const T: Record<Lang, Dict> = {
     manager: "Gerente do clube",
     managerNew: "novo",
     organizerClub: "Tour oficial do clube",
+    invited: "Convite pessoal",
+    invitedText: "A VOYAGE convida você para este casting. Responda «Pronta» se as datas forem boas.",
+    decline: "Não tenho interesse",
+    originalLang: (code) => `Original em ${code}`,
     tours: (n) => `${n} ${pl(n, "tour", "tours")}`,
     closesIn: (d) => `As respostas fecham em ${d}`,
     apply: "Pronta para o tour",
@@ -312,7 +338,7 @@ const T: Record<Lang, Dict> = {
  * ══════════════════════════════════════════════════════════════════ */
 
 type Response = FeedCasting["response"];
-type Pending = "apply" | "withdraw";
+type Pending = "apply" | "withdraw" | "decline";
 
 const ACTIVE_REPLY: ResponseStatus[] = ["ready", "option", "selected"];
 const hasReply = (r: Response) => !!r && ACTIVE_REPLY.includes(r.status);
@@ -321,6 +347,7 @@ const hasReply = (r: Response) => !!r && ACTIVE_REPLY.includes(r.status);
 function rank(c: FeedCasting) {
   const s = c.response?.status;
   if (s === "option" || s === "selected") return 0;
+  if (c.invite && !hasReply(c.response)) return 0.5;
   if (!hasReply(c.response)) return 1;
   return 2;
 }
@@ -504,9 +531,11 @@ function TicketCard({
   failure,
   onApply,
   onWithdraw,
+  onDecline,
   t,
   cm,
   fmt,
+  lang,
 }: {
   c: FeedCasting;
   me: ResidentProfile;
@@ -515,10 +544,17 @@ function TicketCard({
   failure: Failure | null;
   onApply: () => void;
   onWithdraw: () => void;
+  onDecline: () => void;
   t: Dict;
   cm: Common;
   fmt: Fmt;
+  lang: Lang;
 }) {
+  const title = pickI18n(c.title, lang, c.sourceLang);
+  const note = pickI18n(c.briefI18n, lang, c.sourceLang) ?? c.note;
+  const noteLang = pickedLang(c.briefI18n, lang, c.sourceLang);
+  const tourTitle = c.catalogTour ? pickI18n(c.catalogTour.title, lang) : null;
+  const tourRequirements = c.catalogTour ? pickI18n(c.catalogTour.requirements, lang) : null;
   const days = Math.round((c.endsAt - c.startsAt) / DAY) + 1;
   const closingSoon = fmt.ready && c.closesAt - fmt.now < DAY;
   const replied = hasReply(response);
@@ -534,13 +570,30 @@ function TicketCard({
 
   return (
     <article
-      aria-label={`${fmt.city(c.city)} · ${cm.projects[c.project]}`}
+      aria-label={`${title ?? fmt.city(c.city)} · ${fmt.city(c.city)} · ${cm.projects[c.project]}`}
       className={`group relative flex min-w-0 flex-col rounded-[1.4rem] border bg-gradient-to-b ${PROJECT_GLOW[c.project]} via-zinc-900/50 to-zinc-950/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl transition-colors duration-300 ${
         response?.status === "option" ? "border-amber-200/40 shadow-[0_0_40px_-18px_rgba(253,230,138,0.45)]" : "border-zinc-800/80 hover:border-amber-200/25"
       }`}
     >
       {/* ── бриф ── */}
       <div className="flex-1 p-5 pb-6">
+        {c.invite && !replied && (
+          <div className="mb-4 rounded-xl border border-amber-200/40 bg-amber-200/[0.08] px-3 py-2.5">
+            <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-100">
+              <Sparkles className="size-3.5" aria-hidden />
+              {t.invited}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-zinc-200">{c.invite.message ?? t.invitedText}</p>
+            <button
+              type="button"
+              onClick={onDecline}
+              disabled={pending !== null}
+              className="mt-2 text-[11px] text-zinc-400 underline-offset-4 transition hover:text-zinc-200 hover:underline disabled:opacity-50"
+            >
+              {pending === "decline" ? "…" : t.decline}
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <p className="text-[10px] uppercase tracking-[0.28em] text-zinc-500">
             {cm.projects[c.project]} · {t.days(days)}
@@ -556,8 +609,17 @@ function TicketCard({
           </div>
         </div>
 
-        <h3 className={`${cormorant.className} mt-2 text-[2.4rem] font-medium leading-none text-zinc-50`}>{fmt.city(c.city)}</h3>
-        <p className="mt-2 text-sm text-zinc-300">{fmt.range(c.startsAt, c.endsAt)}</p>
+        {tourTitle && (
+          <p className="mt-2 flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-amber-100/70">
+            <Plane className="size-3" strokeWidth={1.75} aria-hidden />
+            {tourTitle}
+          </p>
+        )}
+        <h3 className={`${cormorant.className} mt-2 text-[2.1rem] font-medium leading-none text-zinc-50`}>{title ?? fmt.city(c.city)}</h3>
+        <p className="mt-2 text-sm text-zinc-300">
+          {title ? `${fmt.city(c.city)} · ` : ""}
+          {fmt.range(c.startsAt, c.endsAt)}
+        </p>
 
         <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-zinc-800/70 bg-zinc-800/70">
           {terms.map(({ icon: Icon, label, value }) => (
@@ -579,7 +641,11 @@ function TicketCard({
           </div>
         )}
 
-        {c.note && <p className={`${cormorant.className} mt-4 text-[17px] leading-snug text-zinc-200`}>«{c.note}»</p>}
+        {note && <p className={`${cormorant.className} mt-4 whitespace-pre-line text-[17px] leading-snug text-zinc-200`}>«{note}»</p>}
+        {note && noteLang && noteLang !== lang && (
+          <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-zinc-600">{t.originalLang(noteLang)}</p>
+        )}
+        {tourRequirements && <p className="mt-3 text-xs leading-5 text-zinc-400">{tourRequirements}</p>}
 
         {/* тур клуба — имя и Official Club; партнёр — только репутация, без имени */}
         {c.organizer.official ? (
@@ -760,6 +826,17 @@ function FeedBody({ data }: { data: CastingFeedData }) {
     }
   };
 
+  const [declined, setDeclined] = useState<Set<string>>(new Set());
+  const handleDecline = async (id: string) => {
+    if (pending[id]) return;
+    markFailure(id, null);
+    markPending(id, "decline");
+    const res = await declineInvite(id);
+    markPending(id, null);
+    if (res.ok) setDeclined((cur) => new Set(cur).add(id));
+    else markFailure(id, res.reason);
+  };
+
   const handleOpen = async (next: boolean) => {
     setOpen(next); // сразу — тумблер не должен «думать»
     setOpenBusy(true);
@@ -775,7 +852,28 @@ function FeedBody({ data }: { data: CastingFeedData }) {
     new: ordered.filter(isNew).length,
     mine: ordered.filter(isMine).length,
   };
-  const visible = ordered.filter((c) => (filter === "new" ? isNew(c) : filter === "mine" ? isMine(c) : true));
+  const visible = ordered
+    .filter((c) => !declined.has(c.id))
+    .filter((c) => (filter === "new" ? isNew(c) : filter === "mine" ? isMine(c) : true));
+  // «Открыта к турам» выключено — показываем только личные приглашения клуба.
+  const invitedOnly = ordered.filter((c) => c.invite && !declined.has(c.id));
+  const renderCard = (c: FeedCasting) => (
+    <TicketCard
+      key={c.id}
+      c={c}
+      me={data.me}
+      response={responses[c.id]}
+      pending={pending[c.id] ?? null}
+      failure={failures[c.id] ?? null}
+      onApply={() => void handleApply(c.id)}
+      onWithdraw={() => void handleWithdraw(c.id)}
+      onDecline={() => void handleDecline(c.id)}
+      t={t}
+      cm={cm}
+      fmt={fmt}
+      lang={lang}
+    />
+  );
 
   return (
     <section aria-label={t.title}>
@@ -801,7 +899,11 @@ function FeedBody({ data }: { data: CastingFeedData }) {
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-400">{t.hidden.text}</p>
           </div>
         </div>
-      ) : (
+      ) : null}
+      {!open && invitedOnly.length > 0 && (
+        <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,21rem),1fr))] gap-5">{invitedOnly.map(renderCard)}</div>
+      )}
+      {!open ? null : (
         <>
           <div className="mt-6">
             <FilterTabs
@@ -816,21 +918,7 @@ function FeedBody({ data }: { data: CastingFeedData }) {
             <p className="mt-6 rounded-2xl border border-dashed border-zinc-800 p-6 text-sm text-zinc-400">{t.empty[filter]}</p>
           ) : (
             <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,21rem),1fr))] gap-5">
-              {visible.map((c) => (
-                <TicketCard
-                  key={c.id}
-                  c={c}
-                  me={data.me}
-                  response={responses[c.id]}
-                  pending={pending[c.id] ?? null}
-                  failure={failures[c.id] ?? null}
-                  onApply={() => void handleApply(c.id)}
-                  onWithdraw={() => void handleWithdraw(c.id)}
-                  t={t}
-                  cm={cm}
-                  fmt={fmt}
-                />
-              ))}
+              {visible.map(renderCard)}
             </div>
           )}
         </>

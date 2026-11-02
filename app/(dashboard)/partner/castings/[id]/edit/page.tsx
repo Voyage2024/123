@@ -19,6 +19,7 @@ import {
   editErrors,
   rowToBrief,
   updateCasting,
+  useCatalogTours,
   type BriefErrorKey,
   type BriefValues,
   type CastingStatus,
@@ -30,8 +31,9 @@ import { useAuth } from "@/app/context/AuthContext";
 const STATUS_OPTIONS: { value: CastingStatus; label: string }[] = [
   { value: "open", label: "Открыт — принимает отклики" },
   { value: "shortlist", label: "Шорт-лист — отбор идёт" },
-  { value: "closed", label: "Закрыт — набор завершён" },
-  { value: "cancelled", label: "Отменён" },
+  { value: "archived", label: "Архив — скрыт из ленты резиденток" },
+  { value: "closed", label: "Архив · закрыт — набор завершён" },
+  { value: "cancelled", label: "Архив · отменён" },
 ];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -44,6 +46,7 @@ export default function EditCastingPage() {
   const canChooseOrganizer = role === "owner" || role === "admin";
 
   const [values, setValues] = useState<BriefValues>(EMPTY_BRIEF);
+  const { tours, loading: toursLoading } = useCatalogTours();
   const [status, setStatus] = useState<CastingStatus>("open");
   const [organizerId, setOrganizerId] = useState("");
   const [initialOrganizer, setInitialOrganizer] = useState("");
@@ -110,7 +113,8 @@ export default function EditCastingPage() {
           ? "База отклонила запись по правам. Примените миграцию 20261101090000_casting_owner_full_rights.sql — подробности в консоли браузера."
           : "Недостаточно прав для правки этого кастинга.",
         organizer: "Организатор не найден или заблокирован. Выберите другого.",
-        schema: "База данных не обновлена под эту версию формы. Примените последние миграции.",
+        tour: "Выбранный тур скрыт или удалён из каталога. Выберите другой тур.",
+        schema: "База данных не обновлена под эту версию формы. Примените миграцию 20261103090000_tour_catalog_casting_i18n_invites.sql.",
         has_tour: "По кастингу уже создан тур — организатора сменить нельзя.",
         network: "Не удалось сохранить изменения. Попробуйте ещё раз.",
       };
@@ -138,6 +142,7 @@ export default function EditCastingPage() {
       const messages: Record<typeof result.reason, string> = {
         forbidden: "База не дала удалить кастинг. Примените миграцию 20261101090000_casting_owner_full_rights.sql.",
         organizer: "Не удалось удалить кастинг.",
+        tour: "Не удалось удалить кастинг.",
         schema: "База данных не обновлена. Примените последние миграции.",
         network: "Не удалось удалить кастинг. Попробуйте ещё раз.",
       };
@@ -194,6 +199,9 @@ export default function EditCastingPage() {
                   if (notice?.type === "error") setNotice(null);
                 }}
                 errors={errors}
+                tours={tours}
+                toursLoading={toursLoading}
+                allowNoTour
               />
 
               {notice && (

@@ -3,6 +3,11 @@
 /* VOYAGE · Partner casting response board
  * Names/photos/KYC are shown on this route because the Core Loop requirement
  * explicitly asks for full candidate cards. RPC ownership checks still apply.
+ *
+ * 03.11.2026: заголовок и тур из каталога в шапке; блок partner_tours
+ * переименован в «Детали перелёта / Логистика» (рейс, аэропорт, даты),
+ * чтобы не путать со статичными турами каталога; owner/admin видят модуль
+ * «Пригласить резиденток» (InviteResidentsPanel).
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -46,6 +51,8 @@ import { VipAvatarMark, VipBadge, isKycElite } from "@/app/components/profile/Vi
 import { projectLabel } from "@/lib/project-types";
 import { OrganizerBadgePill, usePublishers } from "@/app/components/organizer/OrganizerSelect";
 import { ORGANIZER_TEXT, VOYAGE_MANAGEMENT_ID } from "@/lib/organizer";
+import { pickI18n, toCastingLang, toI18n, type CastingLang, type I18nText } from "@/lib/casting-i18n";
+import { InviteResidentsPanel } from "@/app/(dashboard)/partner/castings/[id]/InviteResidentsPanel";
 
 type Casting = {
   id: string;
@@ -59,6 +66,22 @@ type Casting = {
   fee_amount: number | string | null;
   fee_currency: string | null;
   status: string;
+  title_i18n?: unknown;
+  source_lang?: string | null;
+  catalog_tour_id?: string | null;
+};
+
+type CatalogTourHead = { id: string; city: string; title: I18nText };
+
+const CASTING_COLUMNS = "id,manager_id,city,project_type,starts_on,ends_on,slots,closes_at,fee_amount,fee_currency,status";
+const CASTING_COLUMNS_I18N = `${CASTING_COLUMNS},title_i18n,source_lang,catalog_tour_id`;
+
+const STAGE_LABEL: Record<string, string> = {
+  open: "Открыт",
+  shortlist: "Шорт-лист",
+  archived: "Архив",
+  closed: "Архив · закрыт",
+  cancelled: "Архив · отменён",
 };
 
 type ResponseRow = {
@@ -159,6 +182,7 @@ export default function CastingResponsesPage() {
   const { publishers } = usePublishers(isAdmin);
   const [tourForm, setTourForm] = useState({ departsAt: "", returnsAt: "", flightNo: "", iata: "" });
   const [tourFormOpen, setTourFormOpen] = useState(false);
+  const [catalogTour, setCatalogTour] = useState<CatalogTourHead | null>(null);
 
   const load = useCallback(async () => {
     if (!isUuid(id)) {
@@ -168,11 +192,19 @@ export default function CastingResponsesPage() {
     }
     setLoading(true);
     setError(null);
-    const { data: castingData, error: castingError } = await supabase
+    // Новые колонки (миграция 20261103090000); на старой базе — без них.
+    let { data: castingData, error: castingError } = await supabase
       .from("partner_castings")
-      .select("id,manager_id,city,project_type,starts_on,ends_on,slots,closes_at,fee_amount,fee_currency,status")
+      .select(CASTING_COLUMNS_I18N)
       .eq("id", id)
-      .maybeSingle();
+      .maybeSingle<Casting>();
+    if (castingError && (castingError.code === "42703" || castingError.code === "PGRST204")) {
+      ({ data: castingData, error: castingError } = await supabase
+        .from("partner_castings")
+        .select(CASTING_COLUMNS)
+        .eq("id", id)
+        .maybeSingle<Casting>());
+    }
 
     if (castingError || !castingData) {
       setCasting(null);
@@ -183,6 +215,16 @@ export default function CastingResponsesPage() {
       return;
     }
     setCasting(castingData as Casting);
+    if (castingData.catalog_tour_id) {
+      const { data: tourRow } = await supabase
+        .from("tour_catalog")
+        .select("id,city,title_i18n")
+        .eq("id", castingData.catalog_tour_id)
+        .maybeSingle();
+      setCatalogTour(tourRow ? { id: String(tourRow.id), city: String(tourRow.city ?? ""), title: toI18n(tourRow.title_i18n) } : null);
+    } else {
+      setCatalogTour(null);
+    }
 
     const [{ data: responseData, error: responseError }, { data: tourData }] = await Promise.all([
       (supabase as any).rpc("partner_manager_get_responses", { p_casting_id: id }),
@@ -224,7 +266,10 @@ export default function CastingResponsesPage() {
     return result;
   }, [rows]);
   const filteredRows = useMemo(() => filter === "all" ? rows : rows.filter((row) => row.status === filter), [filter, rows]);
-  const canProcess = !!casting && casting.status !== "cancelled";
+  const canProcess = !!casting && casting.status !== "cancelled" && casting.status !== "archived";
+  const sourceLang: CastingLang = toCastingLang(casting?.source_lang);
+  const castingTitle = casting ? pickI18n(toI18n(casting.title_i18n), lang, sourceLang) : null;
+  const tourTitle = catalogTour ? pickI18n(catalogTour.title, lang) ?? catalogTour.city : null;
   const organizer = casting
     ? publishers.find((p) => p.id === casting.manager_id)
       ?? (casting.manager_id === VOYAGE_MANAGEMENT_ID ? publishers[0] : undefined)
@@ -247,7 +292,7 @@ export default function CastingResponsesPage() {
       returnsAt: returns ? returns.toISOString() : null,
       flightNo: tourForm.flightNo,
       iata: tourForm.iata,
-    }), "Тур создан. Теперь можно подтверждать участниц рукопожатием.");
+    }), "Детали перелёта сохранены. Теперь можно подтверждать участниц рукопожатием.");
     if (!created) return;
     setTourFormOpen(false);
     setTourForm({ departsAt: "", returnsAt: "", flightNo: "", iata: "" });
@@ -282,7 +327,8 @@ export default function CastingResponsesPage() {
           <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-amber-100/60">Partner workspace · Response board</p>
-              <h1 className="mt-3 font-serif text-3xl text-zinc-50 sm:text-4xl">{casting.city} <span className="text-amber-100/50">/</span> {projectLabel(casting.project_type, lang)}</h1>
+              <h1 className="mt-3 font-serif text-3xl text-zinc-50 sm:text-4xl">{castingTitle ?? casting.city}</h1>
+              <p className="mt-1.5 text-sm text-zinc-400">{casting.city} <span className="text-amber-100/50">/</span> {projectLabel(casting.project_type, lang)}{tourTitle && <> <span className="text-amber-100/50">·</span> <span className="text-amber-100/80">Тур: {tourTitle}</span></>}</p>
               <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-400"><span className="inline-flex items-center gap-1.5"><CalendarClock size={13} /> {date(casting.starts_on)} – {date(casting.ends_on)}</span><span className="inline-flex items-center gap-1.5"><MapPin size={13} /> {casting.slots} мест</span><span className="inline-flex items-center gap-1.5"><Clock size={13} /> Закрытие: {date(casting.closes_at, true)}</span></p>
               {isAdmin && organizer && (
                 <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
@@ -295,26 +341,26 @@ export default function CastingResponsesPage() {
                 <Link href={`${ROUTES.casting(casting.id)}/edit`} className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-300 transition hover:border-amber-200/25 hover:text-amber-100"><Pencil size={13} /> Редактировать кастинг</Link>
               </div>
             </div>
-            <div className="shrink-0 rounded-2xl border border-zinc-800 bg-black/20 px-4 py-3"><p className="text-[9px] uppercase tracking-[0.2em] text-zinc-600">Гонорар</p><p className="mt-1 font-serif text-xl text-amber-100">{feeLabel(casting.fee_amount, casting.fee_currency)}</p><p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-zinc-600">{casting.status}</p></div>
+            <div className="shrink-0 rounded-2xl border border-zinc-800 bg-black/20 px-4 py-3"><p className="text-[9px] uppercase tracking-[0.2em] text-zinc-600">Гонорар</p><p className="mt-1 font-serif text-xl text-amber-100">{feeLabel(casting.fee_amount, casting.fee_currency)}</p><p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-zinc-600">{STAGE_LABEL[casting.status] ?? casting.status}</p></div>
           </div>
         </header>
 
 <section className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-4 sm:p-5">
   <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
     <div>
-      <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Plane size={15} className="text-amber-200/70" /> Тур по этому кастингу</h2>
-      <p className="mt-1 text-xs text-zinc-500">Рукопожатие привязывает участницу к подтверждённому туру с тем же городом и типом проекта.</p>
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><Plane size={15} className="text-amber-200/70" /> Детали перелёта / Логистика</h2>
+      <p className="mt-1 text-xs text-zinc-500">Рейс, аэропорт и даты поездки по этому кастингу. Рукопожатие привязывает участницу к подтверждённой логистике с тем же городом и типом проекта.</p>
     </div>
-    {casting.status !== "cancelled" && !tourFormOpen && (
-      <button type="button" onClick={() => setTourFormOpen(true)} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-amber-200/30 bg-amber-200/10 px-3 py-2 text-xs font-medium text-amber-100 transition hover:bg-amber-200/15"><Plus size={13} /> Создать тур</button>
+    {canProcess && !tourFormOpen && (
+      <button type="button" onClick={() => setTourFormOpen(true)} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-amber-200/30 bg-amber-200/10 px-3 py-2 text-xs font-medium text-amber-100 transition hover:bg-amber-200/15"><Plus size={13} /> Добавить детали перелёта</button>
     )}
   </div>
   {tours.length > 0 && (
     <ul className="mt-4 space-y-2">
       {tours.map((tour) => (
         <li key={tour.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-black/20 px-3 py-2.5 text-xs text-zinc-300">
-          <span>{tour.city} · {projectLabel(tour.project_type, lang)} · вылет {date(tour.departs_at, true)}</span>
-          <Link href={ROUTES.dealRoom(tour.id)} className="text-amber-100 underline-offset-4 hover:underline">Комната тура</Link>
+          <span>Перелёт · {tour.city} · {projectLabel(tour.project_type, lang)} · вылет {date(tour.departs_at, true)}</span>
+          <Link href={ROUTES.dealRoom(tour.id)} className="text-amber-100 underline-offset-4 hover:underline">Комната поездки</Link>
         </li>
       ))}
     </ul>
@@ -323,15 +369,23 @@ export default function CastingResponsesPage() {
     <form onSubmit={(event) => { event.preventDefault(); void submitTour(); }} className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Вылет *<input type="datetime-local" required value={tourForm.departsAt} onChange={(e) => setTourForm((f) => ({ ...f, departsAt: e.target.value }))} className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs normal-case tracking-normal text-zinc-200 outline-none focus:border-amber-200/30" /></label>
       <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Возвращение<input type="datetime-local" value={tourForm.returnsAt} onChange={(e) => setTourForm((f) => ({ ...f, returnsAt: e.target.value }))} className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs normal-case tracking-normal text-zinc-200 outline-none focus:border-amber-200/30" /></label>
-      <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Рейс<input value={tourForm.flightNo} maxLength={12} placeholder="EK 132" onChange={(e) => setTourForm((f) => ({ ...f, flightNo: e.target.value }))} className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs normal-case tracking-normal text-zinc-200 outline-none focus:border-amber-200/30" /></label>
-      <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Аэропорт (IATA)<input value={tourForm.iata} maxLength={3} placeholder="DXB" onChange={(e) => setTourForm((f) => ({ ...f, iata: e.target.value.toUpperCase() }))} className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs normal-case tracking-normal text-zinc-200 outline-none focus:border-amber-200/30" /></label>
+      <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Номер рейса<input value={tourForm.flightNo} maxLength={12} placeholder="EK 132" onChange={(e) => setTourForm((f) => ({ ...f, flightNo: e.target.value }))} className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs normal-case tracking-normal text-zinc-200 outline-none focus:border-amber-200/30" /></label>
+      <label className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Аэропорт прилёта (IATA)<input value={tourForm.iata} maxLength={3} placeholder="DXB" onChange={(e) => setTourForm((f) => ({ ...f, iata: e.target.value.toUpperCase() }))} className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs normal-case tracking-normal text-zinc-200 outline-none focus:border-amber-200/30" /></label>
       <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
-        <button type="submit" disabled={loadingAction === "tour:create"} className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200/40 bg-amber-200 px-4 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-amber-100 disabled:opacity-60"><Plane size={13} /> {loadingAction === "tour:create" ? "Создаём…" : "Создать тур"}</button>
+        <button type="submit" disabled={loadingAction === "tour:create"} className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200/40 bg-amber-200 px-4 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-amber-100 disabled:opacity-60"><Plane size={13} /> {loadingAction === "tour:create" ? "Сохраняем…" : "Сохранить детали перелёта"}</button>
         <button type="button" onClick={() => setTourFormOpen(false)} className="rounded-xl border border-zinc-800 px-4 py-2 text-xs text-zinc-400 transition hover:text-zinc-200">Отмена</button>
       </div>
     </form>
   )}
 </section>
+
+{isAdmin && (
+  <InviteResidentsPanel
+    castingId={casting.id}
+    castingOpen={(casting.status === "open" || casting.status === "shortlist") && new Date(casting.closes_at).getTime() > Date.now()}
+    onChanged={() => void load()}
+  />
+)}
 
 <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
   <Stat label="Всего откликов" value={counts.all} icon={Users as any} />
@@ -394,15 +448,15 @@ export default function CastingResponsesPage() {
                       <button type="button" disabled={busy || !canProcess} onClick={() => { if (window.confirm(`Отклонить отклик ${row.full_name || "резидентки"}?`)) void runAction(`${row.resident_id}:decline`, () => declineCastingResponse(id, row.resident_id), "Отклик отклонён."); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-400/20 bg-rose-400/[0.04] px-3 py-2.5 text-xs text-rose-200/90 transition hover:bg-rose-400/[0.1] disabled:cursor-not-allowed disabled:opacity-50"><XCircle size={14} /> Отклонить</button>
                     </div>
                     <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.035] p-3">
-                      <label htmlFor={`tour-${row.resident_id}`} className="mb-2 block text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-100/60">Тур для рукопожатия</label>
+                      <label htmlFor={`tour-${row.resident_id}`} className="mb-2 block text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-100/60">Логистика (перелёт) для рукопожатия</label>
                       <div className="flex flex-col gap-2 sm:flex-row">
-                        <div className="relative min-w-0 flex-1"><select id={`tour-${row.resident_id}`} value={tourId} onChange={(event) => setTourSelection((prev) => ({ ...prev, [row.resident_id]: event.target.value }))} disabled={!tours.length || busy} className="w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 pr-9 text-xs text-zinc-200 outline-none focus:border-emerald-300/30 disabled:opacity-50"><option value="">{tours.length ? "Выберите тур" : "Нет подходящего подтверждённого тура"}</option>{tours.map((tour) => <option key={tour.id} value={tour.id}>{tour.city} · {projectLabel(tour.project_type, lang)} · {date(tour.departs_at)}</option>)}</select><ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" /></div>
-                        <button type="button" disabled={busy || !canProcess || !tourId} onClick={() => { if (window.confirm(`Подтвердить рукопожатие с ${row.full_name || "резиденткой"}? Будет создан участник тура.`)) void runAction(`${row.resident_id}:handshake`, () => completeCastingHandshake(id, tourId, row.resident_id), "Рукопожатие завершено: резидентка добавлена в состав тура."); }} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-4 py-2.5 text-xs font-medium text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-not-allowed disabled:opacity-40"><Handshake size={14} /> Рукопожатие / утвердить</button>
+                        <div className="relative min-w-0 flex-1"><select id={`tour-${row.resident_id}`} value={tourId} onChange={(event) => setTourSelection((prev) => ({ ...prev, [row.resident_id]: event.target.value }))} disabled={!tours.length || busy} className="w-full appearance-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 pr-9 text-xs text-zinc-200 outline-none focus:border-emerald-300/30 disabled:opacity-50"><option value="">{tours.length ? "Выберите перелёт" : "Нет подтверждённых деталей перелёта"}</option>{tours.map((tour) => <option key={tour.id} value={tour.id}>{tour.city} · {projectLabel(tour.project_type, lang)} · {date(tour.departs_at)}</option>)}</select><ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" /></div>
+                        <button type="button" disabled={busy || !canProcess || !tourId} onClick={() => { if (window.confirm(`Подтвердить рукопожатие с ${row.full_name || "резиденткой"}? Участница будет добавлена в состав поездки.`)) void runAction(`${row.resident_id}:handshake`, () => completeCastingHandshake(id, tourId, row.resident_id), "Рукопожатие завершено: резидентка добавлена в состав поездки."); }} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-4 py-2.5 text-xs font-medium text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-not-allowed disabled:opacity-40"><Handshake size={14} /> Рукопожатие / утвердить</button>
                       </div>
-                      {!tours.length && <p className="mt-2 text-[10px] leading-4 text-zinc-500">Сначала нажмите «Создать тур» в блоке «Тур по этому кастингу» выше. Рукопожатие проверяет соответствие тура, KYC, Blacklist и лимит мест.</p>}
+                      {!tours.length && <p className="mt-2 text-[10px] leading-4 text-zinc-500">Сначала заполните блок «Детали перелёта / Логистика» выше. Рукопожатие проверяет соответствие перелёта, KYC, Blacklist и лимит мест.</p>}
                     </div>
                   </div>}
-                  {status === "selected" && <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.04] px-3 py-2.5 text-xs text-emerald-200"><CheckCircle2 size={15} /> Рукопожатие завершено, участница привязана к туру.</div>}
+                  {status === "selected" && <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.04] px-3 py-2.5 text-xs text-emerald-200"><CheckCircle2 size={15} /> Рукопожатие завершено, участница привязана к поездке.</div>}
                 </article>
               );
             })}

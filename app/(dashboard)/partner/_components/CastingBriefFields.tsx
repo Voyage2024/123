@@ -4,8 +4,13 @@
  * VOYAGE · PARTNER — поля брифа кастинга
  * app/(dashboard)/partner/_components/CastingBriefFields.tsx
  *
- * Блок полей для формы создания кастинга: гонорар и валюта, кто платит
- * перелёт и отель, минимальный рост, языки, текст брифа.
+ * Блок полей для формы создания кастинга: статичный тур из каталога
+ * (tour_catalog), заголовок и бриф на RU/EN/ES/PT с автопереводом,
+ * гонорар и валюта, кто платит перелёт и отель, рост, языки.
+ *
+ * Архитектура «Статичный тур ↔ Динамичный кастинг»: тур — постоянное
+ * направление с базовыми условиями; кастинг — отбор на конкретные даты
+ * под этот тур. Выбор тура подставляет его условия по умолчанию.
  *
  *   CastingBriefFields   — контролируемые поля (value / onChange)
  *   briefErrors(v)       — проверка до отправки, ключи переводятся на языке формы
@@ -14,14 +19,29 @@
  *   updateCasting(id, v) — правка брифа; rowToBrief(row) — строка базы → значения формы
  *   deleteCasting(id)    — удаление (только owner/admin)
  *
- * Колонки и ограничения — миграция 20261015120000_partner_resident_feed.sql
+ * Колонки и ограничения — миграции 20261015120000_partner_resident_feed.sql
+ * и 20261103090000_tour_catalog_casting_i18n_invites.sql (тур, title_i18n,
+ * brief_i18n, source_lang; brief заполняет триггер из версии на языке автора).
  * ──────────────────────────────────────────────────────────────────── */
 
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { MapPinned } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import type { Payer, ProjectKey } from "@/app/(dashboard)/partner/_lib/command";
 import { PROJECTS, projectHint, projectLabels, toProjectKey } from "@/lib/project-types";
+import { I18nTextFields } from "@/app/(dashboard)/partner/_components/I18nTextFields";
+import {
+  BRIEF_MAX,
+  TITLE_MAX,
+  cleanI18n,
+  pickI18n,
+  toCastingLang,
+  toI18n,
+  type CastingLang,
+  type I18nText,
+} from "@/lib/casting-i18n";
+import { TOUR_CATALOG_COLUMNS, parseCatalogTour, type CatalogTour } from "@/lib/tour-catalog";
 
 /** Тур (1–2 недели) и Ивент (до 1 дня) — lib/project-types.ts */
 export const PROJECT_TYPES: readonly ProjectKey[] = PROJECTS;
@@ -30,10 +50,18 @@ export type AudienceSegment = (typeof AUDIENCE_SEGMENTS)[number];
 export const CURRENCIES = ["USD", "EUR", "AED", "AUD", "GBP"] as const;
 export const LANGUAGE_CODES = ["EN", "RU", "ES", "PT", "FR", "IT", "DE", "AR"] as const;
 const PAYERS: Payer[] = ["manager", "participant", "split"];
-const BRIEF_MAX = 2000;
 const MAX_LANGS = 5;
+const TITLE_MIN = 3;
 
 export type BriefValues = {
+  /** Статичный тур из каталога; "" — без тура (только у старых кастингов) */
+  catalogTourId: string;
+  /** Язык, на котором пишет автор */
+  sourceLang: CastingLang;
+  /** Заголовок кастинга на 4 языках */
+  titleI18n: I18nText;
+  /** Бриф на 4 языках */
+  briefI18n: I18nText;
   city: string;
   audienceSegment: AudienceSegment;
   project: ProjectKey;
@@ -47,10 +75,13 @@ export type BriefValues = {
   hotelPaidBy: Payer;
   heightMin: string; // пусто — без требования
   languages: string[];
-  brief: string;
 };
 
 export const EMPTY_BRIEF: BriefValues = {
+  catalogTourId: "",
+  sourceLang: "RU",
+  titleI18n: {},
+  briefI18n: {},
   city: "",
   audienceSegment: "working",
   project: "tour",
@@ -64,12 +95,13 @@ export const EMPTY_BRIEF: BriefValues = {
   hotelPaidBy: "manager",
   heightMin: "",
   languages: [],
-  brief: "",
 };
 
 /* ── проверка ─────────────────────────────────────────────────────── */
 
 export type BriefErrorKey =
+  | "tour"
+  | "title"
   | "city"
   | "dates"
   | "slots"
@@ -79,9 +111,17 @@ export type BriefErrorKey =
   | "languages"
   | "brief";
 
+export type BriefCheckOptions = {
+  /** Новый кастинг обязан ссылаться на тур, если в каталоге есть активные туры */
+  requireTour?: boolean;
+};
+
 /** Пустой список — форма валидна */
-export function briefErrors(v: BriefValues): BriefErrorKey[] {
+export function briefErrors(v: BriefValues, opts: BriefCheckOptions = {}): BriefErrorKey[] {
   const errs: BriefErrorKey[] = [];
+  if (opts.requireTour && !v.catalogTourId) errs.push("tour");
+  const title = (v.titleI18n[v.sourceLang] ?? "").trim();
+  if (title.length < TITLE_MIN || title.length > TITLE_MAX) errs.push("title");
   const city = v.city.trim();
   if (city.length < 2 || city.length > 60) errs.push("city");
   if (!v.startsOn || !v.endsOn || v.endsOn < v.startsOn) errs.push("dates");
@@ -96,7 +136,7 @@ export function briefErrors(v: BriefValues): BriefErrorKey[] {
     if (!Number.isInteger(h) || h < 140 || h > 230) errs.push("height");
   }
   if (v.languages.length > MAX_LANGS) errs.push("languages");
-  if (v.brief.length > BRIEF_MAX) errs.push("brief");
+  if (Object.values(v.briefI18n).some((text) => (text ?? "").length > BRIEF_MAX)) errs.push("brief");
   return errs;
 }
 
@@ -105,7 +145,12 @@ export function briefErrors(v: BriefValues): BriefErrorKey[] {
 /** Значения формы → строка partner_castings (snake_case, как в миграции) */
 export function briefToRow(v: BriefValues) {
   const fee = v.feeAmount.trim() === "" ? null : Number(v.feeAmount.replace(",", "."));
+  const briefI18n = cleanI18n(v.briefI18n, BRIEF_MAX);
   return {
+    catalog_tour_id: v.catalogTourId || null,
+    source_lang: v.sourceLang,
+    title_i18n: cleanI18n(v.titleI18n, TITLE_MAX),
+    brief_i18n: briefI18n,
     city: v.city.trim(),
     audience_segment: v.audienceSegment,
     project_type: v.project,
@@ -119,7 +164,8 @@ export function briefToRow(v: BriefValues) {
     hotel_paid_by: v.hotelPaidBy,
     height_min: v.heightMin.trim() === "" ? null : Number(v.heightMin),
     languages: v.languages,
-    brief: v.brief.trim() === "" ? null : v.brief.trim(),
+    // Триггер partner_castings_sync_i18n пересчитает brief из brief_i18n; здесь — для старой базы.
+    brief: pickI18n(briefI18n, v.sourceLang, v.sourceLang),
   };
 }
 
@@ -127,11 +173,12 @@ export function briefToRow(v: BriefValues) {
  * Причина отказа базы → понятная причина для формы.
  *   forbidden — нет прав (RLS, права на колонки, триггер организатора);
  *   organizer — организатор не найден / заблокирован / профиль клуба не создан;
+ *   tour      — тур из каталога выключен или удалён;
  *   schema    — база старее кода (не применена миграция: тип tour/event, колонка);
  *   network   — всё остальное (сеть, таймаут).
  * Настоящая ошибка пишется в консоль — по ней видно, какая проверка сработала.
  */
-export type WriteFailure = "forbidden" | "organizer" | "schema" | "network";
+export type WriteFailure = "forbidden" | "organizer" | "tour" | "schema" | "network";
 
 function classifyWriteError(
   op: "create" | "update" | "delete",
@@ -139,6 +186,7 @@ function classifyWriteError(
 ): WriteFailure {
   console.error(`[partner_castings:${op}]`, error.code, error.message, error.details ?? "", error.hint ?? "");
   const msg = error.message ?? "";
+  if (msg.includes("catalog_tour_inactive") || msg.includes("partner_castings_catalog_tour_fkey")) return "tour";
   if (msg.includes("invalid_organizer") || error.code === "23503") return "organizer";
   if (error.code === "42501") return "forbidden";
   if (error.code === "23514" || error.code === "42703" || error.code === "PGRST204") return "schema";
@@ -152,8 +200,12 @@ export type CreateResult = { ok: true; id: string } | { ok: false; reason: "inva
  * owner/admin — от имени VOYAGE Management или любого действующего партнёра.
  * Права на колонки — миграция 20261101090000_casting_owner_full_rights.sql.
  */
-export async function createCasting(v: BriefValues, organizerId?: string | null): Promise<CreateResult> {
-  if (briefErrors(v).length > 0) return { ok: false, reason: "invalid" };
+export async function createCasting(
+  v: BriefValues,
+  organizerId?: string | null,
+  opts: BriefCheckOptions = {},
+): Promise<CreateResult> {
+  if (briefErrors(v, opts).length > 0) return { ok: false, reason: "invalid" };
   const row = organizerId ? { ...briefToRow(v), manager_id: organizerId } : briefToRow(v);
   const { data, error } = await supabase
     .from("partner_castings")
@@ -164,7 +216,7 @@ export async function createCasting(v: BriefValues, organizerId?: string | null)
   return { ok: true, id: data.id as string };
 }
 
-export type CastingStatus = "open" | "shortlist" | "closed" | "cancelled";
+export type CastingStatus = "open" | "shortlist" | "closed" | "cancelled" | "archived";
 export type UpdateResult = { ok: true } | { ok: false; reason: "invalid" | "has_tour" | WriteFailure };
 
 /** Правка кастинга. organizerId меняет только owner/admin и только до появления тура. */
@@ -209,7 +261,7 @@ export async function deleteCasting(id: string): Promise<DeleteResult> {
 
 /** Для правки: закрытый или отменённый кастинг можно сохранить с прошедшим сроком откликов. */
 export function editErrors(v: BriefValues, status?: CastingStatus): BriefErrorKey[] {
-  const closing = status === "closed" || status === "cancelled";
+  const closing = status === "closed" || status === "cancelled" || status === "archived";
   return briefErrors(v).filter((key) => !(key === "closesAt" && closing && v.closesAt));
 }
 
@@ -217,6 +269,12 @@ const pad = (n: number) => String(n).padStart(2, "0");
 
 /** Строка partner_castings → значения формы (closes_at в локальное datetime-local). */
 export function rowToBrief(row: Record<string, unknown>): BriefValues {
+  const sourceLang = toCastingLang(row.source_lang);
+  const titleI18n = toI18n(row.title_i18n, TITLE_MAX);
+  const briefI18n = toI18n(row.brief_i18n, BRIEF_MAX);
+  // Кастинги до 03.11.2026: бриф только в brief, заголовка нет — подставляем город.
+  if (!briefI18n[sourceLang] && typeof row.brief === "string" && row.brief.trim()) briefI18n[sourceLang] = row.brief;
+  if (!titleI18n[sourceLang] && typeof row.city === "string" && row.city.trim()) titleI18n[sourceLang] = row.city;
   const closes = typeof row.closes_at === "string" ? new Date(row.closes_at) : null;
   const closesAt = closes && Number.isFinite(closes.getTime())
     ? `${closes.getFullYear()}-${pad(closes.getMonth() + 1)}-${pad(closes.getDate())}T${pad(closes.getHours())}:${pad(closes.getMinutes())}`
@@ -226,6 +284,10 @@ export function rowToBrief(row: Record<string, unknown>): BriefValues {
   const currency = CURRENCIES.includes(row.fee_currency as (typeof CURRENCIES)[number]) ? (row.fee_currency as (typeof CURRENCIES)[number]) : "USD";
   const payer = (value: unknown): Payer => (PAYERS.includes(value as Payer) ? (value as Payer) : "manager");
   return {
+    catalogTourId: typeof row.catalog_tour_id === "string" ? row.catalog_tour_id : "",
+    sourceLang,
+    titleI18n,
+    briefI18n,
     city: typeof row.city === "string" ? row.city : "",
     audienceSegment: segment,
     project,
@@ -239,13 +301,25 @@ export function rowToBrief(row: Record<string, unknown>): BriefValues {
     hotelPaidBy: payer(row.hotel_paid_by),
     heightMin: row.height_min === null || row.height_min === undefined ? "" : String(row.height_min),
     languages: Array.isArray(row.languages) ? row.languages.filter((x): x is string => typeof x === "string") : [],
-    brief: typeof row.brief === "string" ? row.brief : "",
   };
 }
 
 /* ── тексты ───────────────────────────────────────────────────────── */
 
 type Dict = {
+  tour: string;
+  tourPick: string;
+  tourNone: string;
+  tourHidden: string;
+  tourHint: string;
+  tourEmpty: string;
+  tourApplied: string;
+  tourRequirements: string;
+  tourConditions: string;
+  texts: string;
+  textsHint: string;
+  title: string;
+  titleHint: string;
   city: string;
   cityHint: string;
   project: string;
@@ -269,11 +343,25 @@ type Dict = {
   languagesHint: string;
   brief: string;
   briefHint: string;
+  audienceHint: string;
   errors: Record<BriefErrorKey, string>;
 };
 
 const T: Record<Lang, Dict> = {
   EN: {
+    tour: "Tour (static destination)",
+    tourPick: "Choose a tour",
+    tourNone: "No tour (legacy casting)",
+    tourHidden: "Hidden tour",
+    tourHint: "The casting is a selection for specific dates under a permanent club tour. The tour’s base terms are filled in automatically — you can change them below.",
+    tourEmpty: "The tour catalog is empty. The owner adds tours in “Castings → Tours”.",
+    tourApplied: "Tour terms applied: city, type, fee, payers, height and languages.",
+    tourRequirements: "Requirements",
+    tourConditions: "Base terms",
+    texts: "Title and brief · 4 languages",
+    textsHint: "Write in one language and press “Auto-translate” — residents see the version in their language.",
+    title: "Casting title",
+    titleHint: "For example: “Yacht weekend · 3 spots”.",
     city: "City",
     cityHint: "As it will appear in the brief.",
     project: "Project type",
@@ -297,7 +385,10 @@ const T: Record<Lang, Dict> = {
     languagesHint: `Up to ${MAX_LANGS}.`,
     brief: "Brief",
     briefHint: `Up to ${BRIEF_MAX} characters. Shown to residents before they reply.`,
+    audienceHint: "Working sees Working/All castings; Elite sees only Elite/All castings. Invited residents see the casting regardless.",
     errors: {
+      tour: "Choose the tour this casting belongs to.",
+      title: `Title in the original language: ${TITLE_MIN}–${TITLE_MAX} characters.`,
       city: "City: 2–60 characters.",
       dates: "Check the dates: the end can’t be before the start.",
       slots: "Spots: a whole number from 1 to 50.",
@@ -309,6 +400,19 @@ const T: Record<Lang, Dict> = {
     },
   },
   RU: {
+    tour: "Тур (статичное направление)",
+    tourPick: "Выберите тур",
+    tourNone: "Без тура (старый кастинг)",
+    tourHidden: "Скрытый тур",
+    tourHint: "Кастинг — отбор на конкретные даты под постоянный тур клуба. Базовые условия тура подставятся автоматически, ниже их можно изменить.",
+    tourEmpty: "Каталог туров пуст. Owner добавляет туры в разделе «Кастинги → Туры».",
+    tourApplied: "Подставлены условия тура: город, тип, гонорар, оплата, рост и языки.",
+    tourRequirements: "Требования",
+    tourConditions: "Базовые условия",
+    texts: "Заголовок и бриф · 4 языка",
+    textsHint: "Напишите на одном языке и нажмите «Автоперевод» — резидентки увидят версию на своём языке.",
+    title: "Заголовок кастинга",
+    titleHint: "Например: «Яхт-уикенд · 3 места».",
     city: "Город",
     cityHint: "Так он будет виден в брифе.",
     project: "Тип проекта",
@@ -332,7 +436,10 @@ const T: Record<Lang, Dict> = {
     languagesHint: `До ${MAX_LANGS}.`,
     brief: "Бриф",
     briefHint: `До ${BRIEF_MAX} символов. Резидентки видят его до отклика.`,
+    audienceHint: "Working видят кастинги Working/Все, Elite — только Elite/Все. Приглашённые резидентки видят кастинг в любом случае.",
     errors: {
+      tour: "Выберите тур, под который создаётся кастинг.",
+      title: `Заголовок на языке оригинала: от ${TITLE_MIN} до ${TITLE_MAX} символов.`,
       city: "Город: от 2 до 60 символов.",
       dates: "Проверьте даты: конец не может быть раньше начала.",
       slots: "Мест: целое число от 1 до 50.",
@@ -344,6 +451,19 @@ const T: Record<Lang, Dict> = {
     },
   },
   ES: {
+    tour: "Tour (destino fijo)",
+    tourPick: "Elige un tour",
+    tourNone: "Sin tour (casting antiguo)",
+    tourHidden: "Tour oculto",
+    tourHint: "El casting es una selección para fechas concretas dentro de un tour permanente del club. Las condiciones base del tour se rellenan solas y puedes cambiarlas abajo.",
+    tourEmpty: "El catálogo de tours está vacío. El owner añade tours en «Castings → Tours».",
+    tourApplied: "Condiciones del tour aplicadas: ciudad, tipo, honorario, pagos, altura e idiomas.",
+    tourRequirements: "Requisitos",
+    tourConditions: "Condiciones base",
+    texts: "Título y brief · 4 idiomas",
+    textsHint: "Escribe en un idioma y pulsa «Traducir»: las residentes verán la versión en su idioma.",
+    title: "Título del casting",
+    titleHint: "Por ejemplo: «Fin de semana en yate · 3 plazas».",
     city: "Ciudad",
     cityHint: "Tal como aparecerá en el brief.",
     project: "Tipo de proyecto",
@@ -367,7 +487,10 @@ const T: Record<Lang, Dict> = {
     languagesHint: `Hasta ${MAX_LANGS}.`,
     brief: "Brief",
     briefHint: `Hasta ${BRIEF_MAX} caracteres. Las participantes lo ven antes de responder.`,
+    audienceHint: "Working ve castings Working/Todas; Elite solo Elite/Todas. Las residentes invitadas ven el casting en cualquier caso.",
     errors: {
+      tour: "Elige el tour al que pertenece este casting.",
+      title: `Título en el idioma original: de ${TITLE_MIN} a ${TITLE_MAX} caracteres.`,
       city: "Ciudad: de 2 a 60 caracteres.",
       dates: "Revisa las fechas: el fin no puede ser anterior al inicio.",
       slots: "Plazas: número entero de 1 a 50.",
@@ -379,6 +502,19 @@ const T: Record<Lang, Dict> = {
     },
   },
   PT: {
+    tour: "Tour (destino fixo)",
+    tourPick: "Escolha um tour",
+    tourNone: "Sem tour (casting antigo)",
+    tourHidden: "Tour oculto",
+    tourHint: "O casting é uma seleção para datas específicas dentro de um tour permanente do clube. As condições base do tour são preenchidas automaticamente e podem ser alteradas abaixo.",
+    tourEmpty: "O catálogo de tours está vazio. O owner adiciona tours em «Castings → Tours».",
+    tourApplied: "Condições do tour aplicadas: cidade, tipo, cachê, pagamentos, altura e idiomas.",
+    tourRequirements: "Requisitos",
+    tourConditions: "Condições base",
+    texts: "Título e brief · 4 idiomas",
+    textsHint: "Escreva em um idioma e clique em «Traduzir» — as residentes verão a versão no idioma delas.",
+    title: "Título do casting",
+    titleHint: "Por exemplo: «Fim de semana no iate · 3 vagas».",
     city: "Cidade",
     cityHint: "Como vai aparecer no brief.",
     project: "Tipo de projeto",
@@ -402,7 +538,10 @@ const T: Record<Lang, Dict> = {
     languagesHint: `Até ${MAX_LANGS}.`,
     brief: "Brief",
     briefHint: `Até ${BRIEF_MAX} caracteres. As participantes veem antes de responder.`,
+    audienceHint: "Working vê castings Working/Todas; Elite só Elite/Todas. Residentes convidadas veem o casting em qualquer caso.",
     errors: {
+      tour: "Escolha o tour ao qual este casting pertence.",
+      title: `Título no idioma original: de ${TITLE_MIN} a ${TITLE_MAX} caracteres.`,
       city: "Cidade: de 2 a 60 caracteres.",
       dates: "Confira as datas: o fim não pode ser antes do início.",
       slots: "Vagas: número inteiro de 1 a 50.",
@@ -414,6 +553,49 @@ const T: Record<Lang, Dict> = {
     },
   },
 };
+
+/* ── каталог туров ────────────────────────────────────────────────── */
+
+/** Активные туры каталога (RLS tour_catalog). Пустой список — миграция не применена или каталог пуст. */
+export function useCatalogTours(): { loading: boolean; tours: CatalogTour[] } {
+  const [state, setState] = useState<{ loading: boolean; tours: CatalogTour[] }>({ loading: true, tours: [] });
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("tour_catalog")
+        .select(TOUR_CATALOG_COLUMNS)
+        .eq("is_active", true)
+        .order("sort_order")
+        .order("city");
+      if (!alive) return;
+      if (error) console.warn("[tour_catalog]", error.code, error.message);
+      setState({ loading: false, tours: error ? [] : (data ?? []).flatMap((row) => parseCatalogTour(row) ?? []) });
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return state;
+}
+
+/** Значения тура по умолчанию → поля кастинга */
+export function applyTourDefaults(v: BriefValues, tour: CatalogTour): BriefValues {
+  const currency = CURRENCIES.find((c) => c === tour.feeCurrency);
+  return {
+    ...v,
+    catalogTourId: tour.id,
+    city: tour.city,
+    project: tour.project,
+    audienceSegment: tour.audience,
+    feeAmount: tour.feeAmount === null || !currency ? v.feeAmount : String(tour.feeAmount),
+    feeCurrency: currency ?? v.feeCurrency,
+    flightPaidBy: tour.flightPaidBy,
+    hotelPaidBy: tour.hotelPaidBy,
+    heightMin: tour.heightMin === null ? "" : String(tour.heightMin),
+    languages: tour.languages.slice(0, MAX_LANGS),
+  };
+}
 
 /* ── поля ─────────────────────────────────────────────────────────── */
 
@@ -510,15 +692,26 @@ export function CastingBriefFields({
   value,
   onChange,
   errors = [],
+  tours = [],
+  toursLoading = false,
+  allowNoTour = false,
 }: {
   value: BriefValues;
   onChange: (next: BriefValues) => void;
   /** Ключи из briefErrors — показываются под полями, которые не прошли проверку */
   errors?: BriefErrorKey[];
+  /** Активные туры каталога — useCatalogTours() */
+  tours?: CatalogTour[];
+  toursLoading?: boolean;
+  /** Правка старого кастинга: можно оставить без тура */
+  allowNoTour?: boolean;
 }) {
   const { lang } = useLanguage();
   const t = T[lang] ?? T.EN;
+  const [applied, setApplied] = useState(false);
+  const selectedTour = tours.find((tour) => tour.id === value.catalogTourId) ?? null;
   const ids = {
+    tour: useId(),
     city: useId(),
     project: useId(),
     startsOn: useId(),
@@ -527,7 +720,6 @@ export function CastingBriefFields({
     closesAt: useId(),
     fee: useId(),
     height: useId(),
-    brief: useId(),
   };
   const set = (patch: Partial<BriefValues>) => onChange({ ...value, ...patch });
   const toggleLang = (code: string) => {
@@ -541,8 +733,88 @@ export function CastingBriefFields({
     </p>
   );
 
+  const pickTour = (id: string) => {
+    const tour = tours.find((x) => x.id === id);
+    if (!tour) {
+      setApplied(false);
+      set({ catalogTourId: "" });
+      return;
+    }
+    onChange(applyTourDefaults(value, tour));
+    setApplied(true);
+  };
+
   return (
     <div className="grid gap-6 md:grid-cols-2">
+      <div className="space-y-2 md:col-span-2">
+        <Label htmlFor={ids.tour}>{t.tour}</Label>
+        <select
+          id={ids.tour}
+          className={`${INPUT} appearance-none`}
+          value={value.catalogTourId}
+          disabled={toursLoading}
+          onChange={(e) => pickTour(e.target.value)}
+        >
+          <option value="" className="bg-zinc-900">
+            {allowNoTour ? t.tourNone : t.tourPick}
+          </option>
+          {value.catalogTourId && !selectedTour && !toursLoading && (
+            <option value={value.catalogTourId} className="bg-zinc-900">
+              {t.tourHidden}
+            </option>
+          )}
+          {tours.map((tour) => (
+            <option key={tour.id} value={tour.id} className="bg-zinc-900">
+              {pickI18n(tour.title, lang, tour.sourceLang) ?? tour.city} · {tour.city}
+            </option>
+          ))}
+        </select>
+        <p className="text-[11px] text-zinc-500">{!toursLoading && tours.length === 0 ? t.tourEmpty : t.tourHint}</p>
+        {err("tour")}
+        {selectedTour && (
+          <div className="rounded-xl border border-amber-200/15 bg-amber-200/[0.03] p-3.5 text-xs leading-5 text-zinc-300">
+            <p className="flex items-center gap-2 text-sm text-amber-100">
+              <MapPinned className="size-4 shrink-0" aria-hidden />
+              {pickI18n(selectedTour.title, lang, selectedTour.sourceLang) ?? selectedTour.city}
+            </p>
+            {pickI18n(selectedTour.requirements, lang, selectedTour.sourceLang) && (
+              <p className="mt-2">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">{t.tourRequirements}: </span>
+                {pickI18n(selectedTour.requirements, lang, selectedTour.sourceLang)}
+              </p>
+            )}
+            {pickI18n(selectedTour.conditions, lang, selectedTour.sourceLang) && (
+              <p className="mt-1">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">{t.tourConditions}: </span>
+                {pickI18n(selectedTour.conditions, lang, selectedTour.sourceLang)}
+              </p>
+            )}
+            {applied && <p className="mt-2 text-[11px] text-emerald-300/80">{t.tourApplied}</p>}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 rounded-2xl border border-zinc-800/70 bg-zinc-950/30 p-4 md:col-span-2">
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-zinc-300">{t.texts}</p>
+          <p className="mt-1 text-[11px] text-zinc-500">{t.textsHint}</p>
+        </div>
+        <I18nTextFields
+          fields={[
+            { key: "title", label: t.title, max: TITLE_MAX, hint: t.titleHint, required: true },
+            { key: "brief", label: t.brief, max: BRIEF_MAX, multiline: true, rows: 5, hint: t.briefHint },
+          ]}
+          values={{ title: value.titleI18n, brief: value.briefI18n }}
+          onChange={(next) => set({ titleI18n: next.title ?? {}, briefI18n: next.brief ?? {} })}
+          source={value.sourceLang}
+          onSourceChange={(sourceLang) => set({ sourceLang })}
+          errors={{
+            title: errors.includes("title") ? t.errors.title : undefined,
+            brief: errors.includes("brief") ? t.errors.brief : undefined,
+          }}
+        />
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor={ids.city}>{t.city}</Label>
         <input id={ids.city} className={INPUT} value={value.city} maxLength={60} onChange={(e) => set({ city: e.target.value })} />
@@ -570,7 +842,7 @@ export function CastingBriefFields({
           render={(audience) => t.audiences[audience]}
           onChange={(audience) => set({ audienceSegment: audience })}
         />
-        <p className="text-[11px] text-zinc-500">Working sees Working/All castings; Elite sees only Elite/All castings.</p>
+        <p className="text-[11px] text-zinc-500">{t.audienceHint}</p>
       </div>
 
       <div className="space-y-2">
@@ -681,19 +953,6 @@ export function CastingBriefFields({
         {err("languages")}
       </div>
 
-      <div className="space-y-2 md:col-span-2">
-        <Label htmlFor={ids.brief}>{t.brief}</Label>
-        <textarea
-          id={ids.brief}
-          rows={4}
-          maxLength={BRIEF_MAX}
-          className={`${INPUT} min-h-28 py-3`}
-          value={value.brief}
-          onChange={(e) => set({ brief: e.target.value })}
-        />
-        <p className="text-[11px] text-zinc-500">{t.briefHint}</p>
-        {err("brief")}
-      </div>
     </div>
   );
 }

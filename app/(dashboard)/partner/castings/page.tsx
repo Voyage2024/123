@@ -42,7 +42,8 @@ import type { Lang } from "@/app/context/LanguageContext";
 import { DAY, HOUR } from "@/app/(dashboard)/partner/_lib/clock";
 import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
 import { pl, ru, usePartnerFormat, type Common, type Fmt } from "@/app/(dashboard)/partner/_lib/format";
-import { parseCastings, type CastingBrief, type CastingStage, type CastingsData } from "@/app/(dashboard)/partner/_lib/castings";
+import { castingNote, castingTitle, parseCastings, type CastingBrief, type CastingStage, type CastingsData } from "@/app/(dashboard)/partner/_lib/castings";
+import { pickI18n } from "@/lib/casting-i18n";
 import { usePartnerFeed } from "@/app/(dashboard)/partner/_lib/usePartnerFeed";
 import { PartnerGuide } from "@/app/(dashboard)/partner/_components/PartnerGuide";
 import { SNAP_RING, isFreshSnap, snapState } from "@/app/(dashboard)/partner/_components/TrustSignals";
@@ -102,6 +103,8 @@ type Dict = {
   cancelledAt: (ago: string) => string;
   open: string;
   room: string;
+  tours: string;
+  invites: (n: number) => string;
 };
 
 const T: Record<Lang, Dict> = {
@@ -115,7 +118,7 @@ const T: Record<Lang, Dict> = {
     stats: { active: "Active castings", ready: "“Ready” replies", handshakes: "Handshakes", closing: "Closing within 24 h" },
     filters: { label: "Casting filter", active: "Active", open: "Open", shortlist: "Shortlist", archive: "Archive", all: "All" },
     searchPlaceholder: "City or brief text",
-    stage: { open: "Open", shortlist: "Shortlist", closed: "Closed", cancelled: "Cancelled" },
+    stage: { open: "Open", shortlist: "Shortlist", closed: "Archive · closed", cancelled: "Archive · cancelled", archived: "Archive" },
     closing: "Closing soon",
     fresh: (n) => `+${n} new`,
     days: (n) => `${n} ${pl(n, "day", "days")}`,
@@ -137,6 +140,8 @@ const T: Record<Lang, Dict> = {
     cancelledAt: (a) => `Cancelled ${a}`,
     open: "Open",
     room: "Tour room",
+    tours: "Tours",
+    invites: (n) => `${n} invited`,
   },
   RU: {
     eyebrow: "Рынок · Кастинги",
@@ -148,7 +153,7 @@ const T: Record<Lang, Dict> = {
     stats: { active: "Активные кастинги", ready: "Ответы «Готова»", handshakes: "Рукопожатия", closing: "Закрываются за 24 ч" },
     filters: { label: "Фильтр кастингов", active: "Активные", open: "Открыт", shortlist: "Шорт-лист", archive: "Архив", all: "Все" },
     searchPlaceholder: "Город или текст брифа",
-    stage: { open: "Открыт", shortlist: "Шорт-лист", closed: "Закрыт", cancelled: "Отменён" },
+    stage: { open: "Открыт", shortlist: "Шорт-лист", closed: "Архив · закрыт", cancelled: "Архив · отменён", archived: "Архив" },
     closing: "Скоро закрытие",
     fresh: (n) => `+${n} ${ru(n, "новый", "новых", "новых")}`,
     days: (n) => `${n} ${ru(n, "день", "дня", "дней")}`,
@@ -170,6 +175,8 @@ const T: Record<Lang, Dict> = {
     cancelledAt: (a) => `Отменён ${a}`,
     open: "Открыть",
     room: "Комната тура",
+    tours: "Туры",
+    invites: (n) => `Приглашено: ${n}`,
   },
   ES: {
     eyebrow: "Mercado · Castings",
@@ -181,7 +188,7 @@ const T: Record<Lang, Dict> = {
     stats: { active: "Castings activos", ready: "Respuestas «Lista»", handshakes: "Apretones de manos", closing: "Cierran en 24 h" },
     filters: { label: "Filtro de castings", active: "Activos", open: "Abierto", shortlist: "Preselección", archive: "Archivo", all: "Todos" },
     searchPlaceholder: "Ciudad o texto del brief",
-    stage: { open: "Abierto", shortlist: "Preselección", closed: "Cerrado", cancelled: "Cancelado" },
+    stage: { open: "Abierto", shortlist: "Preselección", closed: "Archivo · cerrado", cancelled: "Archivo · cancelado", archived: "Archivo" },
     closing: "Cierra pronto",
     fresh: (n) => `+${n} ${pl(n, "nueva", "nuevas")}`,
     days: (n) => `${n} ${pl(n, "día", "días")}`,
@@ -203,6 +210,8 @@ const T: Record<Lang, Dict> = {
     cancelledAt: (a) => `Cancelado ${a}`,
     open: "Abrir",
     room: "Sala del tour",
+    tours: "Tours",
+    invites: (n) => `${n} invitadas`,
   },
   PT: {
     eyebrow: "Mercado · Castings",
@@ -214,7 +223,7 @@ const T: Record<Lang, Dict> = {
     stats: { active: "Castings ativos", ready: "Respostas «Pronta»", handshakes: "Apertos de mão", closing: "Fecham em 24 h" },
     filters: { label: "Filtro de castings", active: "Ativos", open: "Aberto", shortlist: "Pré-seleção", archive: "Arquivo", all: "Todos" },
     searchPlaceholder: "Cidade ou texto do brief",
-    stage: { open: "Aberto", shortlist: "Pré-seleção", closed: "Encerrado", cancelled: "Cancelado" },
+    stage: { open: "Aberto", shortlist: "Pré-seleção", closed: "Arquivo · encerrado", cancelled: "Arquivo · cancelado", archived: "Arquivo" },
     closing: "Fecha em breve",
     fresh: (n) => `+${n} ${pl(n, "nova", "novas")}`,
     days: (n) => `${n} ${pl(n, "dia", "dias")}`,
@@ -236,6 +245,8 @@ const T: Record<Lang, Dict> = {
     cancelledAt: (a) => `Cancelado ${a}`,
     open: "Abrir",
     room: "Sala do tour",
+    tours: "Tours",
+    invites: (n) => `${n} convidadas`,
   },
 };
 
@@ -275,12 +286,12 @@ const BLIND_AVATAR = [
  * ══════════════════════════════════════════════════════════════════ */
 
 function stageTone(c: CastingBrief, closingSoon: boolean): Tone {
-  if (c.stage === "closed" || c.stage === "cancelled") return "zinc";
+  if (c.stage === "closed" || c.stage === "cancelled" || c.stage === "archived") return "zinc";
   if (closingSoon) return "amber";
   return c.stage === "shortlist" ? "gold" : "emerald";
 }
 
-function BriefCard({ c, t, cm, fmt }: { c: CastingBrief; t: Dict; cm: Common; fmt: Fmt }) {
+function BriefCard({ c, t, cm, fmt, lang }: { c: CastingBrief; t: Dict; cm: Common; fmt: Fmt; lang: Lang }) {
   const active = isActive(c);
   const ready = c.responders.length;
   const closingSoon = active && fmt.ready && c.closesAt - fmt.now < 6 * HOUR;
@@ -292,7 +303,9 @@ function BriefCard({ c, t, cm, fmt }: { c: CastingBrief; t: Dict; cm: Common; fm
   const freshSnaps = c.responders.filter((r) => isFreshSnap(r.snapAt, fmt.now)).length;
   const trusted = c.responders.filter((r) => r.trusted).length;
   const handshakes = c.responders.filter((r) => r.handshake && r.residentId).length;
-  const title = `${fmt.city(c.city)} · ${cm.projects[c.project]}`;
+  const title = `${castingTitle(c, lang)} · ${fmt.city(c.city)} · ${cm.projects[c.project]}`;
+  const tourTitle = c.catalogTour ? pickI18n(c.catalogTour.title, lang) : null;
+  const note = castingNote(c, lang);
 
   const terms = [
     { icon: Banknote, label: t.fee, value: c.fee ? fmt.money(c.fee.amount, c.fee.currency) : t.feeOpen },
@@ -303,7 +316,7 @@ function BriefCard({ c, t, cm, fmt }: { c: CastingBrief; t: Dict; cm: Common; fm
   return (
     <article
       className={`group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-zinc-900/40 p-5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-xl transition-colors duration-300 hover:border-amber-200/30 ${
-        c.stage === "cancelled" ? "border-zinc-800/60 opacity-70" : "border-zinc-800/80"
+        c.stage === "cancelled" || c.stage === "archived" ? "border-zinc-800/60 opacity-70" : "border-zinc-800/80"
       }`}
     >
       <Link href={ROUTES.casting(c.id)} aria-label={title} className={OVERLAY_LINK} />
@@ -318,10 +331,18 @@ function BriefCard({ c, t, cm, fmt }: { c: CastingBrief; t: Dict; cm: Common; fm
           <p className="truncate text-[10px] uppercase tracking-[0.26em] text-zinc-500">
             {cm.projects[c.project]} · {t.days(days)}
           </p>
-          <h3 className={`${cormorant.className} mt-1 truncate text-[1.7rem] font-medium leading-tight text-zinc-50`}>
-            {fmt.city(c.city)}
+          <h3 className={`${cormorant.className} mt-1 line-clamp-2 text-[1.55rem] font-medium leading-tight text-zinc-50`}>
+            {castingTitle(c, lang)}
           </h3>
-          <p className="mt-0.5 text-xs text-zinc-400">{fmt.range(c.startsAt, c.endsAt)}</p>
+          <p className="mt-0.5 text-xs text-zinc-400">
+            {fmt.city(c.city)} · {fmt.range(c.startsAt, c.endsAt)}
+          </p>
+          {tourTitle && (
+            <p className="mt-1 truncate text-[11px] text-amber-100/70">
+              <Plane className="mr-1 inline size-3" strokeWidth={1.75} aria-hidden />
+              {tourTitle}
+            </p>
+          )}
           {c.organizer?.official && (
             <p className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-amber-200/35 bg-amber-200/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100">
               <BadgeCheck className="size-3" aria-hidden />
@@ -333,6 +354,9 @@ function BriefCard({ c, t, cm, fmt }: { c: CastingBrief; t: Dict; cm: Common; fm
           <Pill tone={stageTone(c, closingSoon)}>{closingSoon ? t.closing : t.stage[c.stage]}</Pill>
           {c.fresh > 0 && (
             <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-950">{t.fresh(c.fresh)}</span>
+          )}
+          {c.invites !== null && c.invites > 0 && (
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] ${PILL.zinc}`}>{t.invites(c.invites)}</span>
           )}
         </div>
       </div>
@@ -367,7 +391,7 @@ function BriefCard({ c, t, cm, fmt }: { c: CastingBrief; t: Dict; cm: Common; fm
           )}
         </div>
       )}
-      {c.note && <p className={`${cormorant.className} mt-3 line-clamp-2 text-[15px] leading-snug text-zinc-300`}>{c.note}</p>}
+      {note && <p className={`${cormorant.className} mt-3 line-clamp-2 text-[15px] leading-snug text-zinc-300`}>{note}</p>}
 
       {/* «Готова» из мест */}
       <div className="mt-4">
@@ -535,7 +559,15 @@ function CastingsView({ data }: { data: CastingsData }) {
       .filter((c) => matchesFilter(c, filter))
       .filter((c) => {
         if (!q) return true;
-        const hay = [c.city, fmt.city(c.city), cm.projects[c.project], c.note ?? ""].join(" ").toLowerCase();
+        const hay = [
+          c.city,
+          fmt.city(c.city),
+          cm.projects[c.project],
+          c.note ?? "",
+          ...Object.values(c.title),
+          ...Object.values(c.briefI18n),
+          ...(c.catalogTour ? Object.values(c.catalogTour.title) : []),
+        ].join(" ").toLowerCase();
         return hay.includes(q);
       })
       .sort(byUrgency);
@@ -558,10 +590,19 @@ function CastingsView({ data }: { data: CastingsData }) {
         title={t.title}
         subtitle={t.subtitle}
         actions={
-          <Link href={ROUTES.newCasting} className={BTN_GOLD}>
-            <Plus className="size-4" aria-hidden />
-            {t.create}
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={ROUTES.tourCatalog}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 text-sm text-zinc-200 transition hover:border-amber-200/30 hover:text-amber-100 sm:min-h-10"
+            >
+              <Plane className="size-4" aria-hidden />
+              {t.tours}
+            </Link>
+            <Link href={ROUTES.newCasting} className={BTN_GOLD}>
+              <Plus className="size-4" aria-hidden />
+              {t.create}
+            </Link>
+          </div>
         }
       />
 
@@ -610,7 +651,7 @@ function CastingsView({ data }: { data: CastingsData }) {
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,19rem),1fr))] gap-4">
             {visible.map((c) => (
-              <BriefCard key={c.id} c={c} t={t} cm={cm} fmt={fmt} />
+              <BriefCard key={c.id} c={c} t={t} cm={cm} fmt={fmt} lang={lang} />
             ))}
           </div>
         )}
