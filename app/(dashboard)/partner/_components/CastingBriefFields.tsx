@@ -12,6 +12,7 @@
  *   createCasting(v, o)  — insert в partner_castings; manager_id ставит база,
  *                          owner/admin передают организатора (VOYAGE Management или партнёр)
  *   updateCasting(id, v) — правка брифа; rowToBrief(row) — строка базы → значения формы
+ *   deleteCasting(id)    — удаление (только owner/admin)
  *
  * Колонки и ограничения — миграция 20261015120000_partner_resident_feed.sql
  * ──────────────────────────────────────────────────────────────────── */
@@ -122,11 +123,34 @@ export function briefToRow(v: BriefValues) {
   };
 }
 
-export type CreateResult = { ok: true; id: string } | { ok: false; reason: "invalid" | "forbidden" | "network" };
+/**
+ * Причина отказа базы → понятная причина для формы.
+ *   forbidden — нет прав (RLS, права на колонки, триггер организатора);
+ *   organizer — организатор не найден / заблокирован / профиль клуба не создан;
+ *   schema    — база старее кода (не применена миграция: тип tour/event, колонка);
+ *   network   — всё остальное (сеть, таймаут).
+ * Настоящая ошибка пишется в консоль — по ней видно, какая проверка сработала.
+ */
+export type WriteFailure = "forbidden" | "organizer" | "schema" | "network";
+
+function classifyWriteError(
+  op: "create" | "update" | "delete",
+  error: { code?: string; message?: string; details?: string | null; hint?: string | null },
+): WriteFailure {
+  console.error(`[partner_castings:${op}]`, error.code, error.message, error.details ?? "", error.hint ?? "");
+  const msg = error.message ?? "";
+  if (msg.includes("invalid_organizer") || error.code === "23503") return "organizer";
+  if (error.code === "42501") return "forbidden";
+  if (error.code === "23514" || error.code === "42703" || error.code === "PGRST204") return "schema";
+  return "network";
+}
+
+export type CreateResult = { ok: true; id: string } | { ok: false; reason: "invalid" | WriteFailure };
 
 /**
  * insert в partner_castings. Права проверяет RLS: менеджер — только от себя,
  * owner/admin — от имени VOYAGE Management или любого действующего партнёра.
+ * Права на колонки — миграция 20261101090000_casting_owner_full_rights.sql.
  */
 export async function createCasting(v: BriefValues, organizerId?: string | null): Promise<CreateResult> {
   if (briefErrors(v).length > 0) return { ok: false, reason: "invalid" };
@@ -136,12 +160,12 @@ export async function createCasting(v: BriefValues, organizerId?: string | null)
     .insert(row)
     .select("id")
     .single();
-  if (error) return { ok: false, reason: error.code === "42501" ? "forbidden" : "network" };
+  if (error) return { ok: false, reason: classifyWriteError("create", error) };
   return { ok: true, id: data.id as string };
 }
 
 export type CastingStatus = "open" | "shortlist" | "closed" | "cancelled";
-export type UpdateResult = { ok: true } | { ok: false; reason: "invalid" | "forbidden" | "has_tour" | "network" };
+export type UpdateResult = { ok: true } | { ok: false; reason: "invalid" | "has_tour" | WriteFailure };
 
 /** Правка кастинга. organizerId меняет только owner/admin и только до появления тура. */
 export async function updateCasting(
@@ -160,8 +184,25 @@ export async function updateCasting(
     .select("id");
   if (error) {
     if (error.message.includes("casting_has_tour")) return { ok: false, reason: "has_tour" };
-    return { ok: false, reason: error.code === "42501" ? "forbidden" : "network" };
+    return { ok: false, reason: classifyWriteError("update", error) };
   }
+  if (!data || data.length === 0) return { ok: false, reason: "forbidden" };
+  return { ok: true };
+}
+
+export type DeleteResult = { ok: true } | { ok: false; reason: WriteFailure };
+
+/**
+ * Удаление кастинга — только owner/admin (RLS partner_castings_delete).
+ * Отклики удаляются каскадом; созданный тур остаётся, его casting_id → NULL.
+ */
+export async function deleteCasting(id: string): Promise<DeleteResult> {
+  const { data, error } = await supabase
+    .from("partner_castings")
+    .delete()
+    .eq("id", id)
+    .select("id");
+  if (error) return { ok: false, reason: classifyWriteError("delete", error) };
   if (!data || data.length === 0) return { ok: false, reason: "forbidden" };
   return { ok: true };
 }

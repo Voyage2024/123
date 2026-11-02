@@ -2,18 +2,20 @@
 
 /* VOYAGE · Partner — правка кастинга
  * Те же поля, что при создании, плюс статус. owner/admin могут сменить
- * организатора (VOYAGE Management ↔ партнёр), пока по кастингу нет тура.
+ * организатора (VOYAGE Management ↔ партнёр), пока по кастингу нет тура,
+ * и удалить любой кастинг (двойное подтверждение внизу формы).
  * Права проверяет RLS partner_castings и триггер partner_castings_check_organizer.
  */
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, LoaderCircle, Save, ShieldAlert } from "lucide-react";
+import { ArrowLeft, CheckCircle2, LoaderCircle, Save, ShieldAlert, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
   CastingBriefFields,
   EMPTY_BRIEF,
+  deleteCasting,
   editErrors,
   rowToBrief,
   updateCasting,
@@ -49,6 +51,9 @@ export default function EditCastingPage() {
   const [errors, setErrors] = useState<BriefErrorKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const busy = saving || deleting;
   const [notice, setNotice] = useState<{ type: "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
@@ -101,7 +106,11 @@ export default function EditCastingPage() {
     if (!result.ok) {
       const messages: Record<typeof result.reason, string> = {
         invalid: "Данные кастинга не прошли проверку.",
-        forbidden: "Недостаточно прав для правки этого кастинга.",
+        forbidden: canChooseOrganizer
+          ? "База отклонила запись по правам. Примените миграцию 20261101090000_casting_owner_full_rights.sql — подробности в консоли браузера."
+          : "Недостаточно прав для правки этого кастинга.",
+        organizer: "Организатор не найден или заблокирован. Выберите другого.",
+        schema: "База данных не обновлена под эту версию формы. Примените последние миграции.",
         has_tour: "По кастингу уже создан тур — организатора сменить нельзя.",
         network: "Не удалось сохранить изменения. Попробуйте ещё раз.",
       };
@@ -110,6 +119,32 @@ export default function EditCastingPage() {
     }
     setNotice({ type: "success", message: "Изменения сохранены." });
     router.push(ROUTES.casting(id));
+    router.refresh();
+  };
+
+  // Удаление — только owner/admin; RLS partner_castings_delete проверит это ещё раз.
+  const handleDelete = async () => {
+    if (!canChooseOrganizer || busy) return;
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setDeleting(true);
+    setNotice(null);
+    const result = await deleteCasting(id);
+    setDeleting(false);
+    setConfirmDelete(false);
+    if (!result.ok) {
+      const messages: Record<typeof result.reason, string> = {
+        forbidden: "База не дала удалить кастинг. Примените миграцию 20261101090000_casting_owner_full_rights.sql.",
+        organizer: "Не удалось удалить кастинг.",
+        schema: "База данных не обновлена. Примените последние миграции.",
+        network: "Не удалось удалить кастинг. Попробуйте ещё раз.",
+      };
+      setNotice({ type: "error", message: messages[result.reason] });
+      return;
+    }
+    router.push(ROUTES.castings);
     router.refresh();
   };
 
@@ -138,7 +173,7 @@ export default function EditCastingPage() {
                     id="casting-status"
                     value={status}
                     onChange={(event) => setStatus(event.target.value as CastingStatus)}
-                    disabled={saving}
+                    disabled={busy}
                     className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-amber-200/40"
                   >
                     {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -146,7 +181,7 @@ export default function EditCastingPage() {
                 </div>
                 {canChooseOrganizer && (
                   <div>
-                    <OrganizerSelect id="casting-organizer" value={organizerId} onChange={setOrganizerId} lang="ru" disabled={saving || hasTour} />
+                    <OrganizerSelect id="casting-organizer" value={organizerId} onChange={setOrganizerId} lang="ru" disabled={busy || hasTour} />
                     {hasTour && <p className="mt-1 text-[11px] text-zinc-500">По кастингу уже создан тур — организатор закреплён.</p>}
                   </div>
                 )}
@@ -173,13 +208,42 @@ export default function EditCastingPage() {
                 </div>
               )}
 
-              <div className="mt-8 flex flex-col-reverse gap-3 border-t border-zinc-800/70 pt-6 sm:flex-row sm:justify-end">
+              <div className="mt-8 flex flex-col-reverse gap-3 border-t border-zinc-800/70 pt-6 sm:flex-row sm:items-center sm:justify-end">
+                {canChooseOrganizer && (
+                  <div className="flex flex-col gap-2 sm:mr-auto sm:flex-row sm:items-center">
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={busy}
+                      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-medium transition disabled:opacity-60 ${
+                        confirmDelete
+                          ? "border-rose-400/50 bg-rose-500/15 text-rose-100 hover:bg-rose-500/25"
+                          : "border-rose-400/20 text-rose-300 hover:border-rose-400/40 hover:bg-rose-400/5"
+                      }`}
+                    >
+                      {deleting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      {deleting ? "Удаляем..." : confirmDelete ? "Точно удалить?" : "Удалить кастинг"}
+                    </button>
+                    {confirmDelete && !deleting && (
+                      <button type="button" onClick={() => setConfirmDelete(false)} className="text-xs text-zinc-400 underline-offset-2 hover:text-white hover:underline">
+                        Не удалять
+                      </button>
+                    )}
+                    {confirmDelete && (
+                      <p className="max-w-xs text-[11px] leading-4 text-zinc-500">
+                        {hasTour
+                          ? "Отклики удалятся. Тур останется, но потеряет связь с кастингом (гонорар для авто-баллов). Обычно лучше статус «Отменён»."
+                          : "Кастинг и все отклики на него удалятся без возможности восстановления."}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <Link href={ROUTES.casting(id)} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-800 px-5 text-sm font-medium text-zinc-300 transition hover:border-zinc-700 hover:text-white">
                   Отмена
                 </Link>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={busy}
                   className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200/40 bg-amber-200 px-5 text-sm font-semibold text-zinc-950 transition hover:bg-amber-100 disabled:opacity-60"
                 >
                   {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
