@@ -14,6 +14,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, BadgeCheck, ChevronRight, Lock, Plane, ShieldAlert, Users } from "lucide-react";
 import type { Lang } from "@/app/context/LanguageContext";
+import { VipAvatarMark, VipBadge, isKycElite } from "@/app/components/profile/VipBadge";
 import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
 import { usePartnerFormat, type Common, type Fmt } from "@/app/(dashboard)/partner/_lib/format";
 import { usePartnerFeed } from "@/app/(dashboard)/partner/_lib/usePartnerFeed";
@@ -128,14 +129,14 @@ export default function ResidentCardPage() {
       </PageShell>
     );
   }
-  return <ResidentCardLoader id={id} t={t} c={c} fmt={fmt} />;
+  return <ResidentCardLoader id={id} t={t} c={c} fmt={fmt} lang={lang} />;
 }
 
-function ResidentCardLoader({ id, t, c, fmt }: { id: string; t: Dict; c: Common; fmt: Fmt }) {
+function ResidentCardLoader({ id, t, c, fmt, lang }: { id: string; t: Dict; c: Common; fmt: Fmt; lang: Lang }) {
   const feed = usePartnerFeed("partner_resident_card", parseResidentCard, { p_resident: id });
   return (
     <FeedGate feed={feed} c={c} eyebrow={t.eyebrow} title={t.eyebrow}>
-      {(card) => <ResidentCardView card={card} t={t} c={c} fmt={fmt} />}
+      {(card) => <ResidentCardView card={card} t={t} c={c} fmt={fmt} lang={lang} />}
     </FeedGate>
   );
 }
@@ -149,12 +150,14 @@ function BackLink({ t }: { t: Dict }) {
   );
 }
 
-function ResidentCardView({ card, t, c, fmt }: { card: ResidentCard; t: Dict; c: Common; fmt: Fmt }) {
+function ResidentCardView({ card, t, c, fmt, lang }: { card: ResidentCard; t: Dict; c: Common; fmt: Fmt; lang: Lang }) {
   const title = card.revealed && card.name ? card.name : card.code;
+  /** KYC 3 — личная верификация с консьержем: VIP-знак в шапке и на фото */
+  const elite = isKycElite(card.kycLevel);
   const facts: [string, string][] = [
     [t.facts.height, card.height ? `${card.height} cm` : "—"],
     [t.facts.languages, card.languages.join(" · ") || "—"],
-    [t.facts.kyc, `${card.kycLevel} / 3`],
+    [t.facts.kyc, elite ? `3 / 3 · VIP` : `${card.kycLevel} / 3`],
     [t.facts.segment, card.segment ?? "—"],
     [t.facts.reliability, card.reliability !== null ? `${fmt.num(card.reliability)}%` : "—"],
     [t.facts.open, card.openToTours ? t.yes : t.no],
@@ -169,6 +172,7 @@ function ResidentCardView({ card, t, c, fmt }: { card: ResidentCard; t: Dict; c:
         subtitle={card.revealed ? "" : t.hiddenNote}
         aside={
           <div className="flex flex-wrap gap-1.5">
+            {elite && <VipBadge lang={lang} />}
             <TrustBadge trust={card.trust} />
             {card.verifiedAt !== null && (
               <Pill tone="emerald" icon={BadgeCheck}>
@@ -185,7 +189,8 @@ function ResidentCardView({ card, t, c, fmt }: { card: ResidentCard; t: Dict; c:
       />
 
       <div className="mt-8 grid gap-4 lg:grid-cols-[18rem_1fr]">
-        <Panel className="flex aspect-[3/4] items-center justify-center">
+        <Panel className={`flex aspect-[3/4] items-center justify-center ${elite ? "border-amber-200/35" : ""}`}>
+          {elite && <VipAvatarMark lang={lang} size="lg" className="bottom-3 right-3" />}
           {card.revealed && card.photo ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={card.photo} alt={title} className="absolute inset-0 size-full object-cover" />

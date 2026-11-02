@@ -21,6 +21,12 @@ export type ResidentRow = {
   verifiedAt: number | null;
   workedWithMe: boolean;
   trust: Trust;
+  /**
+   * KYC-уровень (3 = личная верификация с консьержем → VIP-знак).
+   * Список отдаёт его после миграции 20261102090000; до неё — выводим:
+   * не «свои» резидентки попадают в список только с KYC 3.
+   */
+  kycLevel: number | null;
 };
 
 export type ResidentsData = { generatedAt: number; residents: ResidentRow[] };
@@ -60,6 +66,7 @@ function parseRow(r: Record<string, unknown>): ResidentRow | null {
     verifiedAt: time(r.verified_at),
     workedWithMe: r.worked_with_me === true,
     trust: parseTrust(r.trust),
+    kycLevel: num(r.kyc_level) ?? (r.worked_with_me === true ? null : 3),
   };
 }
 

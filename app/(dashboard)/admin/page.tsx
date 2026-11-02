@@ -23,6 +23,10 @@
  * отклонение файла — club_admin_reject_kyc (понижает KYC до level − 1).
  * Оба — миграция 20261009c_kyc_downgrade; без неё — прежний путь.
  * Файлы паспорта/видео смотрятся в DirectoryClient → KycVault.
+ *
+ * Очередь проверки (KYC 1/2 файлы на проверке, запрос KYC 3 консьержу) —
+ * server action getAdminReviewQueue; ?kyc=review открывает вкладку
+ * «Требуют проверки» (ссылка из уведомлений и сайдбара).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -34,6 +38,8 @@ import { isClubAdmin, isStaff } from "@/lib/access";
 import { normalizeCircleKey } from "@/lib/gamification";
 import { resolveAvatarUrl } from "@/lib/memberCards";
 import { inviteErrorCode } from "@/lib/patronage";
+import { getAdminReviewQueue } from "@/app/actions/admin-review";
+import type { ReviewFlags } from "@/lib/admin-review";
 import DirectoryClient, {
   clampKyc,
   cormorant,
@@ -162,11 +168,13 @@ function DirectoryPage() {
   const allowed = isClubAdmin(role);
   const router = useRouter();
   const params = useSearchParams();
-  const initialKyc: KycFilter = params.get("kyc") === "pending" ? "pending" : params.get("kyc") === "verified" ? "verified" : "all";
+  const kycParam = params.get("kyc");
+  const initialKyc: KycFilter = kycParam === "review" ? "review" : kycParam === "pending" ? "pending" : kycParam === "verified" ? "verified" : "all";
   const { t } = useDirectoryI18n();
 
   const [rows, setRows] = useState<Row[] | null>(null);
   const [avatars, setAvatars] = useState<Record<string, string>>({});
+  const [reviewQueue, setReviewQueue] = useState<Record<string, ReviewFlags> | null>(null);
   const [migrationMissing, setMigrationMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -184,8 +192,19 @@ function DirectoryPage() {
     if (!authLoading && !allowed && isStaff(role)) router.replace("/admin/directory");
   }, [authLoading, allowed, role, router]);
 
+  /** Очередь проверки — отдельно: таблица не ждёт её, бейджи появляются следом */
+  const loadQueue = useCallback(async () => {
+    try {
+      const res = await getAdminReviewQueue();
+      if (mounted.current && res.ok) setReviewQueue(res.queue.byProfile);
+    } catch (e) {
+      console.error("[Directory] review queue:", e);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setRefreshing(true);
+    void loadQueue();
     try {
       let list: Row[] = [];
       const res = await supabase.from("v_admin_directory").select("*").order("full_name", { ascending: true });
@@ -215,7 +234,7 @@ function DirectoryPage() {
     } finally {
       if (mounted.current) setRefreshing(false);
     }
-  }, [t]);
+  }, [t, loadQueue]);
 
   useEffect(() => {
     if (!authLoading && allowed) void load();
@@ -277,10 +296,17 @@ function DirectoryPage() {
   );
 
   /** Подтверждение одного уровня KYC (а не сразу 3) — после просмотра файла */
-  const onApprove = useCallback((id: string, level: number) => setKycLevel(id, level), [setKycLevel]);
+  const onApprove = useCallback(
+    async (id: string, level: number) => {
+      const err = await setKycLevel(id, level);
+      if (!err) void loadQueue();
+      return err;
+    },
+    [setKycLevel, loadQueue],
+  );
 
   /** Отклонение файла: заявка → rejected; пройденный уровень → KYC = level − 1 */
-  const onReject = useCallback(
+  const rejectSubmission = useCallback(
     async (id: string, submissionId: string, level: number): Promise<string | null> => {
       const rpc = await supabase.rpc("club_admin_reject_kyc", { p_submission: submissionId });
       if (!rpc.error) {
@@ -308,6 +334,15 @@ function DirectoryPage() {
     [rows, setKycLevel, t],
   );
 
+  const onReject = useCallback(
+    async (id: string, submissionId: string, level: number) => {
+      const err = await rejectSubmission(id, submissionId, level);
+      if (!err) void loadQueue();
+      return err;
+    },
+    [rejectSubmission, loadQueue],
+  );
+
   const onSave = useCallback(
     async (d: ResidentDraft): Promise<string | null> => {
       const fields = {
@@ -323,7 +358,9 @@ function DirectoryPage() {
         const { kyc_level, ...profileFields } = fields;
         const err = await patchProfile(d.id, profileFields);
         if (err) return err;
-        return setKycLevel(d.id, kyc_level);
+        const kycErr = await setKycLevel(d.id, kyc_level);
+        if (!kycErr) void loadQueue();
+        return kycErr;
       }
 
       // новая резидентка — аккаунт создаёт сервер (service-role ключ)
@@ -350,7 +387,7 @@ function DirectoryPage() {
         return t.networkError;
       }
     },
-    [patchProfile, setKycLevel, load, t],
+    [patchProfile, setKycLevel, load, loadQueue, t],
   );
 
   if (authLoading) return <Gate kind="loading" />;
@@ -391,6 +428,7 @@ function DirectoryPage() {
       refreshing={refreshing}
       migrationMissing={migrationMissing}
       viewer={{ id: auth.user?.id ?? null, email: auth.user?.email ?? null, role }}
+      reviewQueue={reviewQueue}
       onRefresh={() => void load()}
       onSave={onSave}
       onApprove={onApprove}

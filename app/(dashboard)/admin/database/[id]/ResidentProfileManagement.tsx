@@ -7,7 +7,9 @@ import { useLanguage } from "@/app/context/LanguageContext";
 import { normalizeLang, type Lang } from "@/lib/gamification";
 import { supabase } from "@/lib/supabase";
 import { updateResidentTrust, type ResidentSegment } from "@/app/actions/admin-profile-trust";
+import { VipBadge, isKycElite } from "@/app/components/profile/VipBadge";
 import { KycViewer, useKycSubmissions, type KycLevelWithFile } from "@/app/(dashboard)/admin/KycVault";
+import { announceReviewQueueChange } from "@/lib/admin-review";
 
 type Props = {
   profileId: string;
@@ -123,6 +125,9 @@ export default function ResidentProfileManagement(props: Props) {
     const { data, error } = await supabase.rpc("club_admin_set_kyc_level", { p_profile: props.profileId, p_level: nextLevel });
     if (error) return error.message;
     setKycLevel(safeKyc(data ?? nextLevel));
+    // плашка «Ждёт проверки» на этой странице и счётчик в меню
+    announceReviewQueueChange();
+    router.refresh();
     return null;
   };
 
@@ -131,6 +136,8 @@ export default function ResidentProfileManagement(props: Props) {
     if (error) return error.message;
     const next = safeKyc(data ?? (kycLevel >= docLevel ? docLevel - 1 : kycLevel));
     setKycLevel(next);
+    announceReviewQueueChange();
+    router.refresh();
     return null;
   };
 
@@ -172,7 +179,7 @@ export default function ResidentProfileManagement(props: Props) {
           <div className="rounded-xl border border-zinc-800/80 bg-black/15 p-4 sm:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-500">{t.level}</p><p className="mt-2 text-base text-zinc-100">Level {level} · {circleName}</p></div>
-              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] ${kycBadge.cls}`}><ShieldCheck size={12} />{kycBadge.label} · {kycLevel}/3</span>
+              {isKycElite(kycLevel) ? <VipBadge lang={languageContext.lang} /> : <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] ${kycBadge.cls}`}><ShieldCheck size={12} />{kycBadge.label} · {kycLevel}/3</span>}
             </div>
             <div className="mt-4 border-t border-zinc-800/70 pt-4">
               <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-500">{t.kycFiles}</p>

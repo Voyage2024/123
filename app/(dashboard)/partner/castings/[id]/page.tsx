@@ -42,6 +42,7 @@ import { createTourFromCasting } from "@/app/(dashboard)/partner/castings/[id]/a
 import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
 import { useAuth } from "@/app/context/AuthContext";
 import { useLanguage } from "@/app/context/LanguageContext";
+import { VipAvatarMark, VipBadge, isKycElite } from "@/app/components/profile/VipBadge";
 import { projectLabel } from "@/lib/project-types";
 import { OrganizerBadgePill, usePublishers } from "@/app/components/organizer/OrganizerSelect";
 import { ORGANIZER_TEXT, VOYAGE_MANAGEMENT_ID } from "@/lib/organizer";
@@ -365,7 +366,10 @@ export default function CastingResponsesPage() {
               return (
                 <article key={row.response_id} className="rounded-2xl border border-zinc-800/80 bg-gradient-to-br from-zinc-900/65 to-zinc-950/80 p-4 transition-colors hover:border-zinc-700/80 sm:p-5">
                   <div className="flex gap-4">
-                    {row.resolved_photo_url ? <img src={row.resolved_photo_url} alt={row.full_name} className="h-20 w-20 shrink-0 rounded-2xl border border-amber-200/15 object-cover sm:h-24 sm:w-24" /> : <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-600 sm:h-24 sm:w-24"><CircleUserRound size={31} /></div>}
+                    <div className="relative shrink-0">
+                      {row.resolved_photo_url ? <img src={row.resolved_photo_url} alt={row.full_name} className={`h-20 w-20 rounded-2xl border object-cover sm:h-24 sm:w-24 ${isKycElite(row.kyc_level) ? "border-amber-200/50" : "border-amber-200/15"}`} /> : <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-600 sm:h-24 sm:w-24"><CircleUserRound size={31} /></div>}
+                      {isKycElite(row.kyc_level) && <VipAvatarMark lang={lang} size="md" className="-bottom-1.5 -right-1.5" />}
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="break-words font-serif text-xl text-zinc-100">{row.full_name || "Резидентка"}</h3><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[9px] font-medium ${STATUS_CLASS[status] ?? STATUS_CLASS.withdrawn}`}>{STATUS_LABEL[status] ?? status}</span></div>
                       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] text-zinc-400">
@@ -373,7 +377,7 @@ export default function CastingResponsesPage() {
                         <span className="inline-flex items-center gap-1"><Languages size={12} className="text-zinc-600" /> {(row.languages ?? []).length ? row.languages!.join(" · ") : "Языки не указаны"}</span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-1.5">
-                        <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[9px] ${Number(row.kyc_level) >= 3 ? "border-emerald-400/20 bg-emerald-400/5 text-emerald-200" : "border-amber-300/20 bg-amber-300/5 text-amber-100/80"}`}><ShieldCheck size={11} /> KYC {Math.max(0, Number(row.kyc_level) || 0)}/3</span>
+                        {isKycElite(row.kyc_level) ? <VipBadge lang={lang} variant="compact" /> : <span className="inline-flex items-center gap-1 rounded-lg border border-amber-300/20 bg-amber-300/5 px-2 py-1 text-[9px] text-amber-100/80"><ShieldCheck size={11} /> KYC {Math.max(0, Number(row.kyc_level) || 0)}/3</span>}
                         <span className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 bg-black/15 px-2 py-1 text-[9px] text-zinc-300"><Sparkles size={11} className="text-amber-200/60" /> {row.circle || "voyager"}</span>
                         <span className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 bg-black/15 px-2 py-1 text-[9px] text-zinc-300"><Star size={11} className="text-amber-200/60" /> Influence {row.influence_index ?? 0}</span>
                         <span className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 bg-black/15 px-2 py-1 text-[9px] text-zinc-400"><UserRoundCheck size={11} /> Reliability {row.reliability ?? 100}%</span>

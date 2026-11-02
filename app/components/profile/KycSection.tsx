@@ -9,7 +9,9 @@
  *                           перед загрузкой — памятка VideoGuide: правила
  *                           съёмки + фраза с именем и сегодняшней датой
  *                           и кнопкой «Скопировать текст»
- *   Уровень 3 · Доверие   — информационный блок: созвон через консьержа
+ *   Уровень 3 · Консьерж  — премиальная карточка KycConciergeLevel:
+ *                           привилегии, шаги, превью VIP-знака, запись
+ *                           к консьержу (заявка + Telegram/WhatsApp)
  *
  * БЕЗОПАСНОСТЬ (см. миграцию 20261009_profile_kyc_vault.sql):
  *   • файлы — в приватном бакете `kyc-vault`, путь <uid>/passport|video/…;
@@ -26,14 +28,12 @@ import {
   Check,
   CheckCircle2,
   Clock,
-  ConciergeBell,
   Copy,
   Glasses,
   Hourglass,
   Loader2,
   Lock,
   Mic,
-  Phone,
   ScanFace,
   Shield,
   ShieldCheck,
@@ -46,6 +46,8 @@ import {
 import { supabase } from "@/lib/supabase";
 import type { Lang } from "@/app/context/LanguageContext";
 import { cormorant } from "@/app/components/profile/fonts";
+import { KycConciergeLevel } from "@/app/components/profile/KycConciergeLevel";
+import { notifyKycSubmitted } from "@/app/actions/admin-review";
 
 /* ══════════════════════════════════════════════════════════════════
  * КОНСТАНТЫ
@@ -992,6 +994,10 @@ function UploadDialog({
       return;
     }
 
+    // Рабочий чат команды: [KYC 1: Паспорт] / [KYC 2: Видео]. Не ждём и не
+    // показываем ошибку — загрузка уже сохранена, уведомление вторично.
+    void notifyKycSubmitted({ level }).catch(() => undefined);
+
     setBusy(false);
     setDone(true);
     onUploaded();
@@ -1172,6 +1178,7 @@ export function KycSection({
   isAdmin,
   onSetLevel,
   fullName = null,
+  avatarUrl = null,
 }: {
   userId: string;
   lang: Lang;
@@ -1180,6 +1187,8 @@ export function KycSection({
   onSetLevel: (n: number) => void;
   /** Имя резидента для фразы в видео; можно поправить прямо в памятке */
   fullName?: string | null;
+  /** Аватар для превью VIP-знака в карточке 3-го уровня */
+  avatarUrl?: string | null;
 }) {
   const t = DICT[lang] ?? DICT.EN;
   const [subs, setSubs] = useState<Submission[]>([]);
@@ -1289,35 +1298,16 @@ export function KycSection({
           {s2 === "locked" && <Note>{t.opensAfter(1)}</Note>}
         </KycCard>
 
-        {/* ── Уровень 3 · созвон через консьержа ── */}
-        <KycCard
-          level={3}
-          state={s3}
-          Icon={Phone}
-          title={t.l3Title}
-          desc={t.l3Desc}
-          t={t}
+        {/* ── Уровень 3 · консьерж / личная верификация (отдельный компонент) ── */}
+        <KycConciergeLevel
+          state={s3 === "review" ? "pending" : s3}
+          lang={lang}
           isAdmin={isAdmin}
           onConfirm={() => onSetLevel(3)}
           onRevoke={() => onSetLevel(2)}
-        >
-          {s3 !== "completed" && (
-            <div className="flex items-start gap-3 rounded-xl border border-dashed border-zinc-600/45 bg-zinc-950/40 p-3.5 sm:gap-3.5 sm:px-[18px] sm:py-4">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-zinc-600/45 text-zinc-400 sm:h-8 sm:w-8">
-                <ConciergeBell aria-hidden className="h-3.5 w-3.5" strokeWidth={1.5} />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.3em] text-zinc-500">{t.brief}</p>
-                <p className="mt-1.5 text-[12.5px] leading-relaxed text-zinc-300 sm:text-[13px]">{t.l3Brief}</p>
-                {s3 === "locked" && (
-                  <div className="mt-2">
-                    <Note>{t.opensAfter(2)}</Note>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </KycCard>
+          fullName={fullName}
+          avatarUrl={avatarUrl}
+        />
       </div>
 
       {dialog !== null && (

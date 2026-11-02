@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
-  BadgeCheck,
   CheckCircle2,
   IdCard,
   LockKeyhole,
@@ -54,6 +53,7 @@ import {
 } from "@/app/components/profile/ClubCardholder";
 import { AchievementShelf, type AchievementKey } from "@/app/components/profile/AchievementShelf";
 import { KycSection } from "@/app/components/profile/KycSection";
+import { VipAvatarMark, VipBadge, VipSeal, isKycElite } from "@/app/components/profile/VipBadge";
 import ProfileIdentityQuickEdit from "@/app/components/profile/ProfileIdentityQuickEdit";
 
 /* ──────────────────────────────────────────────────────────────────────
@@ -505,12 +505,7 @@ function KycExplainer({ lang, kycLevel }: { lang: Lang; kycLevel: number }) {
               <ShieldCheck aria-hidden className="h-3.5 w-3.5" />
               {c.eyebrow}
             </p>
-            {trusted && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/[0.07] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-emerald-200/90">
-                <BadgeCheck aria-hidden className="h-3.5 w-3.5" />
-                {c.trusted}
-              </span>
-            )}
+            {trusted && <VipBadge lang={lang} />}
           </div>
 
           <h2
@@ -1037,6 +1032,8 @@ export default function ResidentProfilePage() {
   // Prefer the database profile name over an Auth/email-derived fallback.
   const displayName = profile?.full_name?.trim() || user?.fullName || null;
   const avatarUrl = user?.avatarUrl ?? null;
+  /** KYC 3 пройден — золотая печать и VIP-плашка в шапке и на аватаре */
+  const elite = isKycElite(profile?.kyc_level);
 
   // Circle резидента из базы — цвет кардхолдера меняется сам при повышении
   const standing = useClubStanding(user?.id, profile?.status);
@@ -1407,8 +1404,33 @@ export default function ResidentProfilePage() {
             {t.pageTitle}
           </h1>
 
-          {/* Identity editor stays above achievements and portfolio; it opens a modal. */}
-          <div className="mt-4">
+          {/* Имя + аватар; после KYC 3 — золотая печать и VIP-плашка.
+              Identity editor stays above achievements and portfolio; it opens a modal. */}
+          <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="relative shrink-0">
+                <span
+                  className={`flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border bg-zinc-800/50 ${
+                    elite ? "border-amber-200/60 shadow-[0_0_26px_-6px_rgba(253,230,138,0.6)]" : "border-amber-500/30"
+                  }`}
+                >
+                  {avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={avatarUrl} alt={displayName ?? "avatar"} className="h-full w-full object-cover" />
+                  ) : (
+                    <User className="h-6 w-6 text-zinc-500" />
+                  )}
+                </span>
+                {elite && <VipAvatarMark lang={lang} size="sm" className="-bottom-0.5 -right-0.5" />}
+              </span>
+              <div className="min-w-0">
+                <p className={`${cormorant.className} flex min-w-0 items-center gap-1.5 text-xl leading-tight sm:text-2xl ${isFilled(displayName) ? "text-zinc-100" : "text-zinc-500"}`}>
+                  <span className="truncate">{isFilled(displayName) ? displayName : t.nameNotSet}</span>
+                  {elite && <VipSeal className="h-[18px] w-[18px]" />}
+                </p>
+                {elite && <VipBadge lang={lang} className="mt-1.5" />}
+              </div>
+            </div>
             <ProfileIdentityQuickEdit
               currentName={displayName ?? ""}
               onSaved={(fullName, avatarPath) => setProfile((prev) => prev ? {
@@ -1487,7 +1509,8 @@ export default function ResidentProfilePage() {
                 <div className="flex items-center gap-4">
                   {/* Avatar — только из настроек (user.avatarUrl), без загрузки */}
                   <div className="relative flex-shrink-0" title={t.avatarHint}>
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-zinc-800/50 border border-amber-500/30 flex items-center justify-center overflow-hidden">
+                    {elite && <VipAvatarMark lang={lang} size="md" className="-bottom-0.5 -right-0.5" />}
+                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-zinc-800/50 border flex items-center justify-center overflow-hidden ${elite ? "border-amber-200/60" : "border-amber-500/30"}`}>
                       {avatarUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -1513,6 +1536,7 @@ export default function ResidentProfilePage() {
                         }`}
                       >
                         {isFilled(displayName) ? displayName : t.nameNotSet}
+                        {elite && <VipSeal className="ml-1.5 inline h-4 w-4 align-[-3px]" />}
                       </span>
                     </div>
                     <div className="min-w-0">
@@ -1821,6 +1845,7 @@ export default function ResidentProfilePage() {
           isAdmin={isAdmin}
           onSetLevel={setKyc}
           fullName={displayName}
+          avatarUrl={avatarUrl}
         />
 
         {/* ── Personal Vault ─────────────────────────────────────── */}

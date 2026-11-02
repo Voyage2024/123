@@ -18,6 +18,10 @@
  * в меню «⋯» (на телефоне — шторка снизу) + быстрые кнопки файлов.
  * Клик по строке открывает анкету со сводкой.
  *
+ * «Требуют проверки» (вкладка, счётчик, янтарная плашка строки и бейджи
+ * «Ожидает KYC 1 / KYC 2», «Запрос KYC 3») — очередь с сервера
+ * (app/actions/admin-review.ts) + файлы из KycVault, если сервер не ответил.
+ *
  * Уровень KYC двигается в обе стороны: подтверждение поднимает его на
  * один шаг, отклонение файла пройденного уровня и ручной выбор в анкете
  * опускают — вплоть до 0. Записывает page.tsx (RPC из миграции
@@ -62,6 +66,13 @@ import {
   type KycLevelWithFile,
   type KycSubmission,
 } from "@/app/(dashboard)/admin/KycVault";
+import {
+  announceReviewQueueChange,
+  hasPendingReview,
+  reviewCopy,
+  type ReviewFlags,
+} from "@/lib/admin-review";
+import { ReviewChips } from "@/app/components/admin/ReviewChips";
 
 export { cormorant };
 
@@ -94,7 +105,7 @@ export type ResidentDraft = {
   password: string;
 };
 
-export type KycFilter = "all" | "pending" | "verified";
+export type KycFilter = "all" | "review" | "pending" | "verified";
 
 export type DirectoryViewer = {
   id: string | null;
@@ -850,6 +861,7 @@ function ResidentSummary({
   lang,
   submissions,
   canViewPassport,
+  reviewFlags = null,
   onViewKyc,
 }: {
   r: DirectoryResident;
@@ -857,6 +869,7 @@ function ResidentSummary({
   lang: Lang;
   submissions: readonly KycSubmission[] | undefined;
   canViewPassport: boolean;
+  reviewFlags?: ReviewFlags | null;
   onViewKyc: (level: KycLevelWithFile) => void;
 }) {
   const completion = useCompletion(r.id);
@@ -875,8 +888,16 @@ function ResidentSummary({
   return (
     <section
       aria-label={t.summary}
-      className="relative overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-3.5 sm:p-4"
+      className={`relative overflow-hidden rounded-xl border bg-zinc-900/40 p-3.5 sm:p-4 ${
+        hasPendingReview(reviewFlags) ? "border-amber-200/50 shadow-[0_0_0_1px_rgba(253,230,138,0.12),0_0_24px_rgba(253,230,138,0.08)]" : "border-zinc-800/80"
+      }`}
     >
+      {hasPendingReview(reviewFlags) && (
+        <div className="relative mb-3 rounded-lg border border-amber-200/40 bg-amber-200/[0.08] px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200">{reviewCopy(lang).bannerTitle}</p>
+          <ReviewChips flags={reviewFlags} lang={lang} className="mt-1.5" />
+        </div>
+      )}
       {skin && (
         <span
           aria-hidden
@@ -967,6 +988,7 @@ function ResidentModal({
   saving,
   submissions,
   canViewPassport,
+  reviewFlags = null,
   suspended,
   onViewKyc,
   onClose,
@@ -979,6 +1001,7 @@ function ResidentModal({
   saving: boolean;
   submissions: readonly KycSubmission[] | undefined;
   canViewPassport: boolean;
+  reviewFlags?: ReviewFlags | null;
   /** поверх открыт просмотрщик KYC — Esc принадлежит ему */
   suspended: boolean;
   onViewKyc: (level: KycLevelWithFile) => void;
@@ -1079,6 +1102,7 @@ function ResidentModal({
               lang={lang}
               submissions={submissions}
               canViewPassport={canViewPassport}
+              reviewFlags={reviewFlags}
               onViewKyc={onViewKyc}
             />
           )}
@@ -1172,6 +1196,7 @@ export default function DirectoryClient({
   refreshing = false,
   migrationMissing = false,
   viewer = { id: null, email: null, role: null },
+  reviewQueue = null,
   onRefresh,
   onSave,
   onApprove,
@@ -1183,6 +1208,8 @@ export default function DirectoryClient({
   migrationMissing?: boolean;
   /** кто смотрит: паспорта — owner/admin; email — в водяной знак */
   viewer?: DirectoryViewer;
+  /** очередь проверки с сервера: profileId → KYC 1/2/3 ждут решения; null — ещё не загружена */
+  reviewQueue?: Record<string, ReviewFlags> | null;
   onRefresh: () => void;
   /** null — успех, строка — текст ошибки */
   onSave: (draft: ResidentDraft) => Promise<string | null>;
@@ -1231,14 +1258,33 @@ export default function DirectoryClient({
     [kyc.byProfile],
   );
 
+  /** Что ждёт проверки: очередь сервера + свежие файлы из KycVault (если сервер ещё не ответил) */
+  const flagsOf = useCallback(
+    (r: DirectoryResident): ReviewFlags | null => {
+      if (isStaff(r.role)) return null;
+      const server = reviewQueue?.[r.id] ?? null;
+      const local = pendingOf(r);
+      const flags: ReviewFlags = {
+        kyc1: server?.kyc1 ?? (local === 1 ? "pending" : null),
+        kyc2: server?.kyc2 ?? (local === 2 ? "pending" : null),
+        kyc3: r.kycLevel >= 3 ? null : server?.kyc3 ?? null,
+      };
+      // уровень уже подтвердили (оптимистично) — бейдж снимаем сразу
+      if (r.kycLevel >= 1) flags.kyc1 = null;
+      if (r.kycLevel >= 2) flags.kyc2 = null;
+      return hasPendingReview(flags) ? flags : null;
+    },
+    [reviewQueue, pendingOf],
+  );
+
   const counts = useMemo(
     () => ({
       total: residents.length,
       verified: residents.filter((r) => !isStaff(r.role) && r.kycLevel >= 3).length,
       review: residents.filter(needsReview).length,
-      files: residents.filter((r) => !isStaff(r.role) && pendingOf(r) !== null).length,
+      needs: residents.filter((r) => flagsOf(r) !== null).length,
     }),
-    [residents, pendingOf],
+    [residents, flagsOf],
   );
 
   const filtered = useMemo(() => {
@@ -1247,19 +1293,20 @@ export default function DirectoryClient({
       if (q && ![r.fullName, r.email, r.location, r.citizenship].some((v) => (v ?? "").toLowerCase().includes(q))) return false;
       if (statusFilter === "__none__" && r.status) return false;
       if (statusFilter !== "all" && statusFilter !== "__none__" && r.status !== statusFilter) return false;
+      if (kycFilter === "review" && flagsOf(r) === null) return false;
       if (kycFilter === "pending" && !needsReview(r)) return false;
       if (kycFilter === "verified" && !(r.kycLevel >= 3 && !isStaff(r.role))) return false;
       return true;
     });
-    // «Ждут KYC»: сверху те, у кого лежит файл на проверке
-    if (kycFilter === "pending") {
+    // «Ждут KYC» и «Все»: сверху те, кому нужна проверка (файл или запрос KYC 3)
+    if (kycFilter === "pending" || kycFilter === "all") {
       return list
-        .map((r, i) => ({ r, i, p: pendingOf(r) !== null ? 0 : 1 }))
+        .map((r, i) => ({ r, i, p: flagsOf(r) !== null ? 0 : 1 }))
         .sort((a, b) => a.p - b.p || a.i - b.i)
         .map((x) => x.r);
     }
     return list;
-  }, [residents, search, statusFilter, kycFilter, pendingOf]);
+  }, [residents, search, statusFilter, kycFilter, flagsOf]);
 
   const save = async (draft: ResidentDraft) => {
     setSaving(true);
@@ -1274,7 +1321,10 @@ export default function DirectoryClient({
     async (id: string, level: number) => {
       const err = await onApprove(id, level);
       setToast(err ? { ok: false, text: err } : { ok: true, text: t.approvedLevel(level) });
-      if (!err) kyc.reload();
+      if (!err) {
+        kyc.reload();
+        announceReviewQueueChange();
+      }
       return err;
     },
     [onApprove, t, kyc],
@@ -1284,7 +1334,10 @@ export default function DirectoryClient({
     async (id: string, submissionId: string, level: number) => {
       const err = await onReject(id, submissionId, level);
       if (err) setToast({ ok: false, text: err });
-      else kyc.reload();
+      else {
+        kyc.reload();
+        announceReviewQueueChange();
+      }
       return err;
     },
     [onReject, kyc],
@@ -1326,8 +1379,10 @@ export default function DirectoryClient({
     return items;
   };
 
-  const kycTabs: Array<{ key: KycFilter; label: string }> = [
+  const rc = reviewCopy(lang);
+  const kycTabs: Array<{ key: KycFilter; label: string; count?: number }> = [
     { key: "all", label: t.kycAll },
+    { key: "review", label: rc.needsReview, count: counts.needs },
     { key: "pending", label: t.kycPending },
     { key: "verified", label: t.kycVerified },
   ];
@@ -1372,7 +1427,7 @@ export default function DirectoryClient({
             { label: t.total, value: counts.total, tone: "text-zinc-50", on: () => setKycFilter("all") },
             { label: t.verifiedCount, value: counts.verified, tone: "text-emerald-300/90", on: () => setKycFilter("verified") },
             { label: t.reviewCount, value: counts.review, tone: "text-amber-200", on: () => setKycFilter("pending") },
-            { label: t.filesCount, value: counts.files, tone: "text-amber-100", on: () => setKycFilter("pending"), dot: counts.files > 0 },
+            { label: rc.needsReview, value: counts.needs, tone: "text-amber-200", on: () => setKycFilter("review"), dot: counts.needs > 0 },
           ].map((s) => (
             <button
               key={s.label}
@@ -1408,7 +1463,7 @@ export default function DirectoryClient({
             </select>
             <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600" aria-hidden />
           </span>
-          <div role="tablist" aria-label="KYC" className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-950/60 p-1">
+          <div role="tablist" aria-label="KYC" className="flex items-center gap-1 overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950/60 p-1 [scrollbar-width:none]">
             {kycTabs.map((tab) => (
               <button
                 key={tab.key}
@@ -1421,6 +1476,11 @@ export default function DirectoryClient({
                 }`}
               >
                 {tab.label}
+                {(tab.count ?? 0) > 0 && (
+                  <span className="ml-1.5 inline-flex min-w-[1.15rem] items-center justify-center rounded-full bg-amber-200 px-1 py-px font-mono text-[10px] font-medium text-zinc-950">
+                    {tab.count}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -1481,10 +1541,22 @@ export default function DirectoryClient({
                 const name = r.fullName ?? t.unnamed;
                 const subs = kyc.byProfile[r.id];
                 const pending = pendingOf(r);
+                const flags = flagsOf(r);
                 const showPassport = canViewPassport && hasFile(subs, 1);
                 const showVideo = hasFile(subs, 2);
                 return (
-                  <li key={r.id} className="dir-row relative transition-colors hover:bg-zinc-900/40">
+                  <li
+                    key={r.id}
+                    data-review={flags ? "pending" : undefined}
+                    className={`dir-row relative transition-colors ${
+                      flags
+                        ? "bg-amber-200/[0.045] shadow-[inset_0_0_0_1px_rgba(253,230,138,0.22)] hover:bg-amber-200/[0.08]"
+                        : "hover:bg-zinc-900/40"
+                    }`}
+                  >
+                    {flags && (
+                      <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-amber-200 shadow-[0_0_12px_rgba(253,230,138,0.55)]" />
+                    )}
                     {/* вся строка кликабельна: растянутая кнопка имени */}
                     <div className="dir-who flex items-center gap-3">
                       <Avatar src={r.avatar} name={r.fullName} />
@@ -1506,6 +1578,7 @@ export default function DirectoryClient({
                           )}
                         </p>
                         <p className="truncate font-mono text-[10px] text-zinc-600">{r.email ?? r.id.slice(0, 8)}</p>
+                        <ReviewChips flags={flags} lang={lang} className="mt-1.5" />
                       </div>
                     </div>
 
@@ -1588,6 +1661,7 @@ export default function DirectoryClient({
           saving={saving}
           submissions={editing ? kyc.byProfile[editing.id] : undefined}
           canViewPassport={canViewPassport}
+          reviewFlags={editing ? flagsOf(editing) : null}
           suspended={vault !== null}
           onViewKyc={(level) => editing && openVault(editing, level)}
           onClose={closeModal}

@@ -14,7 +14,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { BadgeCheck, ChevronRight, Handshake, Plane, Users } from "lucide-react";
-import type { Lang } from "@/app/context/LanguageContext";
+import { useLanguage, type Lang } from "@/app/context/LanguageContext";
+import { VipBadge, VipSeal, isKycElite } from "@/app/components/profile/VipBadge";
 import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
 import { usePartnerFormat } from "@/app/(dashboard)/partner/_lib/format";
 import { usePartnerFeed } from "@/app/(dashboard)/partner/_lib/usePartnerFeed";
@@ -223,6 +224,8 @@ function ResidentsView({
 }
 
 function ResidentTile({ r, t }: { r: ResidentRow; t: Dict }) {
+  const { lang } = useLanguage();
+  const elite = isKycElite(r.kycLevel);
   return (
     <Link
       href={ROUTES.resident(r.id)}
@@ -230,7 +233,10 @@ function ResidentTile({ r, t }: { r: ResidentRow; t: Dict }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-xs tracking-[0.2em] text-amber-200/80">{r.code}</p>
+          <p className="flex items-center gap-1.5 font-mono text-xs tracking-[0.2em] text-amber-200/80">
+            {r.code}
+            {elite && <VipSeal className="h-3.5 w-3.5" />}
+          </p>
           <p className="mt-1 truncate text-base font-medium text-zinc-50">{r.revealed && r.name ? r.name : t.hidden}</p>
         </div>
         <ChevronRight className="mt-1 size-4 shrink-0 text-zinc-600 transition group-hover:text-amber-200" aria-hidden />
@@ -239,6 +245,7 @@ function ResidentTile({ r, t }: { r: ResidentRow; t: Dict }) {
         {[r.height ? t.height(r.height) : null, r.languages.join(" · ") || null].filter(Boolean).join(" · ") || "—"}
       </p>
       <div className="mt-auto flex flex-wrap gap-1.5">
+        {elite && <VipBadge lang={lang} variant="compact" />}
         <TrustBadge trust={r.trust} />
         {r.workedWithMe && (
           <Pill tone="gold" icon={Handshake}>

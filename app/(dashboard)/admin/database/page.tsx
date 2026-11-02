@@ -27,6 +27,9 @@ import {
   type ResidentRecord,
 } from "@/app/actions/access-control";
 import TelegramRecoveryLinkModal, { type RecoveryModalLabels } from "@/app/components/admin/TelegramRecoveryLinkModal";
+import { getAdminReviewQueue } from "@/app/actions/admin-review";
+import { ReviewChips } from "@/app/components/admin/ReviewChips";
+import { reviewCopy, type ReviewFlags } from "@/lib/admin-review";
 
 type DatabaseText = {
   eyebrow: string; title: string; subtitle: string; countResidents: string; searchPlaceholder: string;
@@ -157,11 +160,17 @@ export default function FullDatabasePage() {
   const [duration, setDuration] = useState<BanDuration>("24_hours");
   const [reason, setReason] = useState("");
   const [recovery, setRecovery] = useState<{ link: string; expiresAt: string; profileName: string } | null>(null);
+  const [review, setReview] = useState<{ byProfile: Record<string, ReviewFlags>; verification: number }>({ byProfile: {}, verification: 0 });
+  const rc = reviewCopy(lang);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     setError(null);
-    const result = await getResidentRegistry(page, search);
+    const [result, queue] = await Promise.all([
+      getResidentRegistry(page, search),
+      getAdminReviewQueue().catch(() => null),
+    ]);
+    if (queue?.ok) setReview({ byProfile: queue.queue.byProfile, verification: queue.queue.verification });
     if (!result.ok) {
       setError(t.operationFailed);
       setRows([]);
@@ -260,7 +269,15 @@ export default function FullDatabasePage() {
           />
           {search && <button type="button" onClick={() => { setSearch(""); setPage(0); }} className="text-zinc-600 transition-colors hover:text-zinc-200" aria-label={t.clearSearch}><X size={15} /></button>}
         </label>
-        <div className="flex items-center gap-2 text-xs text-zinc-600"><ShieldCheck size={14} className="text-amber-100/55" /> {t.staffOnly}</div>
+        <div className="flex flex-wrap items-center gap-3">
+          {review.verification > 0 && (
+            <Link href="/admin?kyc=review" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-amber-200/50 bg-amber-200/[0.1] px-3.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-200/[0.16]">
+              {rc.needsReview}
+              <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-amber-200 px-1.5 py-px font-mono text-[10px] font-medium text-zinc-950">{review.verification}</span>
+            </Link>
+          )}
+          <div className="flex items-center gap-2 text-xs text-zinc-600"><ShieldCheck size={14} className="text-amber-100/55" /> {t.staffOnly}</div>
+        </div>
       </div>
 
       {notice && <div className="flex items-center justify-between rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-4 py-3 text-xs text-emerald-200/90"><span className="flex items-center gap-2"><Check size={14} />{notice}</span><button onClick={() => setNotice(null)} aria-label={t.close}><X size={14} /></button></div>}
@@ -289,8 +306,9 @@ export default function FullDatabasePage() {
                 <tr><td colSpan={9} className="px-4 py-16 text-center text-sm text-zinc-500">{t.noResidents}</td></tr>
               ) : rows.map((row) => {
                 const active = banActive(row);
+                const flags = review.byProfile[row.id] ?? null;
                 return (
-                  <tr key={row.id} className="align-top transition-colors hover:bg-white/[0.015]">
+                  <tr key={row.id} className={`align-top transition-colors ${flags ? "bg-amber-200/[0.045] shadow-[inset_3px_0_0_rgb(253,230,138),inset_0_0_0_1px_rgba(253,230,138,0.18)] hover:bg-amber-200/[0.08]" : "hover:bg-white/[0.015]"}`}>
                     <td className="max-w-[270px] px-4 py-4">
                       <div className="flex min-w-0 items-center gap-3">
                         {row.resolved_avatar_url ? <Link href={`/admin/database/${row.id}`} aria-label={t.openProfile(row.full_name || row.name || row.id)} className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-amber-200/50"><img src={row.resolved_avatar_url} alt="" className="h-10 w-10 rounded-full border border-amber-200/20 object-cover transition-opacity hover:opacity-80" /></Link> : <Link href={`/admin/database/${row.id}`} aria-label={t.openProfile(row.full_name || row.name || row.id)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xs font-medium text-amber-100/75 transition-colors hover:border-amber-200/35">{(row.full_name?.trim() || row.name?.trim() || "?").slice(0, 1).toUpperCase()}</Link>}
@@ -298,6 +316,7 @@ export default function FullDatabasePage() {
                           <Link href={`/admin/database/${row.id}`} className="block truncate text-sm font-medium text-zinc-200 transition-colors hover:text-amber-100">{row.full_name?.trim() || row.name?.trim() || t.noName}</Link>
                           <p className="mt-1 font-mono text-[10px] text-zinc-700" title={row.id}>{row.id.slice(0, 8)}…</p>
                           <p className="mt-1 text-[10px] text-zinc-600">{row.location || t.noLocation}</p>
+                          <ReviewChips flags={flags} lang={lang} className="mt-1.5" />
                         </div>
                       </div>
                     </td>

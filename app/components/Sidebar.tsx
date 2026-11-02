@@ -56,6 +56,8 @@ import { cormorant } from "@/app/components/profile/fonts";
 import { supabase } from "@/lib/supabase";
 import { isClubAdmin } from "@/lib/access";
 import { useMobileMenu, useRegisterSidebar, useScrollLock } from "@/app/context/MobileMenuContext";
+import { getAdminReviewCounts } from "@/app/actions/admin-review";
+import { REVIEW_QUEUE_EVENT, type ReviewCounts } from "@/lib/admin-review";
 
 type NavKey =
   | "myVoyage"
@@ -269,6 +271,8 @@ const translations = {
     roles: { owner: "Owner", admin: "Administrator", manager: "Manager", resident: "Resident" },
     logout: "Sign out",
     pendingInvites: (n: number) => `${n} awaiting review`,
+    pendingKyc: (n: number) => `${n} awaiting KYC review`,
+    pendingConcierge: (n: number) => `${n} new concierge requests`,
     openMenu: "Open menu",
     closeMenu: "Close menu",
     menu: "Menu",
@@ -331,6 +335,8 @@ const translations = {
     roles: { owner: "Владелец", admin: "Администратор", manager: "Менеджер", resident: "Резидент" },
     logout: "Выйти",
     pendingInvites: (n: number) => `${n} на модерации`,
+    pendingKyc: (n: number) => `${n} ждут проверки KYC`,
+    pendingConcierge: (n: number) => `${n} новых обращений к консьержу`,
     openMenu: "Открыть меню",
     closeMenu: "Закрыть меню",
     menu: "Меню",
@@ -393,6 +399,8 @@ const translations = {
     roles: { owner: "Propietario", admin: "Administrador", manager: "Gerente", resident: "Residente" },
     logout: "Cerrar sesión",
     pendingInvites: (n: number) => `${n} en moderación`,
+    pendingKyc: (n: number) => `${n} esperan revisión KYC`,
+    pendingConcierge: (n: number) => `${n} solicitudes nuevas al conserje`,
     openMenu: "Abrir menú",
     closeMenu: "Cerrar menú",
     menu: "Menú",
@@ -455,6 +463,8 @@ const translations = {
     roles: { owner: "Proprietário", admin: "Administrador", manager: "Gerente", resident: "Residente" },
     logout: "Sair",
     pendingInvites: (n: number) => `${n} em moderação`,
+    pendingKyc: (n: number) => `${n} aguardam revisão KYC`,
+    pendingConcierge: (n: number) => `${n} pedidos novos ao concierge`,
     openMenu: "Abrir menu",
     closeMenu: "Fechar menu",
     menu: "Menu",
@@ -493,6 +503,53 @@ function usePendingCount(table: "club_invites" | "guest_applications", enabled: 
     };
   }, [table, enabled]);
   return count;
+}
+
+/** Счётчики проверки: KYC 1/2/3 у «Справочника», открытые обращения у «Консьержа».
+ *  Считает сервер (service-role), поэтому RLS на kyc_submissions не мешает.
+ *  Обновляется при переходах, раз в минуту, при возврате на вкладку и по
+ *  событию REVIEW_QUEUE_EVENT (подтвердили/отклонили KYC в админке). */
+const REVIEW_POLL_MS = 60_000;
+function useReviewCounts(enabled: boolean, pathname: string): ReviewCounts {
+  const [counts, setCounts] = useState<ReviewCounts>({ verification: 0, conciergeOpen: 0 });
+  const inFlight = useRef(false);
+  const load = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      const res = await getAdminReviewCounts();
+      if (res.ok) setCounts(res.counts);
+    } catch {
+      // сеть/деплой — просто оставляем прошлые числа
+    } finally {
+      inFlight.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) {
+      setCounts({ verification: 0, conciergeOpen: 0 });
+      return;
+    }
+    void load();
+  }, [enabled, pathname, load]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, REVIEW_POLL_MS);
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener(REVIEW_QUEUE_EVENT, onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener(REVIEW_QUEUE_EVENT, onFocus);
+    };
+  }, [enabled, load]);
+
+  return counts;
 }
 
 const ROLE_BADGE: Record<Role, string> = {
@@ -535,10 +592,16 @@ export default function Sidebar() {
   const clubAdmin = isClubAdmin(role);
   const pendingInvites = usePendingCount("club_invites", clubAdmin);
   const pendingApplications = usePendingCount("guest_applications", clubAdmin);
+  const review = useReviewCounts(clubAdmin, pathname);
   const pendingFor: Partial<Record<NavKey, number>> = {
     invitations: pendingInvites,
     membershipRequests: pendingApplications,
+    directory: review.verification,
+    concierge: review.conciergeOpen,
   };
+  /** Подсказка у счётчика: у каждого раздела своя */
+  const pendingTitle = (key: NavKey, n: number) =>
+    key === "directory" ? t.pendingKyc(n) : key === "concierge" ? t.pendingConcierge(n) : t.pendingInvites(n);
 
   const t = translations[(lang as LangKey) in translations ? (lang as LangKey) : "EN"];
 
@@ -708,10 +771,10 @@ export default function Sidebar() {
       {(pendingFor[key] ?? 0) > 0 && (
         <span
           className="ml-auto inline-flex min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-amber-200 px-1.5 py-px font-mono text-[10px] font-medium text-zinc-950"
-          title={t.pendingInvites(pendingFor[key] ?? 0)}
+          title={pendingTitle(key, pendingFor[key] ?? 0)}
         >
           <span aria-hidden>{pendingFor[key]}</span>
-          <span className="sr-only">{t.pendingInvites(pendingFor[key] ?? 0)}</span>
+          <span className="sr-only">{pendingTitle(key, pendingFor[key] ?? 0)}</span>
         </span>
       )}
     </Link>

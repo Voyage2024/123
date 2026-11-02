@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { AuthorizationError, requireRole } from "@/lib/server/require-role";
 import type { Lang } from "@/app/context/LanguageContext";
+import { notifyAdminsOfConciergeRequest } from "@/lib/server/telegram/admin-notifications";
+import { isKyc3RequestTitle } from "@/lib/admin-review";
 
 export type ConciergeCategory = "travel" | "accommodation" | "transport" | "event" | "documents" | "general";
 export type ConciergeStage = "before_tour" | "during_tour" | "after_tour";
@@ -98,6 +100,38 @@ export async function createConciergeRequest(input: CreateConciergeInput) {
     }
     revalidatePath("/dashboard/concierge");
     revalidatePath("/admin/concierge");
+    revalidatePath("/admin");
+
+    // Рабочий чат: [КОНСЬЕРЖ-ЗАПРОС] или [KYC 3: …]. Ошибки доставки не ломают заявку.
+    try {
+      const { data: person } = await serviceClient().from("profiles")
+        .select("id,full_name,name,email,telegram_id,telegram_username,location,citizenship,kyc_level,segment")
+        .eq("id", profile.id)
+        .maybeSingle();
+      const kycLevel = Number(person?.kyc_level);
+      await notifyAdminsOfConciergeRequest({
+        requestId: String(data.id),
+        title: data.title,
+        category: data.category,
+        tripStage: data.trip_stage,
+        desiredAt: data.desired_at,
+        message: data.message,
+        isKyc3: isKyc3RequestTitle(data.title),
+        person: {
+          profileId: profile.id,
+          fullName: person?.full_name?.trim() || person?.name?.trim() || null,
+          email: person?.email ?? null,
+          telegramId: person?.telegram_id == null ? null : String(person.telegram_id),
+          telegramUsername: person?.telegram_username ?? null,
+          location: person?.location ?? null,
+          citizenship: person?.citizenship ?? null,
+          kycLevel: Number.isFinite(kycLevel) ? kycLevel : null,
+          segment: person?.segment ?? null,
+        },
+      });
+    } catch (notifyError) {
+      console.error("[concierge] admin Telegram notify failed", notifyError instanceof Error ? notifyError.name : "unknown");
+    }
     return { ok: true as const, request: data };
   } catch (error) {
     console.error("[concierge] create request unexpected error", error instanceof Error ? error.name : "unknown");
