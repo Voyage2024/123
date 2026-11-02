@@ -32,6 +32,15 @@ import { useAuth } from "@/app/context/AuthContext";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import { updateResidentLifestylePreference } from "@/app/actions/map-locations";
+import { updateResidentSizes } from "@/app/actions/resident-sizes";
+import {
+  CLOTHING_SIZES,
+  SHOE_SIZE_OPTIONS,
+  SIZE_COPY,
+  formatShoeSize,
+  missingSizes,
+  normalizeClothingSize,
+} from "@/lib/resident-sizes";
 import {
   attachPortfolioPhotos,
   createPortfolioUploadSlots,
@@ -556,6 +565,10 @@ interface Profile {
   height: string | number | null;
   weight: string | number | null;
   measurements: string | null;
+  /** XXS…XXL — обязательный (проверка в анкете и в server action) */
+  clothing_size?: string | null;
+  /** EU, шаг 0.5 — обязательный; numeric из БД приходит строкой */
+  shoe_size?: string | number | null;
   smoking: boolean;
   alcohol: boolean;
   about: string | null;
@@ -581,6 +594,8 @@ function emptyProfile(id: string): Profile {
     height: null,
     weight: null,
     measurements: null,
+    clothing_size: null,
+    shoe_size: null,
     smoking: false,
     alcohol: false,
     about: null,
@@ -831,6 +846,68 @@ function ToggleSwitch({
   );
 }
 
+/** Выбор размера: компактный select в стиле анкеты, с пометкой «обязательно» */
+function SizeSelect({
+  label,
+  value,
+  options,
+  unit,
+  placeholder,
+  requiredLabel,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  options: { value: string; label: string }[];
+  unit?: string;
+  placeholder: string;
+  requiredLabel: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const missing = !value;
+  return (
+    <label className="block">
+      <span className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="text-[10px] sm:text-[11px] tracking-[0.12em] sm:tracking-[0.15em] uppercase text-zinc-500 font-medium">
+          {label}
+        </span>
+        {missing && (
+          <span className="rounded-full border border-amber-200/35 bg-amber-200/[0.06] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-amber-200">
+            {requiredLabel}
+          </span>
+        )}
+      </span>
+      <span
+        className={`flex items-center gap-2 rounded-lg border bg-zinc-950/50 px-3 transition-colors ${
+          missing ? "border-amber-200/40" : "border-zinc-700/40 focus-within:border-amber-500/40"
+        }`}
+      >
+        <select
+          value={value ?? ""}
+          disabled={disabled}
+          required
+          aria-required="true"
+          onChange={(e) => {
+            if (e.target.value) onChange(e.target.value);
+          }}
+          className="min-h-10 w-full cursor-pointer appearance-none bg-transparent font-mono text-sm tracking-wide text-zinc-100 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {/* Пустой вариант только пока размер не указан: стереть его нельзя */}
+          {missing && <option value="">{placeholder}</option>}
+          {options.map((o) => (
+            <option key={o.value} value={o.value} className="bg-zinc-900">
+              {o.label}
+            </option>
+          ))}
+        </select>
+        {unit && <span className="text-xs text-zinc-500">{unit}</span>}
+      </span>
+    </label>
+  );
+}
+
 function GlassCard({
   children,
   className = "",
@@ -1009,6 +1086,7 @@ export default function ResidentProfilePage() {
   const { user, hasRole } = useAuth();
   const { lang } = useLanguage();
   const t: Dict = T[lang] ?? T.EN;
+  const sizeT = SIZE_COPY[lang] ?? SIZE_COPY.EN;
 
   // UI-проверка; настоящая защита — RLS и триггер в базе
   const isAdmin = hasRole(["owner", "admin"]) || user?.email === LEGACY_ADMIN_EMAIL;
@@ -1169,6 +1247,30 @@ export default function ResidentProfilePage() {
     setProfile((current) => current ? { ...current, ...savedPatch } : current);
   }, [user, profile]);
 
+  // ── Размеры одежды/обуви: отдельный server action с валидацией ──────
+  const [sizeError, setSizeError] = useState<string | null>(null);
+  const updateSizes = useCallback(
+    async (patch: { clothing_size?: string; shoe_size?: string }) => {
+      if (!user || !profile) return;
+      const before = { clothing_size: profile.clothing_size ?? null, shoe_size: profile.shoe_size ?? null };
+      setProfile((current) => (current ? { ...current, ...patch } : current));
+      setSizeError(null);
+      setSaving(true);
+      const result = await updateResidentSizes(patch);
+      setSaving(false);
+      if (!result.ok) {
+        setProfile((current) => (current ? { ...current, ...before } : current));
+        setSizeError((SIZE_COPY[lang] ?? SIZE_COPY.EN).saveError);
+        console.error("Could not save sizes:", result.reason);
+        return;
+      }
+      setProfile((current) =>
+        current ? { ...current, clothing_size: result.clothing_size, shoe_size: result.shoe_size } : current
+      );
+    },
+    [user, profile, lang]
+  );
+
   // ── Универсальное сохранение (optimistic + upsert) ──────────────────
   const updateProfile = useCallback(
     async (patch: Partial<Profile>) => {
@@ -1318,9 +1420,10 @@ export default function ResidentProfilePage() {
       profile.about,
     ];
     let done = textFields.filter(isFilled).length; // до 8
+    done += 2 - missingSizes(profile).length; // размеры одежды и обуви — до 2
     done += Math.min((profile.photo_urls ?? []).length, 3); // до 3
     done += profile.kyc_level >= 3 ? 1 : 0; // до 1
-    return Math.round((done / 12) * 100);
+    return Math.round((done / 14) * 100);
   }, [profile, displayName]);
 
   // ── Состояния загрузки / отсутствия пользователя ────────────────────
@@ -1684,6 +1787,42 @@ export default function ResidentProfilePage() {
                     </p>
                   </div>
                 </div>
+
+                {/* Размеры одежды и обуви — обязательные поля анкеты */}
+                <div className="mt-5 grid grid-cols-2 gap-3 border-t border-zinc-800/40 pt-4">
+                  <SizeSelect
+                    label={sizeT.clothing}
+                    value={normalizeClothingSize(profile.clothing_size)}
+                    options={CLOTHING_SIZES.map((s) => ({ value: s, label: s }))}
+                    placeholder={sizeT.choose}
+                    requiredLabel={sizeT.required}
+                    disabled={!canEditOwn || saving}
+                    onChange={(v) => updateSizes({ clothing_size: v })}
+                  />
+                  <SizeSelect
+                    label={sizeT.shoe}
+                    value={formatShoeSize(profile.shoe_size)}
+                    options={SHOE_SIZE_OPTIONS.map((n) => {
+                      const v = formatShoeSize(n) ?? String(n);
+                      return { value: v, label: v };
+                    })}
+                    unit={sizeT.shoeUnit}
+                    placeholder={sizeT.choose}
+                    requiredLabel={sizeT.required}
+                    disabled={!canEditOwn || saving}
+                    onChange={(v) => updateSizes({ shoe_size: v })}
+                  />
+                </div>
+                {missingSizes(profile).length > 0 && (
+                  <p className="mt-3 rounded-lg border border-amber-200/25 bg-amber-200/[0.05] px-3 py-2 text-[11px] leading-5 text-amber-100/80">
+                    {sizeT.requiredHint}
+                  </p>
+                )}
+                {sizeError && (
+                  <p role="alert" className="mt-2 text-[11px] text-rose-300">
+                    {sizeError}
+                  </p>
+                )}
               </div>
             </GlassCard>
 

@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarClock, CircleUserRound, ShieldCheck } from "lucide-react";
 import ResidentProfileManagement from "@/app/(dashboard)/admin/database/[id]/ResidentProfileManagement";
 import DeleteResidentDangerZone from "@/app/(dashboard)/admin/database/[id]/DeleteResidentDangerZone";
+import ResidentPdfExports from "@/app/(dashboard)/admin/database/[id]/ResidentPdfExports";
+import { formatShoeSize, normalizeClothingSize } from "@/lib/resident-sizes";
 import { createClient } from "@/lib/supabase/server";
 import { VipAvatarMark, VipBadge, VipSeal, isKycElite } from "@/app/components/profile/VipBadge";
 import { ReviewChips } from "@/app/components/admin/ReviewChips";
@@ -54,11 +56,21 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
     redirect("/login");
   }
 
-  const { data: profile, error } = await supabase.from("profiles")
-    .select("id,full_name,name,email,role,status,kyc_level,telegram_id,telegram_username,avatar_url,photo_urls,location,citizenship,birth_date,height,weight,measurements,about,segment,circle,level,reliability,influence_index,tour_points,usdt_wallet,banned_until,ban_reason,ban_permanent,created_at,last_seen_at,registration_source")
+  const PROFILE_COLUMNS = "id,full_name,name,email,role,status,kyc_level,telegram_id,telegram_username,avatar_url,photo_urls,location,citizenship,birth_date,height,weight,measurements,about,segment,circle,level,reliability,influence_index,tour_points,usdt_wallet,banned_until,ban_reason,ban_permanent,created_at,last_seen_at,registration_source";
+  type ProfileWithSizes = { clothing_size?: string | null; shoe_size?: string | number | null };
+  let profileQuery = await supabase.from("profiles")
+    .select(`${PROFILE_COLUMNS},clothing_size,shoe_size`)
     .eq("id", id)
     .maybeSingle();
+  // 42703: миграция с размерами ещё не применена — карточка открывается без них.
+  if (profileQuery.error?.code === "42703") {
+    profileQuery = await supabase.from("profiles").select(PROFILE_COLUMNS).eq("id", id).maybeSingle() as typeof profileQuery;
+  }
+  const { data: profile, error } = profileQuery;
   if (error || !profile) notFound();
+  const sizes = profile as ProfileWithSizes;
+  const clothingSize = normalizeClothingSize(sizes.clothing_size);
+  const shoeSize = formatShoeSize(sizes.shoe_size);
 
   let avatarUrl: string | null = profile.avatar_url ?? profile.photo_urls?.[0] ?? null;
   if (avatarUrl && !/^https?:\/\//i.test(avatarUrl)) {
@@ -94,6 +106,8 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
       </div>
     </header>
 
+    {profile.role === "resident" && <ResidentPdfExports profileId={profile.id} viewerRole={String(actor.role)} />}
+
     {pendingReview && review && <section aria-label={rc.bannerTitle} className="relative overflow-hidden rounded-2xl border border-amber-200/50 bg-amber-200/[0.07] p-4 sm:p-5">
       <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-amber-200 shadow-[0_0_12px_rgba(253,230,138,0.55)]" />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -110,7 +124,7 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
     </section>}
 
     <section className="space-y-3"><h2 className="font-serif text-xl text-zinc-100">Идентификация и доступ</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Email / логин" value={profile.email} /><Field label="Telegram ID" value={profile.telegram_id} /><Field label="Telegram username" value={profile.telegram_username ? `@${profile.telegram_username.replace(/^@/, "")}` : null} /><Field label="Роль" value={profile.role} /><Field label="KYC" value={`${profile.kyc_level ?? 0}/3`} /><Field label="Дата создания" value={fmt(profile.created_at)} /><Field label="Источник регистрации" value={profile.registration_source} /><Field label="Блокировка до" value={profile.ban_permanent ? "Навсегда" : profile.banned_until ? bannedUntil : "Не заблокирован"} /><Field label="Причина блокировки" value={profile.ban_reason} /></div></section>
-    <section className="space-y-3"><h2 className="font-serif text-xl text-zinc-100">Профиль резидента</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Локация" value={profile.location} /><Field label="Гражданство" value={profile.citizenship} /><Field label="Дата рождения" value={profile.birth_date} /><Field label="Рост" value={profile.height} /><Field label="Вес" value={profile.weight} /><Field label="Параметры" value={profile.measurements} /><Field label="Индекс влияния" value={profile.influence_index} /><Field label="Баллы" value={profile.tour_points} /><Field label="USDT кошелёк" value={profile.usdt_wallet} /></div></section>
+    <section className="space-y-3"><h2 className="font-serif text-xl text-zinc-100">Профиль резидента</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Локация" value={profile.location} /><Field label="Гражданство" value={profile.citizenship} /><Field label="Дата рождения" value={profile.birth_date} /><Field label="Рост" value={profile.height} /><Field label="Вес" value={profile.weight} /><Field label="Параметры" value={profile.measurements} /><Field label="Размер одежды" value={clothingSize ?? (profile.role === "resident" ? "Не указан" : null)} /><Field label="Размер обуви (EU)" value={shoeSize ?? (profile.role === "resident" ? "Не указан" : null)} /><Field label="Индекс влияния" value={profile.influence_index} /><Field label="Баллы" value={profile.tour_points} /><Field label="USDT кошелёк" value={profile.usdt_wallet} /></div></section>
     {profile.role === "resident" && <div id="kyc-review" className="scroll-mt-24" />}
     {profile.role === "resident" && <ResidentProfileManagement
       profileId={profile.id}

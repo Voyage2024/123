@@ -94,7 +94,7 @@ const DICT: Record<Lang, ShelfDict> = {
       chat_empress: ["Императрица чата", "Жизнь комьюнити"],
       global_reach: ["Глобальный охват", "Международные проекты агентства"],
       tradition_keeper: ["Хранительница традиций", "Профиль и безопасность заполнены"],
-      status_legend: ["Легенда Status", "Особый вклад в комьюнити"],
+      status_legend: ["Легенда Voyage", "Особый вклад в комьюнити"],
     },
   },
   EN: {
@@ -114,7 +114,7 @@ const DICT: Record<Lang, ShelfDict> = {
       chat_empress: ["Empress of the Chat", "The life of the community"],
       global_reach: ["Global Reach", "International agency projects"],
       tradition_keeper: ["Keeper of Traditions", "Profile and security complete"],
-      status_legend: ["Status Legend", "A special mark on the community"],
+      status_legend: ["Voyage Legend", "A special mark on the community"],
     },
   },
   ES: {
@@ -134,7 +134,7 @@ const DICT: Record<Lang, ShelfDict> = {
       chat_empress: ["Emperatriz del chat", "Alma de la comunidad"],
       global_reach: ["Alcance global", "Proyectos internacionales de la agencia"],
       tradition_keeper: ["Guardiana de tradiciones", "Perfil y seguridad completos"],
-      status_legend: ["Leyenda Status", "Aporte especial a la comunidad"],
+      status_legend: ["Leyenda Voyage", "Aporte especial a la comunidad"],
     },
   },
   PT: {
@@ -154,7 +154,7 @@ const DICT: Record<Lang, ShelfDict> = {
       chat_empress: ["Imperatriz do chat", "Alma da comunidade"],
       global_reach: ["Alcance global", "Projetos internacionais da agência"],
       tradition_keeper: ["Guardiã das tradições", "Perfil e segurança completos"],
-      status_legend: ["Lenda Status", "Contribuição especial à comunidade"],
+      status_legend: ["Lenda Voyage", "Contribuição especial à comunidade"],
     },
   },
 };
