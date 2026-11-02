@@ -1820,6 +1820,7 @@ export default function ResidentProfilePage() {
           kycLevel={profile.kyc_level}
           isAdmin={isAdmin}
           onSetLevel={setKyc}
+          fullName={displayName}
         />
 
         {/* ── Personal Vault ─────────────────────────────────────── */}

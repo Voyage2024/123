@@ -5,7 +5,10 @@
  * app/components/profile/KycSection.tsx
  *
  *   Уровень 1 · Личность  — паспорт (JPG/PNG/PDF ≤ 10 МБ), плашка безопасности
- *   Уровень 2 · Лояльность — видео (MP4/MOV/WEBM ≤ 50 МБ) через модалку
+ *   Уровень 2 · Лояльность — видео (MP4/MOV/WEBM ≤ 50 МБ) через модалку;
+ *                           перед загрузкой — памятка VideoGuide: правила
+ *                           съёмки + фраза с именем и сегодняшней датой
+ *                           и кнопкой «Скопировать текст»
  *   Уровень 3 · Доверие   — информационный блок: созвон через консьержа
  *
  * БЕЗОПАСНОСТЬ (см. миграцию 20261009_profile_kyc_vault.sql):
@@ -24,12 +27,17 @@ import {
   CheckCircle2,
   Clock,
   ConciergeBell,
+  Copy,
+  Glasses,
   Hourglass,
   Loader2,
   Lock,
+  Mic,
   Phone,
+  ScanFace,
   Shield,
   ShieldCheck,
+  Sun,
   Upload,
   Video,
   X,
@@ -149,6 +157,22 @@ type KycDict = {
   doneTitle: string;
   doneNote: string;
   backToProfile: string;
+  /* — памятка к видео (уровень 2) — */
+  vgTitle: string;
+  vgLead: string;
+  vgRules: { title: string; hint: string }[];
+  vgPhraseLabel: string;
+  vgPhraseHint: string;
+  /** Шаблон фразы; {name} и {date} подставляются автоматически */
+  vgPhrase: string;
+  vgNamePlaceholder: string;
+  vgNameLabel: string;
+  vgNameMissing: string;
+  vgDate: string;
+  vgCopy: string;
+  vgCopied: string;
+  vgCopyFailed: string;
+  vgDuration: string;
 };
 
 const RU: KycDict = {
@@ -200,6 +224,26 @@ const RU: KycDict = {
   doneTitle: "Файл на проверке",
   doneNote: "Как только команда подтвердит файл, уровень откроется автоматически.",
   backToProfile: "Вернуться в профиль",
+  vgTitle: "Как записать видео",
+  vgLead: "Видео на 15–30 секунд, одним дублем, без монтажа. Перед записью проверьте четыре пункта:",
+  vgRules: [
+    { title: "Чёткое освещение", hint: "Свет падает на лицо — встаньте лицом к окну или лампе, не спиной к свету." },
+    { title: "Без очков и фильтров", hint: "Без солнцезащитных очков, масок и «бьюти»-фильтров. Лёгкий макияж — можно." },
+    { title: "Лицо полностью в кадре", hint: "Голова и плечи в кадре, камера на уровне глаз, смотрите в объектив." },
+    { title: "Чёткая речь", hint: "Тихое место без музыки. Говорите спокойно и разборчиво." },
+  ],
+  vgPhraseLabel: "Что сказать на камеру",
+  vgPhraseHint: "Произнесите фразу дословно — имя и дата уже подставлены.",
+  vgPhrase:
+    "Я, {name}, подтверждаю свою личность для регистрации на платформе VOYAGE, сегодня {date}. Все предоставленные данные и фотографии достоверны.",
+  vgNamePlaceholder: "[Имя Фамилия]",
+  vgNameLabel: "Имя и фамилия как в паспорте",
+  vgNameMissing: "Впишите имя и фамилию — они появятся во фразе.",
+  vgDate: "Дата",
+  vgCopy: "Скопировать текст",
+  vgCopied: "Скопировано",
+  vgCopyFailed: "Не удалось скопировать — выделите текст вручную.",
+  vgDuration: "15–30 сек",
 };
 
 const EN: KycDict = {
@@ -251,6 +295,26 @@ const EN: KycDict = {
   doneTitle: "File in review",
   doneNote: "As soon as the team confirms the file, the level opens automatically.",
   backToProfile: "Back to profile",
+  vgTitle: "How to record the video",
+  vgLead: "A 15–30 second video, in one take, unedited. Before you record, check these four points:",
+  vgRules: [
+    { title: "Clear lighting", hint: "Light falls on your face — face a window or a lamp, not with your back to the light." },
+    { title: "No glasses or filters", hint: "No sunglasses, masks or beauty filters. Light makeup is fine." },
+    { title: "Face fully in frame", hint: "Head and shoulders in frame, camera at eye level, look into the lens." },
+    { title: "Clear speech", hint: "A quiet place with no music. Speak calmly and clearly." },
+  ],
+  vgPhraseLabel: "What to say on camera",
+  vgPhraseHint: "Say the phrase word for word — your name and the date are already filled in.",
+  vgPhrase:
+    "My name is {name}, I confirm my identity for registration on the VOYAGE platform, today is {date}. All the information and photos I have provided are genuine.",
+  vgNamePlaceholder: "[First and last name]",
+  vgNameLabel: "First and last name as in your passport",
+  vgNameMissing: "Enter your first and last name — they will appear in the phrase.",
+  vgDate: "Date",
+  vgCopy: "Copy text",
+  vgCopied: "Copied",
+  vgCopyFailed: "Couldn't copy — please select the text manually.",
+  vgDuration: "15–30 sec",
 };
 
 const ES: KycDict = {
@@ -303,6 +367,26 @@ const ES: KycDict = {
   doneTitle: "Archivo en revisión",
   doneNote: "En cuanto el equipo confirme el archivo, el nivel se abrirá automáticamente.",
   backToProfile: "Volver al perfil",
+  vgTitle: "Cómo grabar el video",
+  vgLead: "Un video de 15–30 segundos, en una sola toma, sin edición. Antes de grabar, revise estos cuatro puntos:",
+  vgRules: [
+    { title: "Buena iluminación", hint: "La luz debe caer sobre su rostro: póngase de frente a una ventana o lámpara, no de espaldas a la luz." },
+    { title: "Sin gafas ni filtros", hint: "Sin gafas de sol, mascarillas ni filtros de belleza. Se permite maquillaje ligero." },
+    { title: "Rostro completo en cuadro", hint: "Cabeza y hombros en cuadro, cámara a la altura de los ojos, mire al objetivo." },
+    { title: "Habla clara", hint: "Un lugar tranquilo, sin música. Hable con calma y de forma clara." },
+  ],
+  vgPhraseLabel: "Qué decir a la cámara",
+  vgPhraseHint: "Diga la frase palabra por palabra: su nombre y la fecha ya están incluidos.",
+  vgPhrase:
+    "Mi nombre es {name}, confirmo mi identidad para el registro en la plataforma VOYAGE, hoy es {date}. Todos los datos y fotografías proporcionados son auténticos.",
+  vgNamePlaceholder: "[Nombre y apellido]",
+  vgNameLabel: "Nombre y apellido como en el pasaporte",
+  vgNameMissing: "Escriba su nombre y apellido: aparecerán en la frase.",
+  vgDate: "Fecha",
+  vgCopy: "Copiar texto",
+  vgCopied: "Copiado",
+  vgCopyFailed: "No se pudo copiar: seleccione el texto manualmente.",
+  vgDuration: "15–30 s",
 };
 
 const PT: KycDict = {
@@ -355,9 +439,73 @@ const PT: KycDict = {
   doneTitle: "Arquivo em análise",
   doneNote: "Assim que a equipe confirmar o arquivo, o nível será liberado automaticamente.",
   backToProfile: "Voltar ao perfil",
+  vgTitle: "Como gravar o vídeo",
+  vgLead: "Um vídeo de 15–30 segundos, em uma única tomada, sem edição. Antes de gravar, confira estes quatro pontos:",
+  vgRules: [
+    { title: "Boa iluminação", hint: "A luz deve cair sobre o rosto: fique de frente para uma janela ou luminária, não de costas para a luz." },
+    { title: "Sem óculos nem filtros", hint: "Sem óculos de sol, máscaras ou filtros de beleza. Maquiagem leve é permitida." },
+    { title: "Rosto inteiro no quadro", hint: "Cabeça e ombros no quadro, câmera na altura dos olhos, olhe para a lente." },
+    { title: "Fala clara", hint: "Um lugar silencioso, sem música. Fale com calma e de forma clara." },
+  ],
+  vgPhraseLabel: "O que dizer para a câmera",
+  vgPhraseHint: "Diga a frase palavra por palavra: seu nome e a data já estão preenchidos.",
+  vgPhrase:
+    "Meu nome é {name}, confirmo minha identidade para o cadastro na plataforma VOYAGE, hoje é {date}. Todos os dados e fotos fornecidos são verdadeiros.",
+  vgNamePlaceholder: "[Nome e sobrenome]",
+  vgNameLabel: "Nome e sobrenome como no passaporte",
+  vgNameMissing: "Digite seu nome e sobrenome: eles aparecerão na frase.",
+  vgDate: "Data",
+  vgCopy: "Copiar texto",
+  vgCopied: "Copiado",
+  vgCopyFailed: "Não foi possível copiar: selecione o texto manualmente.",
+  vgDuration: "15–30 s",
 };
 
 const DICT: Record<Lang, KycDict> = { RU, EN, ES, PT };
+
+/** Локаль для даты во фразе */
+const DATE_LOCALE: Record<Lang, string> = { RU: "ru-RU", EN: "en-GB", ES: "es-ES", PT: "pt-BR" };
+
+/** «2 ноября 2026» / «2 November 2026» / «2 de noviembre de 2026» / «2 de novembro de 2026» */
+function spokenDate(lang: Lang, d = new Date()): string {
+  return new Intl.DateTimeFormat(DATE_LOCALE[lang] ?? "en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+    .format(d)
+    .replace(/\s?\u0433\.$/, ""); // ru-RU добавляет « г.» — вслух это не нужно
+}
+
+/** Подставляет {name} и {date} в шаблон фразы */
+export function buildVideoPhrase(t: Pick<KycDict, "vgPhrase">, name: string, date: string): string {
+  return t.vgPhrase.replace("{name}", name).replace("{date}", date);
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* падаем в запасной вариант ниже */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 /* ══════════════════════════════════════════════════════════════════
  * ТИПЫ И СОСТОЯНИЯ
@@ -553,6 +701,188 @@ function KycCard({
 }
 
 /* ══════════════════════════════════════════════════════════════════
+ * ПАМЯТКА К ВИДЕО (уровень 2)
+ * правила съёмки + фраза с именем и датой + «Скопировать текст»
+ * ══════════════════════════════════════════════════════════════════ */
+
+const RULE_ICONS: readonly LucideIcon[] = [Sun, Glasses, ScanFace, Mic];
+
+/** Схема кадра: телефон, рамка, овал лица, плечи, REC */
+function FrameIllustration() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 96 132"
+      className="h-[112px] w-[82px] shrink-0 text-amber-200 sm:h-[132px] sm:w-[96px]"
+      fill="none"
+    >
+      <rect x="2" y="2" width="92" height="128" rx="16" className="fill-zinc-950/70" stroke="currentColor" strokeOpacity="0.28" />
+      <rect x="38" y="8" width="20" height="3" rx="1.5" fill="currentColor" fillOpacity="0.25" />
+      {/* уголки кадра */}
+      <g stroke="currentColor" strokeOpacity="0.85" strokeWidth="1.6" strokeLinecap="round">
+        <path d="M14 30v-8h8M82 30v-8h-8M14 104v8h8M82 104v8h-8" />
+      </g>
+      {/* лицо и плечи */}
+      <ellipse cx="48" cy="58" rx="15" ry="19" stroke="currentColor" strokeOpacity="0.9" strokeWidth="1.4" strokeDasharray="3 2.5" />
+      <path d="M22 108c2-15 13-23 26-23s24 8 26 23" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.4" />
+      {/* линия глаз = уровень камеры */}
+      <path d="M30 55h36" stroke="currentColor" strokeOpacity="0.25" strokeDasharray="1.5 2.5" />
+      {/* REC */}
+      <circle cx="20" cy="17" r="2.4" className="animate-pulse fill-rose-400" />
+      <text x="25" y="19.4" fontSize="6.5" letterSpacing="0.8" fill="currentColor" fillOpacity="0.7" fontFamily="ui-monospace,monospace">
+        REC
+      </text>
+    </svg>
+  );
+}
+
+function VideoGuide({ t, lang, fullName }: { t: KycDict; lang: Lang; fullName: string | null }) {
+  const nameId = useId();
+  const [name, setName] = useState(() => fullName?.trim() ?? "");
+  const [copy, setCopy] = useState<"idle" | "done" | "fail">("idle");
+  // дата считается в браузере резидента — это её «сегодня»
+  const [date] = useState(() => spokenDate(lang));
+
+  useEffect(() => {
+    if (copy === "idle") return;
+    const id = window.setTimeout(() => setCopy("idle"), 2200);
+    return () => window.clearTimeout(id);
+  }, [copy]);
+
+  const shownName = name.trim();
+  const phrase = buildVideoPhrase(t, shownName || t.vgNamePlaceholder, date);
+
+  const onCopy = async () => setCopy((await copyToClipboard(phrase)) ? "done" : "fail");
+
+  // фраза с подсветкой подставленных значений
+  const parts = t.vgPhrase.split(/(\{name\}|\{date\})/);
+  const [qOpen, qClose] = lang === "EN" ? ["“", "”"] : ["«", "»"];
+
+  return (
+    <section
+      aria-label={t.vgTitle}
+      className="relative overflow-hidden rounded-2xl border border-amber-200/20 bg-[linear-gradient(160deg,rgba(253,230,138,0.07)_0%,rgba(253,230,138,0.015)_55%,transparent_100%)] p-4 sm:p-5"
+    >
+      <div aria-hidden className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/50 to-transparent" />
+
+      {/* шапка */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.26em] text-amber-200">
+          <Video aria-hidden className="h-3.5 w-3.5" strokeWidth={1.6} />
+          {t.vgTitle}
+        </p>
+        <div className="flex gap-1.5">
+          <span className="rounded-full border border-amber-200/25 px-2 py-0.5 font-mono text-[10px] text-amber-200/85">
+            {t.vgDuration}
+          </span>
+          <span className="rounded-full border border-zinc-700/60 px-2 py-0.5 font-mono text-[10px] text-zinc-400">
+            ≤ 50 MB
+          </span>
+        </div>
+      </div>
+
+      {/* схема кадра + вступление */}
+      <div className="mt-3.5 flex items-center gap-4">
+        <FrameIllustration />
+        <p className="text-[13px] leading-relaxed text-zinc-300">{t.vgLead}</p>
+      </div>
+
+      {/* правила съёмки */}
+      <ol className="mt-4 grid gap-2 sm:grid-cols-2">
+        {t.vgRules.map((r, i) => {
+          const Icon = RULE_ICONS[i] ?? Check;
+          return (
+            <li
+              key={r.title}
+              className="flex items-start gap-3 rounded-xl border border-white/[0.06] bg-zinc-950/45 p-3"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-200/30 bg-amber-200/[0.06] text-amber-200">
+                <Icon aria-hidden className="h-4 w-4" strokeWidth={1.5} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[12.5px] font-medium leading-snug text-zinc-100">{r.title}</p>
+                <p className="mt-0.5 text-[11.5px] leading-snug text-zinc-400">{r.hint}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      {/* фраза */}
+      <div className="mt-4 rounded-xl border border-amber-200/20 bg-black/40 p-3.5 sm:p-4">
+        <p className="text-[9px] font-semibold uppercase tracking-[0.3em] text-amber-200/80">{t.vgPhraseLabel}</p>
+        <p className="mt-1 text-[11.5px] leading-snug text-zinc-500">{t.vgPhraseHint}</p>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+          <label htmlFor={nameId} className="sr-only">
+            {t.vgNameLabel}
+          </label>
+          <input
+            id={nameId}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t.vgNameLabel}
+            autoComplete="name"
+            maxLength={80}
+            className="min-h-10 w-full rounded-lg border border-zinc-700/70 bg-zinc-950/70 px-3 text-[13px] text-zinc-100 placeholder:text-zinc-600 focus:border-amber-200/50 focus:outline-none focus:ring-1 focus:ring-amber-200/30"
+          />
+          <span className="inline-flex min-h-10 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 text-[12px] text-zinc-400">
+            <span className="mr-1.5 text-[9px] uppercase tracking-[0.2em] text-zinc-600">{t.vgDate}</span>
+            {date}
+          </span>
+        </div>
+        {!shownName && <p className="mt-1.5 text-[11px] text-amber-200/70">{t.vgNameMissing}</p>}
+
+        <blockquote
+          className={`${cormorant.className} mt-3.5 border-l-2 border-amber-200/60 pl-3.5 text-[18px] leading-[1.4] text-zinc-100 sm:text-[19px]`}
+        >
+          {qOpen}
+          {parts.map((part, i) =>
+            part === "{name}" ? (
+              <mark
+                key={i}
+                className={
+                  shownName
+                    ? "rounded bg-amber-200/10 px-1 text-amber-200"
+                    : "rounded border border-dashed border-amber-200/40 bg-transparent px-1 text-amber-200/60"
+                }
+              >
+                {shownName || t.vgNamePlaceholder}
+              </mark>
+            ) : part === "{date}" ? (
+              <mark key={i} className="rounded bg-amber-200/10 px-1 text-amber-200">
+                {date}
+              </mark>
+            ) : (
+              <span key={i}>{part}</span>
+            ),
+          )}
+          {qClose}
+        </blockquote>
+
+        <div className="mt-3.5 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void onCopy()}
+            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-amber-200/40 bg-amber-200/[0.08] px-4 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-amber-200 transition-colors hover:border-amber-200/70 hover:bg-amber-200/[0.14] focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-200/60"
+          >
+            {copy === "done" ? (
+              <Check aria-hidden className="h-3.5 w-3.5" strokeWidth={2} />
+            ) : (
+              <Copy aria-hidden className="h-3.5 w-3.5" strokeWidth={1.6} />
+            )}
+            {copy === "done" ? t.vgCopied : t.vgCopy}
+          </button>
+          <span role="status" aria-live="polite" className="text-[11px] text-rose-300">
+            {copy === "fail" ? t.vgCopyFailed : ""}
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
  * МОДАЛКА ЗАГРУЗКИ
  * мобильная — шторка снизу, sm+ — диалог по центру
  * ══════════════════════════════════════════════════════════════════ */
@@ -561,12 +891,16 @@ function UploadDialog({
   level,
   userId,
   t,
+  lang,
+  fullName,
   onClose,
   onUploaded,
 }: {
   level: UploadLevel;
   userId: string;
   t: KycDict;
+  lang: Lang;
+  fullName: string | null;
   onClose: () => void;
   onUploaded: () => void;
 }) {
@@ -665,7 +999,7 @@ function UploadDialog({
 
   const title = level === 1 ? t.passportDialogTitle : t.videoDialogTitle;
   const desc = level === 1 ? t.passportDialogDesc : t.videoDialogDesc;
-  const rules = level === 1 ? [t.passportFormats, t.passportSize] : [t.makeup, t.videoSize];
+  const rules = [t.passportFormats, t.passportSize];
   const FileIcon = level === 1 ? Shield : Video;
 
   return createPortal(
@@ -680,7 +1014,7 @@ function UploadDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-[26px] border-t border-[#d4a853]/30 bg-gradient-to-b from-[#141416] to-[#0d0d0f] px-5 pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-2.5 text-zinc-100 shadow-[0_-30px_60px_-10px_rgba(0,0,0,0.7)] sm:max-w-md sm:rounded-[22px] sm:border sm:border-zinc-800/70 sm:px-7 sm:pb-7 sm:pt-6"
+        className={`relative max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-[26px] border-t border-[#d4a853]/30 bg-gradient-to-b from-[#141416] to-[#0d0d0f] px-5 pb-[max(1.75rem,env(safe-area-inset-bottom))] pt-2.5 text-zinc-100 shadow-[0_-30px_60px_-10px_rgba(0,0,0,0.7)] ${level === 2 ? "sm:max-w-xl" : "sm:max-w-md"} sm:rounded-[22px] sm:border sm:border-zinc-800/70 sm:px-7 sm:pb-7 sm:pt-6`}
       >
         <div aria-hidden className="mx-auto mb-3.5 h-1 w-[38px] rounded-full bg-white/15 sm:hidden" />
 
@@ -730,17 +1064,21 @@ function UploadDialog({
               <p className="mt-2 text-[13px] leading-relaxed text-zinc-400">{desc}</p>
             </div>
 
-            <div className="rounded-[14px] border border-zinc-800/70 bg-zinc-900/60 px-4 py-3.5">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.3em] text-zinc-500">{t.brief}</p>
-              <ul className="mt-2.5 flex flex-col gap-2">
-                {rules.map((r) => (
-                  <li key={r} className="flex items-start gap-2.5 text-[13px] leading-snug text-zinc-200">
-                    <Check aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#d4a853]" strokeWidth={2} />
-                    {r}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            {level === 2 ? (
+              <VideoGuide t={t} lang={lang} fullName={fullName} />
+            ) : (
+              <div className="rounded-[14px] border border-zinc-800/70 bg-zinc-900/60 px-4 py-3.5">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.3em] text-zinc-500">{t.brief}</p>
+                <ul className="mt-2.5 flex flex-col gap-2">
+                  {rules.map((r) => (
+                    <li key={r} className="flex items-start gap-2.5 text-[13px] leading-snug text-zinc-200">
+                      <Check aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#d4a853]" strokeWidth={2} />
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {level === 1 && <PrivacyPlaque t={t} />}
 
@@ -833,12 +1171,15 @@ export function KycSection({
   kycLevel,
   isAdmin,
   onSetLevel,
+  fullName = null,
 }: {
   userId: string;
   lang: Lang;
   kycLevel: number;
   isAdmin: boolean;
   onSetLevel: (n: number) => void;
+  /** Имя резидента для фразы в видео; можно поправить прямо в памятке */
+  fullName?: string | null;
 }) {
   const t = DICT[lang] ?? DICT.EN;
   const [subs, setSubs] = useState<Submission[]>([]);
@@ -932,6 +1273,7 @@ export function KycSection({
           {s2 !== "completed" && (
             <div className="flex flex-col items-start gap-3 border-t border-white/[0.05] pt-3.5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                <Chip>{t.vgDuration}</Chip>
                 <Chip>{t.makeup.replace(/\.$/, "")}</Chip>
                 <Chip>{t.videoSizeShort}</Chip>
               </div>
@@ -984,6 +1326,8 @@ export function KycSection({
           level={dialog}
           userId={userId}
           t={t}
+          lang={lang}
+          fullName={fullName}
           onClose={closeDialog}
           onUploaded={() => void loadSubs()}
         />
