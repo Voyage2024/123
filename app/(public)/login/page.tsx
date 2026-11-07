@@ -9,6 +9,8 @@ import { getRoleHomePath } from "@/lib/rbac";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { cormorant } from "@/app/components/profile/fonts";
 import { supabase } from "@/lib/supabase";
+import LoginDialogue from "@/app/(public)/login/_components/LoginDialogue";
+import { resolveLoginScene, type LoginField } from "@/app/(public)/login/_components/loginDialogue.copy";
 
 // ---------------------------------------------------------------------------
 // Вход по никнейму: "admin1" -> "admin1@voyage-models.com"
@@ -181,9 +183,27 @@ export default function LoginPage() {
   const [errorKey, setErrorKey] = useState<ErrorKey | null>(null);
   /** Приветствие партнёра, пока открывается Штаб */
   const [welcome, setWelcome] = useState<string | null>(null);
+  /** Фокус формы — по нему персонажи слева меняют реплики */
+  const [focusedField, setFocusedField] = useState<LoginField>(null);
+  const [lastField, setLastField] = useState<LoginField>(null);
+
+  const focusField = (field: Exclude<LoginField, null>) => {
+    setFocusedField(field);
+    setLastField(field);
+  };
+  const blurField = () => setFocusedField(null);
 
   const hasError = errorKey !== null;
   const isNickname = email.trim().length > 0 && !email.includes("@");
+
+  const dialogueScene = resolveLoginScene({
+    focusedField,
+    lastField,
+    loginValue: email,
+    passwordValue: password,
+    isLoading,
+    hasError,
+  });
 
   // Сбрасываем ошибку, как только пользователь начинает исправлять ввод
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -276,8 +296,16 @@ export default function LoginPage() {
   return (
     // pt-24 уже задан в layout.tsx — здесь вычитаем высоту шапки (6rem),
     // чтобы форма центрировалась в видимой области и не уходила под Navbar
-    <main className="relative flex min-h-[calc(100dvh-6rem)] items-center justify-center overflow-hidden bg-zinc-950 px-4 py-10 sm:py-16">
+    <main className="relative flex min-h-[calc(100dvh-6rem)] flex-col items-center justify-center gap-4 overflow-hidden bg-zinc-950 px-4 py-10 sm:py-16 lg:flex-row lg:gap-14">
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-200/[0.04] blur-[120px]" />
+
+      {/* Диалог двух резиденток: слева от формы на десктопе, компактный баббл над формой на мобильных */}
+      <div className="relative z-10 hidden lg:block">
+        <LoginDialogue scene={dialogueScene} lang={lang} layout="stage" />
+      </div>
+      <div className="relative z-10 flex w-full justify-center lg:hidden">
+        <LoginDialogue scene={dialogueScene} lang={lang} layout="compact" />
+      </div>
 
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-8 backdrop-blur-xl sm:p-10">
         {/* Логотип */}
@@ -327,6 +355,8 @@ export default function LoginPage() {
                 placeholder={t.loginPlaceholder}
                 value={email}
                 onChange={handleEmailChange}
+                onFocus={() => focusField("login")}
+                onBlur={blurField}
                 disabled={isLoading}
                 aria-invalid={hasError}
                 aria-describedby={hasError ? "login-error" : undefined}
@@ -364,6 +394,8 @@ export default function LoginPage() {
                 placeholder={t.passwordPlaceholder}
                 value={password}
                 onChange={handlePasswordChange}
+                onFocus={() => focusField("password")}
+                onBlur={blurField}
                 disabled={isLoading}
                 aria-invalid={hasError}
                 aria-describedby={hasError ? "login-error" : undefined}
