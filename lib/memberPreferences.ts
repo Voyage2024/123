@@ -3,7 +3,14 @@
  * lib/memberPreferences.ts — общий для server action и клиентских компонентов
  * ──────────────────────────────────────────────────────────────────── */
 
-export const RESIDENT_PREFERENCE_KEYS = ["notify_tours", "notify_parties", "notify_approvals", "notify_points", "hide_points"] as const;
+export const RESIDENT_PREFERENCE_KEYS = [
+  "notify_tours",
+  "notify_location_updates",
+  "notify_parties",
+  "notify_approvals",
+  "notify_points",
+  "hide_points",
+] as const;
 export const MANAGER_PREFERENCE_KEYS = [
   "notify_casting_responses",
   "notify_contract_signed",
@@ -18,6 +25,8 @@ export type MemberPreferences = Record<PreferenceKey, boolean>;
 /** Нет строки в БД — всё включено, баллы не скрыты */
 export const DEFAULT_PREFERENCES: MemberPreferences = {
   notify_tours: true,
+  // подписки на города карты (миграция 20261106090000_map_hub_subscriptions.sql)
+  notify_location_updates: true,
   notify_parties: true,
   notify_approvals: true,
   notify_points: true,

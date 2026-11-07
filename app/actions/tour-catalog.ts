@@ -4,9 +4,12 @@
  * VOYAGE · каталог статичных туров — серверные методы
  * app/actions/tour-catalog.ts
  *
- *   listCatalogTours()     партнёр/admin/owner: активные туры (staff видит и скрытые)
+ *   listCatalogTours()     партнёр/admin/owner: туры + локации карты (map_hubs)
  *   saveCatalogTour(input) owner/admin: создать или изменить тур
  *   deleteCatalogTour(id)  owner/admin: удалить (у кастингов catalog_tour_id → NULL)
+ *
+ * Направление тура — только локация из /admin/map-locations (map_hub_id);
+ * город/регион ставит база (миграция 20261103100000_tour_catalog_map_hubs.sql).
  *
  * Роль проверяется здесь (requireRole) и ещё раз в базе (RLS tour_catalog,
  * миграция 20261103090000_tour_catalog_casting_i18n_invites.sql).
@@ -25,10 +28,28 @@ import {
   isCastingLang,
   type I18nText,
 } from "@/lib/casting-i18n";
-import { TOUR_CATALOG_COLUMNS, parseCatalogTour, slugify, type CatalogTour } from "@/lib/tour-catalog";
+import {
+  MAP_HUB_COLUMNS,
+  TOUR_CATALOG_COLUMNS,
+  parseCatalogTour,
+  parseMapHub,
+  slugify,
+  type CatalogTour,
+  type MapHub,
+} from "@/lib/tour-catalog";
 
-export type CatalogFailure = "forbidden" | "invalid" | "slug_taken" | "schema" | "not_found" | "failed";
-export type CatalogListResult = { ok: true; tours: CatalogTour[] } | { ok: false; reason: CatalogFailure };
+export type CatalogFailure =
+  | "forbidden"
+  | "invalid"
+  | "slug_taken"
+  | "hub_required"
+  | "hub_taken"
+  | "hub_inactive"
+  | "hub_no_country"
+  | "schema"
+  | "not_found"
+  | "failed";
+export type CatalogListResult = { ok: true; tours: CatalogTour[]; hubs: MapHub[] } | { ok: false; reason: CatalogFailure };
 export type CatalogSaveResult = { ok: true; tour: CatalogTour } | { ok: false; reason: CatalogFailure; field?: string };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -37,6 +58,12 @@ const AUDIENCES = ["all", "working", "elite"];
 
 function failureOf(error: { code?: string; message?: string }): CatalogFailure {
   console.error("[tour_catalog]", error.code, error.message);
+  const msg = error.message ?? "";
+  if (msg.includes("map_hub_required")) return "hub_required";
+  if (msg.includes("map_hub_inactive")) return "hub_inactive";
+  if (msg.includes("map_hub_country_required")) return "hub_no_country";
+  if (msg.includes("map_hub_not_found") || msg.includes("tour_catalog_map_hub_fkey")) return "hub_required";
+  if (error.code === "23505" && msg.includes("map_hub")) return "hub_taken";
   if (error.code === "42501") return "forbidden";
   if (error.code === "23505") return "slug_taken";
   if (error.code === "42P01" || error.code === "42703" || error.code === "PGRST204" || error.code === "PGRST205") return "schema";
@@ -54,17 +81,23 @@ export async function listCatalogTours(opts: { includeInactive?: boolean } = {})
   const supabase = await createClient();
   let query = supabase.from("tour_catalog").select(TOUR_CATALOG_COLUMNS).order("sort_order").order("city");
   if (!opts.includeInactive) query = query.eq("is_active", true);
-  const { data, error } = await query;
+  const [{ data, error }, hubsRes] = await Promise.all([
+    query,
+    supabase.from("map_hubs").select(MAP_HUB_COLUMNS).order("region").order("id"),
+  ]);
   if (error) return { ok: false, reason: failureOf(error) };
-  return { ok: true, tours: (data ?? []).flatMap((row) => parseCatalogTour(row) ?? []) };
+  if (hubsRes.error) console.error("[map_hubs]", hubsRes.error.code, hubsRes.error.message);
+  return {
+    ok: true,
+    tours: (data ?? []).flatMap((row) => parseCatalogTour(row) ?? []),
+    hubs: (hubsRes.data ?? []).flatMap((row) => parseMapHub(row) ?? []),
+  };
 }
 
 export type CatalogTourInput = {
   id?: string | null;
-  slug?: string;
-  city: string;
-  countryCode?: string | null;
-  region?: string | null;
+  /** Локация из /admin/map-locations — единственный источник направления */
+  mapHubId: string;
   project: string;
   audience: string;
   sourceLang: string;
@@ -82,15 +115,11 @@ export type CatalogTourInput = {
   sortOrder?: number;
 };
 
+const HUB_ID = /^[A-Za-z0-9_-]{1,80}$/;
+
 function toRow(input: CatalogTourInput): { row: Record<string, unknown> } | { field: string } {
-  const city = (input.city ?? "").trim();
-  if (city.length < 2 || city.length > 60) return { field: "city" };
-  const slug = slugify(input.slug?.trim() || city);
-  if (!slug) return { field: "slug" };
-  const country = (input.countryCode ?? "").trim().toUpperCase();
-  if (country && !/^[A-Z]{2}$/.test(country)) return { field: "countryCode" };
-  const region = (input.region ?? "").trim();
-  if (region.length > 60) return { field: "region" };
+  const mapHubId = typeof input.mapHubId === "string" ? input.mapHubId.trim() : "";
+  if (!HUB_ID.test(mapHubId)) return { field: "mapHubId" };
   if (!isProjectKey(input.project)) return { field: "project" };
   if (!AUDIENCES.includes(input.audience)) return { field: "audience" };
   if (!isCastingLang(input.sourceLang)) return { field: "sourceLang" };
@@ -111,10 +140,9 @@ function toRow(input: CatalogTourInput): { row: Record<string, unknown> } | { fi
 
   return {
     row: {
-      slug,
-      city,
-      country_code: country || null,
-      region: region || null,
+      map_hub_id: mapHubId,
+      // city / region ставит триггер tour_catalog_sync_hub из локации; здесь — заглушка для NOT NULL на старой базе
+      city: mapHubId,
       project_type: input.project,
       audience_segment: input.audience,
       source_lang: input.sourceLang,
@@ -147,10 +175,21 @@ export async function saveCatalogTour(input: CatalogTourInput): Promise<CatalogS
   if ("field" in built) return { ok: false, reason: "invalid", field: built.field };
 
   const supabase = await createClient();
-  const query = input.id
-    ? supabase.from("tour_catalog").update(built.row).eq("id", input.id).select(TOUR_CATALOG_COLUMNS)
-    : supabase.from("tour_catalog").insert(built.row).select(TOUR_CATALOG_COLUMNS);
-  const { data, error } = await query;
+  const { data: hub, error: hubError } = await supabase.from("map_hubs").select("id,is_active,country_code").eq("id", built.row.map_hub_id as string).maybeSingle();
+  if (hubError) return { ok: false, reason: failureOf(hubError) };
+  if (!hub) return { ok: false, reason: "hub_required" };
+  if (built.row.is_active && hub.is_active === false) return { ok: false, reason: "hub_inactive" };
+  // Локация = страна + город: без страны тур не создаётся и не включается (миграция 20261106090000)
+  if (!hub.country_code && (!input.id || built.row.is_active)) return { ok: false, reason: "hub_no_country" };
+  // Адрес тура = id локации; если он занят старым туром без локации — с суффиксом.
+  const baseSlug = slugify(String(built.row.map_hub_id)) || "tour";
+  const insert = (slug: string) => supabase.from("tour_catalog").insert({ ...built.row, slug }).select(TOUR_CATALOG_COLUMNS);
+  let { data, error } = input.id
+    ? await supabase.from("tour_catalog").update(built.row).eq("id", input.id).select(TOUR_CATALOG_COLUMNS)
+    : await insert(baseSlug);
+  if (!input.id && error?.code === "23505" && (error.message ?? "").includes("slug")) {
+    ({ data, error } = await insert(`${baseSlug}-${Date.now().toString(36)}`.slice(0, 60)));
+  }
   if (error) return { ok: false, reason: failureOf(error) };
   const tour = parseCatalogTour(Array.isArray(data) ? data[0] : null);
   if (!tour) return { ok: false, reason: input.id ? "not_found" : "failed" };

@@ -5,6 +5,7 @@ import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
 import { getPreferredTelegramLanguage } from "@/lib/server/telegram/preferences";
 import type { TelegramLang } from "@/lib/server/telegram/types";
 import { projectLabels, toProjectKey, type ProjectKey } from "@/lib/project-types";
+import { countryFlag, countryName } from "@/lib/countries";
 
 type JsonRecord = Record<string, unknown>;
 type NotificationRow = JsonRecord & {
@@ -211,6 +212,11 @@ type ClubCopy = {
   approvedParty: string;
   approvedCasting: string;
   castingInvite: string;
+  locationTour: (place: string) => string;
+  locationCasting: (place: string) => string;
+  heightFrom: (cm: string) => string;
+  slots: (n: string) => string;
+  locationHint: string;
   dates: string;
   pointsTitle: (points: number) => string;
   castingResponse: string;
@@ -243,6 +249,11 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     approvedParty: "Ваша заявка на тусовку одобрена",
     approvedCasting: "Вас выбрали в состав тура",
     castingInvite: "Личное приглашение на кастинг VOYAGE",
+    locationTour: (place) => `Новый тур: ${place}`,
+    locationCasting: (place) => `Открыт кастинг: ${place}`,
+    heightFrom: (cm) => `Рост от ${cm} см`,
+    slots: (n) => `Мест: ${n}`,
+    locationHint: "Вы подписаны на эту локацию на карте. Отписаться — Карта → Мои локации.",
     dates: "Даты",
     pointsTitle: (n) => `+${n} к Influence Index`,
     castingResponse: "Новые отклики на кастинг",
@@ -273,6 +284,11 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     approvedParty: "Your party application is approved",
     approvedCasting: "You have been selected for the crew",
     castingInvite: "Personal invitation to a VOYAGE casting",
+    locationTour: (place) => `New tour: ${place}`,
+    locationCasting: (place) => `Casting open: ${place}`,
+    heightFrom: (cm) => `Height from ${cm} cm`,
+    slots: (n) => `Slots: ${n}`,
+    locationHint: "You follow this location on the map. Unsubscribe in Map → My locations.",
     dates: "Dates",
     pointsTitle: (n) => `+${n} to your Influence Index`,
     castingResponse: "New casting responses",
@@ -303,6 +319,11 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     approvedParty: "Tu solicitud para la fiesta fue aprobada",
     approvedCasting: "Te han elegido para el equipo",
     castingInvite: "Invitación personal a un casting de VOYAGE",
+    locationTour: (place) => `Nuevo tour: ${place}`,
+    locationCasting: (place) => `Casting abierto: ${place}`,
+    heightFrom: (cm) => `Altura desde ${cm} cm`,
+    slots: (n) => `Plazas: ${n}`,
+    locationHint: "Sigues esta ubicación en el mapa. Cancela en Mapa → Mis ubicaciones.",
     dates: "Fechas",
     pointsTitle: (n) => `+${n} a tu Influence Index`,
     castingResponse: "Nuevas respuestas al casting",
@@ -333,6 +354,11 @@ const clubText: Record<TelegramLang, ClubCopy> = {
     approvedParty: "Sua candidatura à festa foi aprovada",
     approvedCasting: "Você foi escolhida para a equipe",
     castingInvite: "Convite pessoal para um casting VOYAGE",
+    locationTour: (place) => `Novo tour: ${place}`,
+    locationCasting: (place) => `Casting aberto: ${place}`,
+    heightFrom: (cm) => `Altura a partir de ${cm} cm`,
+    slots: (n) => `Vagas: ${n}`,
+    locationHint: "Você segue esta localização no mapa. Cancele em Mapa → Minhas localizações.",
     dates: "Datas",
     pointsTitle: (n) => `+${n} no seu Influence Index`,
     castingResponse: "Novas respostas ao casting",
@@ -361,7 +387,7 @@ const clubText: Record<TelegramLang, ClubCopy> = {
 const CLUB_TEMPLATES = new Set([
   "tour_published", "party_published", "application_approved", "points_awarded",
   "casting_response", "contract_signed", "docs_uploaded", "review_received",
-  "casting_invite",
+  "casting_invite", "location_update",
 ]);
 
 /** Название из jsonb { RU, EN, … } или строка */
@@ -446,6 +472,37 @@ function clubNotificationBody(template: string, payload: JsonRecord, lang: Teleg
       if (note) lines.push("", `<i>${escapeHtml(note)}</i>`);
       break;
     }
+    case "location_update": {
+      // Миграция 20261106090000: voyage_location_fanout → payload { kind tour|casting, city, country_code,
+      // hub_name_i18n, title_i18n, conditions_i18n / brief_i18n, fee_*, *_paid_by, dates, closes_at, slots, height_min }
+      const labels = text[lang];
+      const cc = valueText(payload.country_code);
+      const city = pickText(localizedText(payload.hub_name_i18n, lang), payload.city);
+      const where = [countryFlag(cc), [city, countryName(cc, lang)].filter(Boolean).join(", ")].filter(Boolean).join(" ");
+      const isCasting = valueText(payload.kind) === "casting";
+      lines.push(`<b>${escapeHtml(isCasting ? copy.locationCasting(where) : copy.locationTour(where))}</b>`);
+      if (title) lines.push(escapeHtml(title));
+      const project = projectLabel(payload.project, copy);
+      if (project) lines.push(escapeHtml(project));
+      const from = formatDate(payload.starts_on, lang);
+      const to = formatDate(payload.ends_on, lang);
+      if (from) lines.push(`${escapeHtml(copy.dates)}: ${escapeHtml(to && to !== from ? `${from} – ${to}` : from)}`);
+      const amount = valueText(payload.fee_amount);
+      const currency = valueText(payload.fee_currency);
+      if (amount && currency) lines.push(`${escapeHtml(labels.fee)}: ${escapeHtml(`${Number(amount).toLocaleString("en-US")} ${currency}`)}`);
+      if (valueText(payload.flight_paid_by)) lines.push(`${escapeHtml(labels.flight)}: ${escapeHtml(formatPayer(payload.flight_paid_by, labels))}`);
+      if (valueText(payload.hotel_paid_by)) lines.push(`${escapeHtml(labels.hotel)}: ${escapeHtml(formatPayer(payload.hotel_paid_by, labels))}`);
+      const height = valueText(payload.height_min);
+      if (height) lines.push(escapeHtml(copy.heightFrom(height)));
+      const slots = valueText(payload.slots);
+      if (isCasting && slots) lines.push(escapeHtml(copy.slots(slots)));
+      const until = formatDate(payload.closes_at, lang);
+      if (until) lines.push(`${escapeHtml(copy.applyUntil)}: ${escapeHtml(until)}`);
+      const note = localizedText(isCasting ? payload.brief_i18n : payload.conditions_i18n, lang);
+      if (note) lines.push("", `<i>${escapeHtml(note.length > 600 ? `${note.slice(0, 597)}…` : note)}</i>`);
+      lines.push("", `<i>${escapeHtml(copy.locationHint)}</i>`);
+      break;
+    }
     case "casting_response": {
       lines.push(`<b>${escapeHtml(copy.castingResponse)}</b>`);
       if (place) lines.push(escapeHtml(place));
@@ -501,6 +558,10 @@ function clubKeyboard(template: string, payload: JsonRecord, lang: TelegramLang)
       return keyboard.url(copy.openPoints, getSiteLink("/dashboard/gamification#points-history"));
     case "casting_invite":
       return keyboard.url(copy.openCastings, getSiteLink("/dashboard/castings"));
+    case "location_update":
+      return valueText(payload.kind) === "casting"
+        ? keyboard.url(copy.openCastings, getSiteLink("/dashboard/castings"))
+        : keyboard.url(copy.openMap, getSiteLink("/dashboard/map#location-feed"));
     case "casting_response":
       return keyboard.url(copy.openCasting, getSiteLink(ref ? `/partner/castings/${ref}` : "/partner/castings"));
     case "contract_signed":
@@ -522,6 +583,7 @@ const PREFERENCE_COLUMN: Record<string, string> = {
   contract_signed: "notify_contract_signed",
   docs_uploaded: "notify_docs_uploaded",
   review_received: "notify_reviews",
+  location_update: "notify_location_updates",
 };
 
 async function isOptedOut(recipientId: string, template: string): Promise<boolean> {

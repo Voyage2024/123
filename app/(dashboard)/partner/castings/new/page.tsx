@@ -3,9 +3,11 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
   CheckCircle2,
+  MapPinned,
   LoaderCircle,
   Plus,
   ShieldAlert,
@@ -34,9 +36,12 @@ export default function NewCastingPage() {
   const [organizerId, setOrganizerId] = useState<string>(VOYAGE_MANAGEMENT_ID);
 
   const [values, setValues] = useState<BriefValues>(EMPTY_BRIEF);
-  // Кастинг создаётся под статичный тур из каталога (если каталог не пуст).
+  // Кастинг создаётся только под статичный тур каталога, а тур — только на
+  // локации карты (страна + город). Без тура база кастинг не примет
+  // (миграция 20261106090000_map_hub_subscriptions.sql).
   const { tours, loading: toursLoading } = useCatalogTours();
-  const checkOptions = { requireTour: tours.length > 0 };
+  const checkOptions = { requireTour: true };
+  const noTours = !toursLoading && tours.length === 0;
 
   // /partner/castings/new?tour=<id> — кнопка «Кастинг под этот тур» в каталоге.
   // window.location вместо useSearchParams: страница не требует Suspense при сборке.
@@ -87,7 +92,7 @@ export default function NewCastingPage() {
             : "Недостаточно прав для создания кастинга. Обратитесь к администратору.",
           organizer:
             "Организатор не найден или заблокирован. Выберите VOYAGE Management или другого партнёра.",
-          tour: "Выбранный тур скрыт или удалён из каталога. Выберите другой тур.",
+          tour: "Выберите активный тур каталога: кастинг создаётся только под тур на локации карты.",
           schema:
             "База данных не обновлена под эту версию формы (тур, тексты на 4 языках). Примените миграцию 20261103090000_tour_catalog_casting_i18n_invites.sql.",
           network:
@@ -191,6 +196,20 @@ export default function NewCastingPage() {
               </div>
             )}
 
+            {noTours && (
+              <div className="mb-7 flex items-start gap-3 rounded-xl border border-amber-200/20 bg-amber-200/[0.04] p-4 text-sm text-amber-100">
+                <MapPinned className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+                <p className="leading-5">
+                  В каталоге нет активных туров. Кастинг открывается только под тур, привязанный к стране и городу из
+                  «Локаций карты». Сначала{" "}
+                  <Link href="/partner/castings/tours" className="underline decoration-amber-200/40 underline-offset-4 hover:text-amber-200">
+                    создайте тур
+                  </Link>
+                  .
+                </p>
+              </div>
+            )}
+
             <CastingBriefFields
               value={values}
               onChange={(nextValues) => {
@@ -245,7 +264,7 @@ export default function NewCastingPage() {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || noTours}
                   className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200/40 bg-amber-200 px-5 text-sm font-semibold text-zinc-950 shadow-lg shadow-amber-950/10 transition hover:border-amber-100 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmitting ? (

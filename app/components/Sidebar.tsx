@@ -58,6 +58,7 @@ import { isClubAdmin } from "@/lib/access";
 import { useMobileMenu, useRegisterSidebar, useScrollLock } from "@/app/context/MobileMenuContext";
 import { getAdminReviewCounts } from "@/app/actions/admin-review";
 import { REVIEW_QUEUE_EVENT, type ReviewCounts } from "@/lib/admin-review";
+import { useUnreadLocationFeed } from "@/lib/map-subscriptions";
 
 type NavKey =
   | "myVoyage"
@@ -273,6 +274,7 @@ const translations = {
     pendingInvites: (n: number) => `${n} awaiting review`,
     pendingKyc: (n: number) => `${n} awaiting KYC review`,
     pendingConcierge: (n: number) => `${n} new concierge requests`,
+    pendingLocationFeed: (n: number) => `${n} new in your map locations`,
     openMenu: "Open menu",
     closeMenu: "Close menu",
     menu: "Menu",
@@ -337,6 +339,7 @@ const translations = {
     pendingInvites: (n: number) => `${n} на модерации`,
     pendingKyc: (n: number) => `${n} ждут проверки KYC`,
     pendingConcierge: (n: number) => `${n} новых обращений к консьержу`,
+    pendingLocationFeed: (n: number) => `${n} новое в ваших локациях карты`,
     openMenu: "Открыть меню",
     closeMenu: "Закрыть меню",
     menu: "Меню",
@@ -401,6 +404,7 @@ const translations = {
     pendingInvites: (n: number) => `${n} en moderación`,
     pendingKyc: (n: number) => `${n} esperan revisión KYC`,
     pendingConcierge: (n: number) => `${n} solicitudes nuevas al conserje`,
+    pendingLocationFeed: (n: number) => `${n} novedades en tus ubicaciones`,
     openMenu: "Abrir menú",
     closeMenu: "Cerrar menú",
     menu: "Menú",
@@ -465,6 +469,7 @@ const translations = {
     pendingInvites: (n: number) => `${n} em moderação`,
     pendingKyc: (n: number) => `${n} aguardam revisão KYC`,
     pendingConcierge: (n: number) => `${n} pedidos novos ao concierge`,
+    pendingLocationFeed: (n: number) => `${n} novidades nas suas localizações`,
     openMenu: "Abrir menu",
     closeMenu: "Fechar menu",
     menu: "Menu",
@@ -593,7 +598,10 @@ export default function Sidebar() {
   const pendingInvites = usePendingCount("club_invites", clubAdmin);
   const pendingApplications = usePendingCount("guest_applications", clubAdmin);
   const review = useReviewCounts(clubAdmin, pathname);
+  // Лента локаций: новые туры/кастинги в городах из подписок резидентки
+  const locationFeedUnread = useUnreadLocationFeed(role === "resident", user?.id);
   const pendingFor: Partial<Record<NavKey, number>> = {
+    mapTours: locationFeedUnread,
     invitations: pendingInvites,
     membershipRequests: pendingApplications,
     directory: review.verification,
@@ -601,7 +609,13 @@ export default function Sidebar() {
   };
   /** Подсказка у счётчика: у каждого раздела своя */
   const pendingTitle = (key: NavKey, n: number) =>
-    key === "directory" ? t.pendingKyc(n) : key === "concierge" ? t.pendingConcierge(n) : t.pendingInvites(n);
+    key === "directory"
+      ? t.pendingKyc(n)
+      : key === "concierge"
+        ? t.pendingConcierge(n)
+        : key === "mapTours"
+          ? t.pendingLocationFeed(n)
+          : t.pendingInvites(n);
 
   const t = translations[(lang as LangKey) in translations ? (lang as LangKey) : "EN"];
 

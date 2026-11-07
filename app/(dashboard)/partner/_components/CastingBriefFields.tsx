@@ -112,7 +112,7 @@ export type BriefErrorKey =
   | "brief";
 
 export type BriefCheckOptions = {
-  /** Новый кастинг обязан ссылаться на тур, если в каталоге есть активные туры */
+  /** Новый кастинг обязан ссылаться на тур каталога (база тоже не примет кастинг без тура) */
   requireTour?: boolean;
 };
 
@@ -186,7 +186,8 @@ function classifyWriteError(
 ): WriteFailure {
   console.error(`[partner_castings:${op}]`, error.code, error.message, error.details ?? "", error.hint ?? "");
   const msg = error.message ?? "";
-  if (msg.includes("catalog_tour_inactive") || msg.includes("partner_castings_catalog_tour_fkey")) return "tour";
+  // catalog_tour_required — миграция 20261106090000: кастинг только под тур на локации карты
+  if (msg.includes("catalog_tour_inactive") || msg.includes("catalog_tour_required") || msg.includes("partner_castings_catalog_tour_fkey")) return "tour";
   if (msg.includes("invalid_organizer") || error.code === "23503") return "organizer";
   if (error.code === "42501") return "forbidden";
   if (error.code === "23514" || error.code === "42703" || error.code === "PGRST204") return "schema";
@@ -322,6 +323,7 @@ type Dict = {
   titleHint: string;
   city: string;
   cityHint: string;
+  cityFromMap: string;
   project: string;
   audienceSegment: string;
   audiences: Record<AudienceSegment, string>;
@@ -364,6 +366,7 @@ const T: Record<Lang, Dict> = {
     titleHint: "For example: “Yacht weekend · 3 spots”.",
     city: "City",
     cityHint: "As it will appear in the brief.",
+    cityFromMap: "Set by the tour location on the map (admin → Map locations). It can’t be changed here.",
     project: "Project type",
     audienceSegment: "Target audience",
     audiences: { all: "All residents", working: "Working", elite: "Elite" },
@@ -415,6 +418,7 @@ const T: Record<Lang, Dict> = {
     titleHint: "Например: «Яхт-уикенд · 3 места».",
     city: "Город",
     cityHint: "Так он будет виден в брифе.",
+    cityFromMap: "Берётся из локации тура на карте (админка → Локации карты). Здесь не меняется.",
     project: "Тип проекта",
     audienceSegment: "Целевая аудитория",
     audiences: { all: "Все резидентки", working: "Working", elite: "Elite" },
@@ -466,6 +470,7 @@ const T: Record<Lang, Dict> = {
     titleHint: "Por ejemplo: «Fin de semana en yate · 3 plazas».",
     city: "Ciudad",
     cityHint: "Tal como aparecerá en el brief.",
+    cityFromMap: "Lo define la ubicación del tour en el mapa (admin → Ubicaciones del mapa). Aquí no se cambia.",
     project: "Tipo de proyecto",
     audienceSegment: "Audiencia objetivo",
     audiences: { all: "Todas las residentes", working: "Working", elite: "Elite" },
@@ -517,6 +522,7 @@ const T: Record<Lang, Dict> = {
     titleHint: "Por exemplo: «Fim de semana no iate · 3 vagas».",
     city: "Cidade",
     cityHint: "Como vai aparecer no brief.",
+    cityFromMap: "Definida pela localização do tour no mapa (admin → Localizações do mapa). Não muda aqui.",
     project: "Tipo de projeto",
     audienceSegment: "Público-alvo",
     audiences: { all: "Todas as residentes", working: "Working", elite: "Elite" },
@@ -556,7 +562,7 @@ const T: Record<Lang, Dict> = {
 
 /* ── каталог туров ────────────────────────────────────────────────── */
 
-/** Активные туры каталога (RLS tour_catalog). Пустой список — миграция не применена или каталог пуст. */
+/** Активные туры каталога с локацией карты (map_hubs). Пустой список — миграции не применены или каталог пуст. */
 export function useCatalogTours(): { loading: boolean; tours: CatalogTour[] } {
   const [state, setState] = useState<{ loading: boolean; tours: CatalogTour[] }>({ loading: true, tours: [] });
   useEffect(() => {
@@ -566,6 +572,7 @@ export function useCatalogTours(): { loading: boolean; tours: CatalogTour[] } {
         .from("tour_catalog")
         .select(TOUR_CATALOG_COLUMNS)
         .eq("is_active", true)
+        .not("map_hub_id", "is", null)
         .order("sort_order")
         .order("city");
       if (!alive) return;
@@ -710,6 +717,8 @@ export function CastingBriefFields({
   const t = T[lang] ?? T.EN;
   const [applied, setApplied] = useState(false);
   const selectedTour = tours.find((tour) => tour.id === value.catalogTourId) ?? null;
+  // Под туром город задаёт локация карты (триггер partner_castings_sync_i18n тоже его перезапишет)
+  const cityLocked = Boolean(value.catalogTourId);
   const ids = {
     tour: useId(),
     city: useId(),
@@ -817,8 +826,18 @@ export function CastingBriefFields({
 
       <div className="space-y-2">
         <Label htmlFor={ids.city}>{t.city}</Label>
-        <input id={ids.city} className={INPUT} value={value.city} maxLength={60} onChange={(e) => set({ city: e.target.value })} />
-        <p className="text-[11px] text-zinc-500">{t.cityHint}</p>
+        <input
+          id={ids.city}
+          className={`${INPUT} ${cityLocked ? "cursor-not-allowed opacity-70" : ""}`}
+          value={cityLocked && selectedTour ? selectedTour.city : value.city}
+          maxLength={60}
+          readOnly={cityLocked}
+          aria-readonly={cityLocked}
+          onChange={(e) => {
+            if (!cityLocked) set({ city: e.target.value });
+          }}
+        />
+        <p className="text-[11px] text-zinc-500">{cityLocked ? t.cityFromMap : t.cityHint}</p>
         {err("city")}
       </div>
 

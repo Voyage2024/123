@@ -8,13 +8,17 @@
  * условиями, стандартным описанием и требованиями на RU/EN/ES/PT.
  * Динамичные кастинги создаются под тур (/partner/castings/new).
  *
+ * Направление тура — только локация из /admin/map-locations (map_hubs):
+ * город и регион берутся из неё, одна локация — один тур, вручную
+ * направление не заводится (миграция 20261103100000_tour_catalog_map_hubs.sql).
+ *
  * Партнёры видят активные туры; owner/admin создают, правят, скрывают и
  * удаляют (server actions app/actions/tour-catalog.ts + RLS tour_catalog).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowLeft, Eye, EyeOff, LoaderCircle, MapPinned, Pencil, Plus, Save, ShieldAlert, Trash2, X } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, LoaderCircle, Map as MapIcon, MapPinned, Pencil, Plus, Save, ShieldAlert, Trash2, X } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
@@ -30,7 +34,8 @@ import {
   type CastingLang,
   type I18nText,
 } from "@/lib/casting-i18n";
-import type { CatalogTour, TourAudience, TourPayer } from "@/lib/tour-catalog";
+import { MAP_HUB_REGIONS, mapHubName, type CatalogTour, type MapHub, type TourAudience, type TourPayer } from "@/lib/tour-catalog";
+import { countryFlag, countryName } from "@/lib/countries";
 
 type Dict = {
   back: string;
@@ -49,11 +54,16 @@ type Dict = {
   height: (cm: number) => string;
   editorNew: string;
   editorEdit: string;
-  city: string;
-  slug: string;
-  slugHint: string;
-  country: string;
-  region: string;
+  location: string;
+  locationPick: string;
+  locationHint: string;
+  locationOff: string;
+  locationBusy: string;
+  manageLocations: string;
+  noHub: string;
+  hubsWithout: string;
+  hubsWithoutHint: string;
+  makeTour: string;
   project: string;
   audience: string;
   audiences: Record<TourAudience, string>;
@@ -78,6 +88,84 @@ type Dict = {
   errors: Record<CatalogFailure, string> & { field: (f: string) => string };
 };
 
+const LOC = {
+  RU: {
+    location: "Локация на карте",
+    locationPick: "Выберите локацию",
+    locationHint: "Направления заводятся только в «Админ → Локации карты». Город и регион тура берутся оттуда.",
+    locationOff: "выключена на карте",
+    locationBusy: "уже есть тур",
+    manageLocations: "Локации карты",
+    noHub: "Нет локации на карте — тур выключен. Выберите локацию.",
+    hubsWithout: "Локации карты без тура",
+    hubsWithoutHint: "Для каждой локации можно оформить один статичный тур.",
+    makeTour: "Оформить тур",
+  },
+  EN: {
+    location: "Map location",
+    locationPick: "Choose a location",
+    locationHint: "Destinations are created only in “Admin → Map locations”. The tour’s city and region come from there.",
+    locationOff: "disabled on the map",
+    locationBusy: "already has a tour",
+    manageLocations: "Map locations",
+    noHub: "No map location — the tour is disabled. Choose a location.",
+    hubsWithout: "Map locations without a tour",
+    hubsWithoutHint: "Each location can have one static tour.",
+    makeTour: "Create tour",
+  },
+  ES: {
+    location: "Ubicación en el mapa",
+    locationPick: "Elige una ubicación",
+    locationHint: "Los destinos se crean solo en «Admin → Ubicaciones del mapa». La ciudad y la región del tour salen de ahí.",
+    locationOff: "desactivada en el mapa",
+    locationBusy: "ya tiene tour",
+    manageLocations: "Ubicaciones del mapa",
+    noHub: "Sin ubicación en el mapa: el tour está desactivado. Elige una ubicación.",
+    hubsWithout: "Ubicaciones del mapa sin tour",
+    hubsWithoutHint: "Cada ubicación puede tener un tour fijo.",
+    makeTour: "Crear tour",
+  },
+  PT: {
+    location: "Local no mapa",
+    locationPick: "Escolha um local",
+    locationHint: "Os destinos são criados só em «Admin → Locais do mapa». Cidade e região do tour vêm de lá.",
+    locationOff: "desativado no mapa",
+    locationBusy: "já tem tour",
+    manageLocations: "Locais do mapa",
+    noHub: "Sem local no mapa — o tour está desativado. Escolha um local.",
+    hubsWithout: "Locais do mapa sem tour",
+    hubsWithoutHint: "Cada local pode ter um tour fixo.",
+    makeTour: "Criar tour",
+  },
+} as const;
+
+const HUB_ERRORS = {
+  RU: {
+    hub_required: "Выберите локацию из «Локаций карты».",
+    hub_taken: "У этой локации уже есть тур — правьте его.",
+    hub_inactive: "Локация выключена на карте — тур можно сохранить только скрытым.",
+    hub_no_country: "У локации не указана страна. Заполните её в «Локациях карты» — тур привязывается к стране и городу.",
+  },
+  EN: {
+    hub_required: "Choose a location from “Map locations”.",
+    hub_taken: "This location already has a tour — edit that one.",
+    hub_inactive: "The location is disabled on the map — the tour can only be saved hidden.",
+    hub_no_country: "The location has no country. Set it in “Map locations” — a tour is bound to a country and a city.",
+  },
+  ES: {
+    hub_required: "Elige una ubicación de «Ubicaciones del mapa».",
+    hub_taken: "Esta ubicación ya tiene un tour; edítalo.",
+    hub_inactive: "La ubicación está desactivada en el mapa: el tour solo puede guardarse oculto.",
+    hub_no_country: "La ubicación no tiene país. Indícalo en «Ubicaciones del mapa»: el tour va ligado a país y ciudad.",
+  },
+  PT: {
+    hub_required: "Escolha um local em «Locais do mapa».",
+    hub_taken: "Este local já tem um tour — edite-o.",
+    hub_inactive: "O local está desativado no mapa — o tour só pode ser salvo oculto.",
+    hub_no_country: "O local não tem país. Preencha em «Locais do mapa» — o tour fica ligado a país e cidade.",
+  },
+} as const;
+
 const T: Record<Lang, Dict> = {
   RU: {
     back: "Все кастинги",
@@ -96,11 +184,7 @@ const T: Record<Lang, Dict> = {
     height: (cm) => `от ${cm} см`,
     editorNew: "Новый тур",
     editorEdit: "Правка тура",
-    city: "Город",
-    slug: "Адрес (slug)",
-    slugHint: "Латиница и дефисы; пусто — из города.",
-    country: "Страна (ISO, 2 буквы)",
-    region: "Регион",
+    ...LOC.RU,
     project: "Тип",
     audience: "Аудитория",
     audiences: { all: "Все", working: "Working", elite: "Elite" },
@@ -123,6 +207,7 @@ const T: Record<Lang, Dict> = {
     remove: "Удалить",
     removeConfirm: "Точно удалить? Кастинги останутся, но потеряют ссылку на тур.",
     errors: {
+      ...HUB_ERRORS.RU,
       forbidden: "Править каталог могут только owner и admin.",
       invalid: "Проверьте поля формы.",
       slug_taken: "Такой адрес (slug) уже занят — укажите другой.",
@@ -149,11 +234,7 @@ const T: Record<Lang, Dict> = {
     height: (cm) => `from ${cm} cm`,
     editorNew: "New tour",
     editorEdit: "Edit tour",
-    city: "City",
-    slug: "Slug",
-    slugHint: "Latin letters and hyphens; empty — from the city.",
-    country: "Country (ISO, 2 letters)",
-    region: "Region",
+    ...LOC.EN,
     project: "Type",
     audience: "Audience",
     audiences: { all: "All", working: "Working", elite: "Elite" },
@@ -176,6 +257,7 @@ const T: Record<Lang, Dict> = {
     remove: "Delete",
     removeConfirm: "Delete for sure? Castings stay but lose the link to the tour.",
     errors: {
+      ...HUB_ERRORS.EN,
       forbidden: "Only the owner and admins can edit the catalog.",
       invalid: "Check the form fields.",
       slug_taken: "This slug is taken — choose another one.",
@@ -202,11 +284,7 @@ const T: Record<Lang, Dict> = {
     height: (cm) => `desde ${cm} cm`,
     editorNew: "Nuevo tour",
     editorEdit: "Editar tour",
-    city: "Ciudad",
-    slug: "Slug",
-    slugHint: "Letras latinas y guiones; vacío — desde la ciudad.",
-    country: "País (ISO, 2 letras)",
-    region: "Región",
+    ...LOC.ES,
     project: "Tipo",
     audience: "Audiencia",
     audiences: { all: "Todas", working: "Working", elite: "Elite" },
@@ -229,6 +307,7 @@ const T: Record<Lang, Dict> = {
     remove: "Eliminar",
     removeConfirm: "¿Eliminar seguro? Los castings se quedan, pero pierden el enlace al tour.",
     errors: {
+      ...HUB_ERRORS.ES,
       forbidden: "Solo el owner y los admins pueden editar el catálogo.",
       invalid: "Revisa los campos del formulario.",
       slug_taken: "Este slug ya existe; elige otro.",
@@ -255,11 +334,7 @@ const T: Record<Lang, Dict> = {
     height: (cm) => `a partir de ${cm} cm`,
     editorNew: "Novo tour",
     editorEdit: "Editar tour",
-    city: "Cidade",
-    slug: "Slug",
-    slugHint: "Letras latinas e hífens; vazio — a partir da cidade.",
-    country: "País (ISO, 2 letras)",
-    region: "Região",
+    ...LOC.PT,
     project: "Tipo",
     audience: "Público",
     audiences: { all: "Todas", working: "Working", elite: "Elite" },
@@ -282,6 +357,7 @@ const T: Record<Lang, Dict> = {
     remove: "Excluir",
     removeConfirm: "Excluir mesmo? Os castings ficam, mas perdem o vínculo com o tour.",
     errors: {
+      ...HUB_ERRORS.PT,
       forbidden: "Só o owner e os admins podem editar o catálogo.",
       invalid: "Confira os campos do formulário.",
       slug_taken: "Este slug já existe — escolha outro.",
@@ -295,10 +371,7 @@ const T: Record<Lang, Dict> = {
 
 type Draft = {
   id: string | null;
-  slug: string;
-  city: string;
-  countryCode: string;
-  region: string;
+  mapHubId: string;
   project: (typeof PROJECTS)[number];
   audience: TourAudience;
   sourceLang: CastingLang;
@@ -315,10 +388,7 @@ type Draft = {
 
 const EMPTY: Draft = {
   id: null,
-  slug: "",
-  city: "",
-  countryCode: "",
-  region: "",
+  mapHubId: "",
   project: "tour",
   audience: "all",
   sourceLang: "RU",
@@ -336,10 +406,7 @@ const EMPTY: Draft = {
 function toDraft(t: CatalogTour): Draft {
   return {
     id: t.id,
-    slug: t.slug,
-    city: t.city,
-    countryCode: t.countryCode ?? "",
-    region: t.region ?? "",
+    mapHubId: t.mapHubId ?? "",
     project: t.project,
     audience: t.audience,
     sourceLang: t.sourceLang,
@@ -365,6 +432,7 @@ export default function TourCatalogPage() {
   const t = T[lang] ?? T.EN;
   const isAdmin = role === "owner" || role === "admin";
   const [tours, setTours] = useState<CatalogTour[]>([]);
+  const [hubs, setHubs] = useState<MapHub[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -379,6 +447,7 @@ export default function TourCatalogPage() {
     }
     setError(null);
     setTours(res.tours);
+    setHubs(res.hubs);
   }, [isAdmin, t]);
 
   useEffect(() => {
@@ -386,6 +455,15 @@ export default function TourCatalogPage() {
   }, [load]);
 
   const projects = projectLabels(lang);
+  const hubById = new Map(hubs.map((h) => [h.id, h]));
+  const usedHubs = new Set(tours.map((x) => x.mapHubId).filter((id): id is string => !!id));
+  const freeHubs = hubs.filter((h) => !usedHubs.has(h.id));
+  const draftFromHub = (hub: MapHub): Draft => ({
+    ...EMPTY,
+    mapHubId: hub.id,
+    isActive: hub.isActive,
+    texts: { ...EMPTY.texts, title: { ...hub.name } },
+  });
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-4 pb-12 pt-6 sm:px-6">
@@ -400,13 +478,22 @@ export default function TourCatalogPage() {
           <p className="mt-2 max-w-2xl text-sm text-zinc-400">{t.subtitle}</p>
         </div>
         {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setDraft({ ...EMPTY })}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200/40 bg-amber-200 px-5 text-sm font-semibold text-zinc-950 transition hover:bg-amber-100"
-          >
-            <Plus size={16} /> {t.add}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/map-locations"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-zinc-800 px-4 text-sm text-zinc-300 transition hover:border-amber-200/30 hover:text-amber-100"
+            >
+              <MapIcon size={16} /> {t.manageLocations}
+            </Link>
+            <button
+              type="button"
+              disabled={freeHubs.length === 0}
+              onClick={() => setDraft({ ...EMPTY })}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200/40 bg-amber-200 px-5 text-sm font-semibold text-zinc-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus size={16} /> {t.add}
+            </button>
+          </div>
         )}
       </header>
 
@@ -414,6 +501,28 @@ export default function TourCatalogPage() {
         <p role="alert" className="flex items-start gap-2 rounded-xl border border-rose-400/20 bg-rose-400/5 p-4 text-sm text-rose-200">
           <ShieldAlert size={16} className="mt-0.5 shrink-0" /> {error}
         </p>
+      )}
+
+      {isAdmin && !loading && freeHubs.length > 0 && (
+        <section className="rounded-2xl border border-dashed border-amber-200/20 bg-amber-200/[0.03] p-4">
+          <p className="text-sm text-zinc-200">{t.hubsWithout}</p>
+          <p className="mt-0.5 text-xs text-zinc-500">{t.hubsWithoutHint}</p>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {freeHubs.map((hub) => (
+              <li key={hub.id}>
+                <button
+                  type="button"
+                  onClick={() => setDraft(draftFromHub(hub))}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition ${hub.isActive ? "border-amber-200/30 text-amber-100 hover:bg-amber-200/10" : "border-zinc-800 text-zinc-500 hover:text-zinc-300"}`}
+                >
+                  <Plus size={12} /> {countryFlag(hub.countryCode)} {mapHubName(hub, lang)}
+                  <span className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">{MAP_HUB_REGIONS[hub.region ?? ""] ?? hub.region ?? ""}</span>
+                  {!hub.isActive && <span className="text-[10px] text-zinc-500">· {t.locationOff}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {loading ? (
@@ -426,6 +535,7 @@ export default function TourCatalogPage() {
             const requirements = pickI18n(tour.requirements, lang, tour.sourceLang);
             const conditions = pickI18n(tour.conditions, lang, tour.sourceLang);
             const description = pickI18n(tour.description, lang, tour.sourceLang);
+            const hub = tour.mapHubId ? hubById.get(tour.mapHubId) : undefined;
             return (
               <li
                 key={tour.id}
@@ -434,8 +544,9 @@ export default function TourCatalogPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase tracking-[0.24em] text-zinc-500">
-                      {projects[tour.project]} · {tour.city}
-                      {tour.countryCode ? ` · ${tour.countryCode}` : ""} · {t.audiences[tour.audience]}
+                      {projects[tour.project]} · <MapPinned size={10} className="-mt-0.5 inline" /> {hub ? mapHubName(hub, lang) : tour.city}
+                      {tour.countryCode ? ` · ${countryFlag(tour.countryCode)} ${countryName(tour.countryCode, lang)}` : ""}
+                      {tour.region ? ` · ${MAP_HUB_REGIONS[tour.region] ?? tour.region}` : ""} · {t.audiences[tour.audience]}
                     </p>
                     <h2 className="mt-1 font-serif text-2xl text-zinc-50">{pickI18n(tour.title, lang, tour.sourceLang) ?? tour.city}</h2>
                   </div>
@@ -445,6 +556,7 @@ export default function TourCatalogPage() {
                     </span>
                   )}
                 </div>
+                {!tour.mapHubId && <p className="mt-2 text-xs text-amber-200/80">{t.noHub}</p>}
                 {description && <p className="mt-3 whitespace-pre-line text-sm leading-6 text-zinc-300">{description}</p>}
                 {requirements && (
                   <p className="mt-3 text-xs leading-5 text-zinc-400">
@@ -493,6 +605,8 @@ export default function TourCatalogPage() {
           draft={draft}
           t={t}
           lang={lang}
+          hubs={hubs}
+          usedHubs={usedHubs}
           onClose={() => setDraft(null)}
           onSaved={() => {
             setDraft(null);
@@ -508,12 +622,16 @@ function TourEditor({
   draft: initial,
   t,
   lang,
+  hubs,
+  usedHubs,
   onClose,
   onSaved,
 }: {
   draft: Draft;
   t: Dict;
   lang: Lang;
+  hubs: MapHub[];
+  usedHubs: Set<string>;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -529,12 +647,14 @@ function TourEditor({
     if (saving) return;
     setSaving(true);
     setError(null);
+    if (!d.mapHubId) {
+      setSaving(false);
+      setError(t.errors.hub_required);
+      return;
+    }
     const res = await saveCatalogTour({
       id: d.id,
-      slug: d.slug,
-      city: d.city,
-      countryCode: d.countryCode,
-      region: d.region,
+      mapHubId: d.mapHubId,
       project: d.project,
       audience: d.audience,
       sourceLang: d.sourceLang,
@@ -588,22 +708,37 @@ function TourEditor({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className={LABEL}>
-            <span>{t.city} *</span>
-            <input className={INPUT} value={d.city} maxLength={60} onChange={(e) => set({ city: e.target.value })} required />
-          </label>
-          <label className={LABEL}>
-            <span>{t.slug}</span>
-            <input className={`${INPUT} font-mono`} value={d.slug} maxLength={60} placeholder="dubai" onChange={(e) => set({ slug: e.target.value })} />
-            <span className="block normal-case tracking-normal text-zinc-500">{t.slugHint}</span>
-          </label>
-          <label className={LABEL}>
-            <span>{t.country}</span>
-            <input className={`${INPUT} font-mono uppercase`} value={d.countryCode} maxLength={2} placeholder="AE" onChange={(e) => set({ countryCode: e.target.value.toUpperCase() })} />
-          </label>
-          <label className={LABEL}>
-            <span>{t.region}</span>
-            <input className={INPUT} value={d.region} maxLength={60} onChange={(e) => set({ region: e.target.value })} />
+          <label className={`${LABEL} sm:col-span-2`}>
+            <span>{t.location} *</span>
+            <select
+              className={INPUT}
+              value={d.mapHubId}
+              required
+              onChange={(e) => {
+                const hub = hubs.find((h) => h.id === e.target.value);
+                set({
+                  mapHubId: e.target.value,
+                  isActive: hub ? d.isActive && hub.isActive : d.isActive,
+                  // Пустое название тура — подставляем название локации с карты
+                  texts: hub && !Object.values(d.texts.title).some((v) => (v ?? "").trim()) ? { ...d.texts, title: { ...hub.name } } : d.texts,
+                });
+              }}
+            >
+              <option value="">{t.locationPick}</option>
+              {hubs.map((hub) => {
+                const busy = usedHubs.has(hub.id) && hub.id !== initial.mapHubId;
+                const region = MAP_HUB_REGIONS[hub.region ?? ""] ?? hub.region ?? "";
+                return (
+                  <option key={hub.id} value={hub.id} disabled={busy}>
+                    {countryFlag(hub.countryCode)} {mapHubName(hub, lang)}
+                    {hub.countryCode ? `, ${countryName(hub.countryCode, lang)}` : ""} · {region}
+                    {!hub.isActive ? ` · ${t.locationOff}` : ""}
+                    {busy ? ` · ${t.locationBusy}` : ""}
+                  </option>
+                );
+              })}
+            </select>
+            <span className="block normal-case tracking-normal text-zinc-500">{t.locationHint}</span>
           </label>
           <label className={LABEL}>
             <span>{t.project}</span>

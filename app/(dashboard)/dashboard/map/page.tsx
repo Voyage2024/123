@@ -7,6 +7,10 @@
  * четыре региона с живым числом открытых локаций (map_hubs.is_active) →
  * подсказки «как читать карту» → путь от отклика до баллов.
  *
+ * Под регионами — подписки на города (LocationSubscriptions) и лента
+ * локаций (LocationFeed): новый тур или открытый кастинг в городе из
+ * подписок приходит сюда и в Telegram (миграция 20261106090000).
+ *
  * Менеджер видит заглушку (ManagerMapGate): карта — пространство резиденток.
  * ──────────────────────────────────────────────────────────────────── */
 
@@ -33,6 +37,8 @@ import PageExplainerHeader, {
   ResidentPageShell,
   type ExplainerDict,
 } from "@/app/(dashboard)/dashboard/_components/PageExplainerHeader";
+import LocationSubscriptions from "@/app/(dashboard)/dashboard/_components/LocationSubscriptions";
+import LocationFeed from "@/app/(dashboard)/dashboard/_components/LocationFeed";
 
 type RegionKey = "americas" | "apac" | "europe" | "mena";
 type Region = { key: RegionKey; title: string; subtitle: string; href: string; map: string; mood: string };
@@ -328,6 +334,10 @@ function MapContent() {
           );
         })}
       </section>
+
+      {/* ── Подписки на города и лента локаций ─────────────── */}
+      <LocationSubscriptions />
+      <LocationFeed />
 
       {/* ── Как читать карту ───────────────────────────────── */}
       <section className="mt-12">

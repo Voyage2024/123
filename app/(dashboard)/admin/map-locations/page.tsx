@@ -21,6 +21,7 @@ import { useLanguage } from "@/app/context/LanguageContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import LocationManagementPanel from "@/app/(dashboard)/admin/map-locations/LocationManagementPanel";
+import { countryFlag, countryName, countryOptions, normalizeCountryCode } from "@/lib/countries";
 
 type Lang = "EN" | "RU" | "ES" | "PT";
 type Localized = Record<Lang, string>;
@@ -34,6 +35,8 @@ type Rates = {
 interface MapHub {
   id: string;
   region: string;
+  /** ISO-3166 alpha-2; "" — страна не задана (миграция 20261106090000) */
+  country_code: string;
   name: Localized;
   subtitle: Localized;
   description: Localized;
@@ -71,6 +74,7 @@ const EMPTY_RATES: Rates = {
 const EMPTY_FORM: MapHub = {
   id: "",
   region: "mena",
+  country_code: "",
   name: { ...EMPTY_LOCALIZED },
   subtitle: { ...EMPTY_LOCALIZED },
   description: { ...EMPTY_LOCALIZED },
@@ -138,6 +142,13 @@ const T: Record<
     applications: string;
     expand: string;
     collapse: string;
+    country: string;
+    countryPick: string;
+    countryHint: string;
+    countryMissing: string;
+    countryRequired: string;
+    countryInUse: string;
+    subscribers: (n: number) => string;
   }
 > = {
   EN: {
@@ -194,6 +205,13 @@ const T: Record<
     applications: "Applications & responsible staff",
     expand: "Open applications",
     collapse: "Hide applications",
+    country: "Country",
+    countryPick: "Choose a country",
+    countryHint: "Location = country + city. Tours and castings take both from here.",
+    countryMissing: "No country",
+    countryRequired: "Choose the location’s country.",
+    countryInUse: "This location has a tour — the country can be changed but not cleared.",
+    subscribers: (n) => `Subscribers: ${n}`,
   },
   RU: {
     title: "Локации карты",
@@ -249,6 +267,13 @@ const T: Record<
     applications: "Отклики и ответственные",
     expand: "Открыть отклики",
     collapse: "Скрыть отклики",
+    country: "Страна",
+    countryPick: "Выберите страну",
+    countryHint: "Локация = страна + город. Туры и кастинги берут их отсюда.",
+    countryMissing: "Без страны",
+    countryRequired: "Выберите страну локации.",
+    countryInUse: "К локации привязан тур — страну можно сменить, но не стереть.",
+    subscribers: (n) => `Подписчиц: ${n}`,
   },
   ES: {
     title: "Ubicaciones del mapa",
@@ -304,6 +329,13 @@ const T: Record<
     applications: "Solicitudes y responsables",
     expand: "Abrir solicitudes",
     collapse: "Ocultar solicitudes",
+    country: "País",
+    countryPick: "Elige un país",
+    countryHint: "Ubicación = país + ciudad. Tours y castings los toman de aquí.",
+    countryMissing: "Sin país",
+    countryRequired: "Elige el país de la ubicación.",
+    countryInUse: "La ubicación tiene un tour: el país se puede cambiar, no borrar.",
+    subscribers: (n) => `Suscriptoras: ${n}`,
   },
   PT: {
     title: "Localizações do mapa",
@@ -359,6 +391,13 @@ const T: Record<
     applications: "Candidaturas e responsáveis",
     expand: "Abrir candidaturas",
     collapse: "Ocultar candidaturas",
+    country: "País",
+    countryPick: "Escolha um país",
+    countryHint: "Localização = país + cidade. Tours e castings usam os dois daqui.",
+    countryMissing: "Sem país",
+    countryRequired: "Escolha o país da localização.",
+    countryInUse: "O local tem um tour — o país pode mudar, mas não ser apagado.",
+    subscribers: (n) => `Assinantes: ${n}`,
   },
 };
 
@@ -373,6 +412,7 @@ function createEmptyForm(): MapHub {
   return {
     id: "",
     region: "mena",
+    country_code: "",
     name: { ...EMPTY_LOCALIZED },
     subtitle: { ...EMPTY_LOCALIZED },
     description: { ...EMPTY_LOCALIZED },
@@ -398,6 +438,7 @@ function normalizeHub(value: unknown): MapHub {
   return {
     id: String(row.id ?? ""),
     region: String(row.region ?? "mena"),
+    country_code: normalizeCountryCode(row.country_code) ?? "",
     name: {
       EN: String(row.name?.EN ?? ""),
       RU: String(row.name?.RU ?? ""),
@@ -454,6 +495,9 @@ export default function MapLocationsPage() {
   const t = T[lang];
 
   const [hubs, setHubs] = useState<MapHub[]>([]);
+  // Подписчицы локаций (owner/admin, RPC voyage_map_hub_subscriber_counts)
+  const [subscribers, setSubscribers] = useState<Record<string, number>>({});
+  const countries = useMemo(() => countryOptions(lang), [lang]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -489,6 +533,8 @@ export default function MapLocationsPage() {
       const haystack = [
         hub.id,
         hub.region,
+        hub.country_code,
+        countryName(hub.country_code, lang),
         hub.name.EN,
         hub.name.RU,
         hub.name.ES,
@@ -535,6 +581,17 @@ export default function MapLocationsPage() {
 
     setHubs((data ?? []).map(normalizeHub));
     setLoading(false);
+
+    const { data: counts, error: countsError } = await supabase.rpc("voyage_map_hub_subscriber_counts");
+    if (countsError) {
+      console.warn("voyage_map_hub_subscriber_counts:", countsError.code, countsError.message);
+      return;
+    }
+    const next: Record<string, number> = {};
+    for (const row of (Array.isArray(counts) ? counts : []) as { hub_id?: unknown; subscribers?: unknown }[]) {
+      if (typeof row.hub_id === "string") next[row.hub_id] = Number(row.subscribers) || 0;
+    }
+    setSubscribers(next);
   };
 
   useEffect(() => {
@@ -613,9 +670,16 @@ export default function MapLocationsPage() {
       return;
     }
 
+    const countryCode = normalizeCountryCode(form.country_code);
+    if (!countryCode) {
+      showToast("error", t.countryRequired);
+      return;
+    }
+
     const payload = {
       id,
       region: form.region,
+      country_code: countryCode,
       name: form.name,
       subtitle: form.subtitle,
       description: form.description,
@@ -634,6 +698,7 @@ export default function MapLocationsPage() {
         .from("map_hubs")
         .update({
           region: payload.region,
+          country_code: payload.country_code,
           name: payload.name,
           subtitle: payload.subtitle,
           description: payload.description,
@@ -650,7 +715,7 @@ export default function MapLocationsPage() {
 
       if (error) {
         console.error("map_hubs update error:", error);
-        showToast("error", t.saveError);
+        showToast("error", (error.message ?? "").includes("map_hub_country_in_use") ? t.countryInUse : t.saveError);
         setSaving(false);
         return;
       }
@@ -862,6 +927,22 @@ export default function MapLocationsPage() {
                         <span className="rounded-full border border-amber-200/10 bg-amber-200/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.15em] text-amber-200/70">
                           {getRegionLabel(hub.region)}
                         </span>
+
+                        {hub.country_code ? (
+                          <span className="rounded-full border border-zinc-800 bg-zinc-950/60 px-2.5 py-1 text-[10px] text-zinc-300">
+                            {countryFlag(hub.country_code)} {countryName(hub.country_code, lang)}
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-rose-300/25 bg-rose-300/5 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.15em] text-rose-200/80">
+                            {t.countryMissing}
+                          </span>
+                        )}
+
+                        {(subscribers[hub.id] ?? 0) > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-zinc-800 bg-zinc-950/60 px-2.5 py-1 text-[10px] text-zinc-400">
+                            <Users className="h-3 w-3" /> {t.subscribers(subscribers[hub.id] ?? 0)}
+                          </span>
+                        )}
                       </div>
 
                       <h2 className="font-serif text-2xl font-light text-zinc-100">
@@ -1091,6 +1172,38 @@ export default function MapLocationsPage() {
 
                       <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                      {t.country} *
+                    </label>
+
+                    <div className="relative">
+                      <select
+                        value={form.country_code}
+                        required
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            country_code: event.target.value,
+                          }))
+                        }
+                        className="w-full appearance-none rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-sm text-zinc-200 outline-none transition-all focus:border-amber-200/30"
+                      >
+                        <option value="" className="bg-zinc-950">
+                          {t.countryPick}
+                        </option>
+                        {countries.map((country) => (
+                          <option key={country.code} value={country.code} className="bg-zinc-950">
+                            {countryFlag(country.code)} {country.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
+                    </div>
+                    <p className="mt-1.5 text-[11px] leading-4 text-zinc-600">{t.countryHint}</p>
                   </div>
 
                   <div>

@@ -49,6 +49,7 @@ const T: Record<Lang, Copy> = {
     managerSubtitle: "Рабочие уведомления кабинета менеджера. Выключите то, что отслеживаете в Штабе сами.",
     items: {
       notify_tours: { title: "Новые туры", hint: "Когда на интерактивной карте открывается новая локация." },
+      notify_location_updates: { title: "Мои локации", hint: "Новый тур или открытый кастинг в городе, на который вы подписаны на карте. В ленте локаций всё видно и без Telegram." },
       notify_parties: { title: "Новые тусовки", hint: "Закрытые ивенты и яхты, доступные вашему уровню." },
       notify_approvals: { title: "Одобрение в тур", hint: "Заявка на тур или тусовку одобрена, вас выбрали в состав." },
       notify_points: { title: "Начисление баллов", hint: "Сколько баллов пришло и за что: тур, штамп, комбо." },
@@ -74,6 +75,7 @@ const T: Record<Lang, Copy> = {
     managerSubtitle: "Work alerts from the manager cabinet. Switch off what you already follow in Command.",
     items: {
       notify_tours: { title: "New tours", hint: "When a new location opens on the interactive map." },
+      notify_location_updates: { title: "My locations", hint: "A new tour or an open casting in a city you follow on the map. The locations feed shows everything even without Telegram." },
       notify_parties: { title: "New parties", hint: "Private events and yachts open to your level." },
       notify_approvals: { title: "Tour approval", hint: "Your tour or party application is approved, or you joined a crew." },
       notify_points: { title: "Points awarded", hint: "How many points arrived and why: tour, stamp, combo." },
@@ -99,6 +101,7 @@ const T: Record<Lang, Copy> = {
     managerSubtitle: "Avisos de trabajo del gabinete. Desactiva lo que ya sigues en el Cuartel.",
     items: {
       notify_tours: { title: "Nuevos tours", hint: "Cuando se abre una nueva ubicación en el mapa interactivo." },
+      notify_location_updates: { title: "Mis ubicaciones", hint: "Un tour nuevo o un casting abierto en una ciudad que sigues en el mapa. El feed de ubicaciones lo muestra todo también sin Telegram." },
       notify_parties: { title: "Nuevas fiestas", hint: "Eventos privados y yates abiertos a tu nivel." },
       notify_approvals: { title: "Aprobación para el tour", hint: "Tu solicitud fue aprobada o entraste en un equipo." },
       notify_points: { title: "Puntos recibidos", hint: "Cuántos puntos llegaron y por qué: tour, sello, combo." },
@@ -124,6 +127,7 @@ const T: Record<Lang, Copy> = {
     managerSubtitle: "Avisos de trabalho do gabinete. Desligue o que você já acompanha no Quartel.",
     items: {
       notify_tours: { title: "Novos tours", hint: "Quando uma nova localização abre no mapa interativo." },
+      notify_location_updates: { title: "Minhas localizações", hint: "Um tour novo ou um casting aberto numa cidade que você segue no mapa. O feed de localizações mostra tudo mesmo sem Telegram." },
       notify_parties: { title: "Novas festas", hint: "Eventos privados e iates abertos ao seu nível." },
       notify_approvals: { title: "Aprovação no tour", hint: "Sua candidatura foi aprovada ou você entrou na equipe." },
       notify_points: { title: "Pontos recebidos", hint: "Quantos pontos chegaram e por quê: tour, carimbo, combo." },

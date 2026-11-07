@@ -7,6 +7,10 @@
  * Динамичный кастинг — отбор под конкретные даты, ссылается на тур
  * (partner_castings.catalog_tour_id) и берёт из него значения по умолчанию.
  *
+ * Направление тура = локация из /admin/map-locations (map_hubs, миграция
+ * 20261103100000): город и регион тура база берёт из локации, одна
+ * локация — один тур, вручную направление не заводится.
+ *
  * Без серверных импортов — подключается и в клиенте, и в server actions.
  * ──────────────────────────────────────────────────────────────────── */
 
@@ -19,6 +23,8 @@ export type TourAudience = "all" | "working" | "elite";
 export type CatalogTour = {
   id: string;
   slug: string;
+  /** Локация карты (map_hubs.id); null — старый тур без локации (всегда выключен) */
+  mapHubId: string | null;
   city: string;
   countryCode: string | null;
   region: string | null;
@@ -42,7 +48,7 @@ export type CatalogTour = {
 };
 
 export const TOUR_CATALOG_COLUMNS =
-  "id,slug,city,country_code,region,project_type,audience_segment,source_lang,title_i18n,description_i18n,requirements_i18n,conditions_i18n,fee_amount,fee_currency,flight_paid_by,hotel_paid_by,height_min,languages,cover_url,is_active,sort_order,updated_at";
+  "id,slug,map_hub_id,city,country_code,region,project_type,audience_segment,source_lang,title_i18n,description_i18n,requirements_i18n,conditions_i18n,fee_amount,fee_currency,flight_paid_by,hotel_paid_by,height_min,languages,cover_url,is_active,sort_order,updated_at";
 
 const PAYERS: readonly TourPayer[] = ["manager", "participant", "split"];
 const AUDIENCES: readonly TourAudience[] = ["all", "working", "elite"];
@@ -63,6 +69,7 @@ export function parseCatalogTour(raw: unknown): CatalogTour | null {
   return {
     id,
     slug,
+    mapHubId: s(r.map_hub_id),
     city,
     countryCode: s(r.country_code),
     region: s(r.region),
@@ -111,6 +118,47 @@ export function parseCatalogTourBrief(raw: unknown): CatalogTourBrief | null {
     requirements: toI18n(r.requirements_i18n, TOUR_NOTE_MAX),
     conditions: toI18n(r.conditions_i18n, TOUR_NOTE_MAX),
   };
+}
+
+/* ── Локации карты (map_hubs) ───────────────────────────────────────── */
+
+export type MapHub = {
+  id: string;
+  name: I18nText;
+  region: string | null;
+  /** ISO-3166 alpha-2 (map_hubs.country_code, миграция 20261106090000); null — страна не задана, тур не создать */
+  countryCode: string | null;
+  isActive: boolean;
+};
+
+export const MAP_HUB_COLUMNS = "id,name,region,country_code,is_active";
+
+export const MAP_HUB_REGIONS: Record<string, string> = {
+  mena: "MENA",
+  europe: "Europe",
+  americas: "Americas",
+  apac: "APAC",
+};
+
+export function parseMapHub(raw: unknown): MapHub | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const id = s(r.id);
+  if (!id) return null;
+  const cc = s(r.country_code)?.toUpperCase() ?? null;
+  return {
+    id,
+    name: toI18n(r.name, 60),
+    region: s(r.region),
+    countryCode: cc && /^[A-Z]{2}$/.test(cc) ? cc : null,
+    isActive: r.is_active !== false,
+  };
+}
+
+/** Название локации на языке интерфейса (как на карте) → EN → RU → id */
+export function mapHubName(hub: Pick<MapHub, "id" | "name">, lang: string): string {
+  const key = lang.toUpperCase() as keyof I18nText;
+  return (hub.name[key] ?? hub.name.EN ?? hub.name.RU ?? hub.name.ES ?? hub.name.PT ?? hub.id).trim() || hub.id;
 }
 
 /** «Dubai» → «dubai», «São Paulo Fashion» → «sao-paulo-fashion» */
