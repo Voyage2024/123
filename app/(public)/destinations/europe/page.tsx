@@ -21,6 +21,12 @@ import { useAuth } from "@/app/context/AuthContext";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import { submitMapHubApplication } from "@/app/actions/map-locations";
+import {
+  LOCATION_APPLY_COPY,
+  LocationApplyBrief,
+  activeApplicationLabel,
+  useHubSubscription,
+} from "@/app/(public)/destinations/_components/LocationApplyBrief";
 
 type Lang = "EN" | "RU" | "ES" | "PT";
 
@@ -134,6 +140,7 @@ export default function EuropePage() {
   const [applicationChecking, setApplicationChecking] = useState(false);
   const [applicationSubmitting, setApplicationSubmitting] = useState(false);
   const [applicationError, setApplicationError] = useState(false);
+  const hubSubscription = useHubSubscription(selected?.id, user?.id);
 
   useEffect(() => {
     let cancelled = false;
@@ -470,6 +477,8 @@ export default function EuropePage() {
 
     setApplicationStatus("pending");
     setApplicationSubmitting(false);
+    // заявка = подписка на локацию (туры/кастинги города → Telegram)
+    void hubSubscription.subscribe();
   };
 
   const applicationDisabled =
@@ -484,10 +493,10 @@ export default function EuropePage() {
     : applicationSubmitting
       ? t.submitting[currentLang]
       : applicationStatus === "pending" || applicationStatus === "approved"
-        ? t.applicationActive[currentLang]
+        ? activeApplicationLabel(currentLang, hubSubscription, t.applicationActive[currentLang])
         : applicationStatus === "rejected"
           ? t.rejectedWait[currentLang]
-          : t.applyForTour[currentLang];
+          : LOCATION_APPLY_COPY.cta[currentLang];
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-amber-200/20 selection:text-amber-100">
@@ -883,6 +892,13 @@ export default function EuropePage() {
               </div>
 
               <div className="mt-10">
+                <LocationApplyBrief
+                  className="mb-4"
+                  lang={currentLang}
+                  signedIn={Boolean(user)}
+                  applicationActive={applicationStatus === "pending" || applicationStatus === "approved"}
+                  subscription={hubSubscription}
+                />
                 {!user ? (
                   <Link
                     href="/login"

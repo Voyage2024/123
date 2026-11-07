@@ -21,6 +21,12 @@ import { useLanguage } from "@/app/context/LanguageContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { submitMapHubApplication } from "@/app/actions/map-locations";
+import {
+  LOCATION_APPLY_COPY,
+  LocationApplyBrief,
+  activeApplicationLabel,
+  useHubSubscription,
+} from "@/app/(public)/destinations/_components/LocationApplyBrief";
 
 type Lang = "EN" | "RU" | "ES" | "PT";
 
@@ -140,6 +146,7 @@ export default function AmericasPage() {
   >("idle");
   const [applicationError, setApplicationError] = useState<string | null>(null);
   const [applicationErrorType, setApplicationErrorType] = useState<"check" | "submit" | null>(null);
+  const hubSubscription = useHubSubscription(selected?.id, user?.id);
 
   useEffect(() => {
     let cancelled = false;
@@ -255,6 +262,7 @@ export default function AmericasPage() {
     if (!result.ok) {
       if (result.reason === "duplicate") {
         setApplicationStatus("active");
+        void hubSubscription.subscribe();
         return;
       }
       setApplicationError(t.submitError[currentLang]);
@@ -264,6 +272,8 @@ export default function AmericasPage() {
     }
 
     setApplicationStatus("active");
+    // заявка = подписка на локацию (туры/кастинги города → Telegram)
+    void hubSubscription.subscribe();
   };
 
   const t = useMemo(
@@ -703,15 +713,23 @@ export default function AmericasPage() {
                 )}
               </div>
 
+              <LocationApplyBrief
+                className="mt-10"
+                lang={currentLang}
+                signedIn={Boolean(user)}
+                applicationActive={applicationStatus === "active"}
+                subscription={hubSubscription}
+              />
+
               {!user ? (
                 <Link
                   href="/login"
-                  className="mt-10 inline-flex items-center justify-center rounded-full bg-amber-200 px-8 py-3 w-full text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100 hover:shadow-[0_0_30px_rgba(251,191,36,0.12)]"
+                  className="mt-4 inline-flex items-center justify-center rounded-full bg-amber-200 px-8 py-3 w-full text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-100 hover:shadow-[0_0_30px_rgba(251,191,36,0.12)]"
                 >
                   {t.residentLogin[currentLang]}
                 </Link>
               ) : (
-                <div className="mt-10">
+                <div className="mt-4">
                   <button
                     type="button"
                     onClick={applyForTour}
@@ -729,14 +747,14 @@ export default function AmericasPage() {
                     {applicationStatus === "checking"
                       ? t.checking[currentLang]
                       : applicationStatus === "active"
-                        ? t.applicationActive[currentLang]
+                        ? activeApplicationLabel(currentLang, hubSubscription, t.applicationActive[currentLang])
                         : applicationStatus === "rejected_wait"
                           ? t.rejectedWait[currentLang]
                           : applicationStatus === "submitting"
                             ? t.submitting[currentLang]
                             : applicationStatus === "error"
                               ? t.checkError[currentLang]
-                              : t.applyForTour[currentLang]}
+                              : LOCATION_APPLY_COPY.cta[currentLang]}
                   </button>
 
                   {applicationError && (

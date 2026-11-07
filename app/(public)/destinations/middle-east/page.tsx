@@ -21,6 +21,12 @@ import { useLanguage } from "@/app/context/LanguageContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { submitMapHubApplication } from "@/app/actions/map-locations";
+import {
+  LOCATION_APPLY_COPY,
+  LocationApplyBrief,
+  activeApplicationLabel,
+  useHubSubscription,
+} from "@/app/(public)/destinations/_components/LocationApplyBrief";
 
 type Lang = "EN" | "RU" | "ES" | "PT";
 
@@ -241,6 +247,7 @@ export default function MiddleEastPage() {
     useState<ApplicationState>("available");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const hubSubscription = useHubSubscription(selected?.id, user?.id);
 
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [loadingHubs, setLoadingHubs] = useState(true);
@@ -656,6 +663,8 @@ export default function MiddleEastPage() {
       }
 
       setApplicationState("active");
+      // заявка = подписка на локацию (туры/кастинги города → Telegram)
+      void hubSubscription.subscribe();
     } finally {
       setIsSubmitting(false);
     }
@@ -664,7 +673,7 @@ export default function MiddleEastPage() {
   const renderApplicationButton = () => {
     if (!user) {
       return (
-        <div className="space-y-3">
+        <div className="mt-4 space-y-3">
           <Link
             href="/login"
             className="flex w-full items-center justify-center rounded-full bg-amber-200 px-8 py-3.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-950 transition-all duration-300 hover:bg-amber-100 hover:shadow-[0_0_30px_rgba(251,191,36,0.12)]"
@@ -695,7 +704,7 @@ export default function MiddleEastPage() {
       },
 
       active: {
-        label: t.active[currentLang],
+        label: activeApplicationLabel(currentLang, hubSubscription, t.active[currentLang]),
         disabled: true,
         className:
           "cursor-not-allowed border border-amber-200/20 bg-amber-200/5 text-amber-200",
@@ -716,7 +725,7 @@ export default function MiddleEastPage() {
       },
 
       available: {
-        label: t.apply[currentLang],
+        label: LOCATION_APPLY_COPY.cta[currentLang],
         disabled: false,
         className:
           "border border-amber-200/20 bg-amber-200 text-zinc-950 hover:bg-amber-100 hover:shadow-[0_0_35px_rgba(251,191,36,0.12)]",
@@ -732,7 +741,7 @@ export default function MiddleEastPage() {
         disabled={
           current.disabled || isSubmitting
         }
-        className={`mt-10 flex w-full items-center justify-center rounded-full px-8 py-3.5 text-[11px] font-semibold uppercase tracking-[0.2em] transition-all duration-300 ${current.className}`}
+        className={`mt-4 flex w-full items-center justify-center rounded-full px-8 py-3.5 text-[11px] font-semibold uppercase tracking-[0.2em] transition-all duration-300 ${current.className}`}
       >
         {current.label}
       </button>
@@ -1329,6 +1338,14 @@ export default function MiddleEastPage() {
                   </div>
                 )}
               </div>
+
+              <LocationApplyBrief
+                className="mt-10"
+                lang={currentLang}
+                signedIn={Boolean(user)}
+                applicationActive={applicationState === "active"}
+                subscription={hubSubscription}
+              />
 
               {renderApplicationButton()}
             </motion.aside>
