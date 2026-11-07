@@ -24,7 +24,6 @@ import { submitMapHubApplication } from "@/app/actions/map-locations";
 import {
   LOCATION_APPLY_COPY,
   LocationApplyBrief,
-  activeApplicationLabel,
   useHubSubscription,
 } from "@/app/(public)/destinations/_components/LocationApplyBrief";
 
@@ -493,7 +492,7 @@ export default function EuropePage() {
     : applicationSubmitting
       ? t.submitting[currentLang]
       : applicationStatus === "pending" || applicationStatus === "approved"
-        ? activeApplicationLabel(currentLang, hubSubscription, t.applicationActive[currentLang])
+        ? LOCATION_APPLY_COPY.waiting[currentLang]
         : applicationStatus === "rejected"
           ? t.rejectedWait[currentLang]
           : LOCATION_APPLY_COPY.cta[currentLang];

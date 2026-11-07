@@ -21,6 +21,7 @@ import { useLanguage } from "@/app/context/LanguageContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import LocationManagementPanel from "@/app/(dashboard)/admin/map-locations/LocationManagementPanel";
+import MapLocationsTabs from "@/app/(dashboard)/admin/map-locations/MapLocationsTabs";
 import { countryFlag, countryName, countryOptions, normalizeCountryCode } from "@/lib/countries";
 
 type Lang = "EN" | "RU" | "ES" | "PT";
@@ -814,6 +815,8 @@ export default function MapLocationsPage() {
   return (
     <main className="min-h-screen bg-zinc-950 px-4 pb-6 pt-2 text-zinc-100 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1600px]">
+        <MapLocationsTabs />
+
         <div className="mb-8 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-200/60">

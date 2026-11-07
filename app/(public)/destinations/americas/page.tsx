@@ -24,7 +24,6 @@ import { submitMapHubApplication } from "@/app/actions/map-locations";
 import {
   LOCATION_APPLY_COPY,
   LocationApplyBrief,
-  activeApplicationLabel,
   useHubSubscription,
 } from "@/app/(public)/destinations/_components/LocationApplyBrief";
 
@@ -747,7 +746,7 @@ export default function AmericasPage() {
                     {applicationStatus === "checking"
                       ? t.checking[currentLang]
                       : applicationStatus === "active"
-                        ? activeApplicationLabel(currentLang, hubSubscription, t.applicationActive[currentLang])
+                        ? LOCATION_APPLY_COPY.waiting[currentLang]
                         : applicationStatus === "rejected_wait"
                           ? t.rejectedWait[currentLang]
                           : applicationStatus === "submitting"

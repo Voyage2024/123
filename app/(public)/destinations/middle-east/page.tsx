@@ -24,7 +24,6 @@ import { submitMapHubApplication } from "@/app/actions/map-locations";
 import {
   LOCATION_APPLY_COPY,
   LocationApplyBrief,
-  activeApplicationLabel,
   useHubSubscription,
 } from "@/app/(public)/destinations/_components/LocationApplyBrief";
 
@@ -704,7 +703,7 @@ export default function MiddleEastPage() {
       },
 
       active: {
-        label: activeApplicationLabel(currentLang, hubSubscription, t.active[currentLang]),
+        label: LOCATION_APPLY_COPY.waiting[currentLang],
         disabled: true,
         className:
           "cursor-not-allowed border border-amber-200/20 bg-amber-200/5 text-amber-200",

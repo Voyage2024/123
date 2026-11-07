@@ -24,7 +24,6 @@ import { submitMapHubApplication } from "@/app/actions/map-locations";
 import {
   LOCATION_APPLY_COPY,
   LocationApplyBrief,
-  activeApplicationLabel,
   useHubSubscription,
 } from "@/app/(public)/destinations/_components/LocationApplyBrief";
 
@@ -760,7 +759,7 @@ export default function AsiaPacificPage() {
                     )}
 
                     {applicationState === "active" &&
-                      activeApplicationLabel(currentLang, hubSubscription, t.applicationActive[currentLang])}
+                      LOCATION_APPLY_COPY.waiting[currentLang]}
 
                     {applicationState === "cooldown" && t.rejectedWait[currentLang]}
 
