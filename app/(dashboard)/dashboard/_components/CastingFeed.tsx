@@ -28,9 +28,17 @@
  * над городом — статичный тур; личное приглашение клуба — золотая плашка
  * с сообщением и кнопкой «Не интересно». Приглашения видны и при выключенном
  * «Открыта к турам».
+ *
+ * С 14.11.2026 (миграция 20261114090000): одобренная резидентка видит все
+ * открытые кастинги сразу, даже без KYC 3 и с выключенным тумблером.
+ * Что мешает отклику — баннер CastingAccessBanner над лентой и подпись
+ * на заблокированной кнопке карточки. Рост и языки кастинг не прячут:
+ * требование показывается как «подходит / не совпадает / не указано».
+ * После переключения тумблера лента перезагружается (раньше оставалась
+ * пустой до F5).
  * ──────────────────────────────────────────────────────────────────── */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   BadgeCheck,
@@ -38,7 +46,6 @@ import {
   BedDouble,
   Check,
   Clock,
-  EyeOff,
   Handshake,
   Hourglass,
   KeyRound,
@@ -60,7 +67,6 @@ import { pl, ru, usePartnerFormat, type Common, type Fmt } from "@/app/(dashboar
 import {
   BTN_GOLD,
   FilterTabs,
-  ICON_RING,
   PILL,
   Pill,
   SectionHeader,
@@ -77,6 +83,7 @@ import {
 } from "@/app/(dashboard)/dashboard/_lib/castingFeed";
 import { applyToCasting, declineInvite, markCastingsSeen, setOpenToTours, withdrawResponse, type ActionResult } from "@/app/(dashboard)/dashboard/_lib/actions";
 import { pickI18n, pickedLang } from "@/lib/casting-i18n";
+import CastingAccessBanner, { hardBlocker, lockedLabel } from "@/app/(dashboard)/dashboard/_components/CastingAccessBanner";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПЕРЕВОДЫ
@@ -100,6 +107,10 @@ type Dict = {
   slots: (n: number) => string;
   height: (cm: number) => string;
   fits: string;
+  /** Требование есть, а в профиле поле пустое */
+  unknown: string;
+  /** Не совпало — откликнуться всё равно можно */
+  mismatch: string;
   manager: string;
   managerNew: string;
   organizerClub: string;
@@ -122,6 +133,7 @@ type Dict = {
   selectedHint: string;
   error: Record<Failure, string>;
   retry: string;
+  lockedHint: string;
   loading: string;
   loadError: string;
 };
@@ -149,6 +161,8 @@ const T: Record<Lang, Dict> = {
     slots: (n) => `${n}`,
     height: (cm) => `from ${cm} cm`,
     fits: "matches your profile",
+    unknown: "not in your profile yet",
+    mismatch: "doesn’t fully match — you can still reply",
     manager: "Club manager",
     managerNew: "new",
     organizerClub: "Official club tour",
@@ -175,6 +189,7 @@ const T: Record<Lang, Dict> = {
       network: "Couldn’t send. Check your connection and try again.",
     },
     retry: "Try again",
+    lockedHint: "How to unlock replies",
     loading: "Loading castings…",
     loadError: "Couldn’t load castings. Refresh the page to try again.",
   },
@@ -200,6 +215,8 @@ const T: Record<Lang, Dict> = {
     slots: (n) => `${n}`,
     height: (cm) => `от ${cm} см`,
     fits: "подходит под ваш профиль",
+    unknown: "не указано в профиле",
+    mismatch: "не всё совпадает — откликнуться можно",
     manager: "Менеджер клуба",
     managerNew: "новый",
     organizerClub: "Официальный тур клуба",
@@ -226,6 +243,7 @@ const T: Record<Lang, Dict> = {
       network: "Не удалось отправить. Проверьте связь и попробуйте ещё раз.",
     },
     retry: "Повторить",
+    lockedHint: "Как открыть отклик",
     loading: "Загружаем кастинги…",
     loadError: "Не удалось загрузить кастинги. Обновите страницу.",
   },
@@ -251,6 +269,8 @@ const T: Record<Lang, Dict> = {
     slots: (n) => `${n}`,
     height: (cm) => `desde ${cm} cm`,
     fits: "encaja con tu perfil",
+    unknown: "aún no está en tu perfil",
+    mismatch: "no coincide del todo — puedes responder igual",
     manager: "Gerente del club",
     managerNew: "nuevo",
     organizerClub: "Tour oficial del club",
@@ -277,6 +297,7 @@ const T: Record<Lang, Dict> = {
       network: "No se pudo enviar. Revisa la conexión e inténtalo de nuevo.",
     },
     retry: "Reintentar",
+    lockedHint: "Cómo activar la respuesta",
     loading: "Cargando castings…",
     loadError: "No se pudieron cargar los castings. Actualiza la página.",
   },
@@ -302,6 +323,8 @@ const T: Record<Lang, Dict> = {
     slots: (n) => `${n}`,
     height: (cm) => `a partir de ${cm} cm`,
     fits: "combina com seu perfil",
+    unknown: "ainda não está no seu perfil",
+    mismatch: "não combina 100% — você ainda pode responder",
     manager: "Gerente do clube",
     managerNew: "novo",
     organizerClub: "Tour oficial do clube",
@@ -328,6 +351,7 @@ const T: Record<Lang, Dict> = {
       network: "Não foi possível enviar. Verifique a conexão e tente de novo.",
     },
     retry: "Tentar de novo",
+    lockedHint: "Como liberar a resposta",
     loading: "Carregando castings…",
     loadError: "Não foi possível carregar os castings. Atualize a página.",
   },
@@ -404,12 +428,15 @@ function ApplyStub({
   response,
   pending,
   failure,
+  locked,
   onApply,
   onWithdraw,
   t,
   fmt,
 }: {
   response: Response;
+  /** Отклик пока закрыт (KYC / тумблер): подпись вместо «Готова в тур» */
+  locked: string | null;
   pending: Pending | null;
   failure: Failure | null;
   onApply: () => void;
@@ -493,6 +520,27 @@ function ApplyStub({
     );
   }
 
+  // Отклик пока закрыт — кастинг виден, кнопка заблокирована с причиной
+  if (locked) {
+    return (
+      <div>
+        <button
+          type="button"
+          disabled
+          className="inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border border-zinc-700/80 bg-zinc-900/60 px-4 text-center text-sm text-zinc-300"
+        >
+          <Lock className="size-4 shrink-0 text-amber-200/70" aria-hidden />
+          {locked}
+        </button>
+        <p className="mt-2 text-center text-[11px] leading-snug text-zinc-500">
+          <a href="#casting-access" className="underline-offset-4 hover:text-zinc-300 hover:underline">
+            {t.lockedHint}
+          </a>
+        </p>
+      </div>
+    );
+  }
+
   // Нет отклика (или отозван) — главная кнопка
   const sending = pending === "apply";
   return (
@@ -529,6 +577,7 @@ function TicketCard({
   response,
   pending,
   failure,
+  locked,
   onApply,
   onWithdraw,
   onDecline,
@@ -542,6 +591,7 @@ function TicketCard({
   response: Response;
   pending: Pending | null;
   failure: Failure | null;
+  locked: string | null;
   onApply: () => void;
   onWithdraw: () => void;
   onDecline: () => void;
@@ -558,8 +608,16 @@ function TicketCard({
   const days = Math.round((c.endsAt - c.startsAt) / DAY) + 1;
   const closingSoon = fmt.ready && c.closesAt - fmt.now < DAY;
   const replied = hasReply(response);
-  const heightOk = c.heightMin === null || (me.height ?? 0) >= c.heightMin;
-  const langOk = c.languages.every((l) => me.languages.includes(l));
+  // Требования не прячут кастинг: подходит / не совпадает / не указано в профиле
+  const heightFit: Fit = c.heightMin === null ? "ok" : me.height === null ? "unknown" : me.height >= c.heightMin ? "ok" : "miss";
+  const langFit: Fit =
+    c.languages.length === 0
+      ? "ok"
+      : me.languages.length === 0
+        ? "unknown"
+        : c.languages.every((l) => me.languages.includes(l))
+          ? "ok"
+          : "miss";
 
   const terms: { icon: LucideIcon; label: string; value: string }[] = [
     { icon: Banknote, label: t.terms.fee, value: c.fee ? fmt.money(c.fee.amount, c.fee.currency) : t.terms.feeOpen },
@@ -635,9 +693,17 @@ function TicketCard({
 
         {(c.heightMin !== null || c.languages.length > 0) && (
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {c.heightMin !== null && <Requirement icon={Ruler} text={t.height(c.heightMin)} ok={heightOk} />}
-            {c.languages.length > 0 && <Requirement icon={Languages} text={c.languages.join(" · ")} ok={langOk} />}
-            {heightOk && langOk && <span className="text-[11px] text-emerald-300/80">{t.fits}</span>}
+            {c.heightMin !== null && <Requirement icon={Ruler} text={t.height(c.heightMin)} fit={heightFit} />}
+            {c.languages.length > 0 && <Requirement icon={Languages} text={c.languages.join(" · ")} fit={langFit} />}
+            {heightFit === "ok" && langFit === "ok" ? (
+              <span className="text-[11px] text-emerald-300/80">{t.fits}</span>
+            ) : heightFit === "miss" || langFit === "miss" ? (
+              <span className="text-[11px] text-zinc-500">{t.mismatch}</span>
+            ) : (
+              <a href="#casting-access" className="text-[11px] text-amber-200/80 underline-offset-4 hover:underline">
+                {t.unknown}
+              </a>
+            )}
           </div>
         )}
 
@@ -709,6 +775,7 @@ function TicketCard({
             response={response}
             pending={pending}
             failure={failure}
+            locked={locked}
             onApply={onApply}
             onWithdraw={onWithdraw}
             t={t}
@@ -720,12 +787,16 @@ function TicketCard({
   );
 }
 
-function Requirement({ icon: Icon, text, ok }: { icon: LucideIcon; text: string; ok: boolean }) {
+type Fit = "ok" | "miss" | "unknown";
+
+function Requirement({ icon: Icon, text, fit }: { icon: LucideIcon; text: string; fit: Fit }) {
+  const tone = fit === "ok" ? PILL.emerald : fit === "unknown" ? PILL.gold : PILL.zinc;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${ok ? PILL.emerald : PILL.zinc}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${tone}`}>
       <Icon className="size-3" strokeWidth={1.75} aria-hidden />
       {text}
-      {ok && <Check className="size-3" aria-hidden />}
+      {fit === "ok" && <Check className="size-3" aria-hidden />}
+      {fit === "unknown" && <span aria-hidden>?</span>}
     </span>
   );
 }
@@ -748,12 +819,16 @@ export default function CastingFeed() {
   const t = T[lang] ?? T.EN;
   const [data, setData] = useState<CastingFeedData | null>(null);
   const [failed, setFailed] = useState(false);
+  // «Новые» с первой загрузки: после markCastingsSeen база отдаст fresh=false,
+  // а при перезагрузке (тумблер) метки не должны пропадать.
+  const freshIds = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     let alive = true;
     fetchCastingFeed()
       .then((d) => {
         if (!alive) return;
+        freshIds.current = new Set(d.castings.filter((c) => c.fresh).map((c) => c.id));
         setData(d);
         void markCastingsSeen();
       })
@@ -766,6 +841,17 @@ export default function CastingFeed() {
     };
   }, []);
 
+  /** Перечитать ленту после смены допуска (тумблер); старые данные остаются на экране до ответа */
+  const reload = useCallback(async () => {
+    try {
+      const d = await fetchCastingFeed();
+      const fresh = freshIds.current;
+      setData({ ...d, castings: d.castings.map((c) => (fresh?.has(c.id) ? { ...c, fresh: true } : c)) });
+    } catch (e: unknown) {
+      console.error("[castings] reload:", e);
+    }
+  }, []);
+
   if (!data) {
     return (
       <section aria-busy={!failed} aria-label={t.title}>
@@ -775,14 +861,16 @@ export default function CastingFeed() {
     );
   }
 
-  return <FeedBody data={data} />;
+  return <FeedBody key={data.generatedAt} data={data} onReload={reload} />;
 }
 
-function FeedBody({ data }: { data: CastingFeedData }) {
+function FeedBody({ data, onReload }: { data: CastingFeedData; onReload: () => Promise<void> }) {
   const { lang, c: cm, fmt } = usePartnerFormat();
   const t = T[lang] ?? T.EN;
   const [filter, setFilter] = useState<FilterKey>("all");
   const [open, setOpen] = useState(data.me.openToTours);
+  const [me, setMe] = useState(data.me);
+  const blocked = hardBlocker(me);
   const [openBusy, setOpenBusy] = useState(false);
   const [responses, setResponses] = useState<Record<string, Response>>(() =>
     Object.fromEntries(data.castings.map((c) => [c.id, c.response])),
@@ -841,9 +929,19 @@ function FeedBody({ data }: { data: CastingFeedData }) {
     setOpen(next); // сразу — тумблер не должен «думать»
     setOpenBusy(true);
     const res = await setOpenToTours(next);
+    if (!res.ok) {
+      setOpenBusy(false);
+      setOpen(!next);
+      return;
+    }
+    // Право отклика зависит от тумблера — берём свежие can_respond из базы
+    await onReload();
     setOpenBusy(false);
-    if (!res.ok) setOpen(!next);
   };
+
+  /** Подпись заблокированной кнопки: null — отклик доступен или уже есть */
+  const lockedFor = (c: FeedCasting): string | null =>
+    c.canRespond || hasReply(responses[c.id]) ? null : lockedLabel(me, open, lang);
 
   const isNew = (c: FeedCasting) => c.fresh && !hasReply(responses[c.id]);
   const isMine = (c: FeedCasting) => hasReply(responses[c.id]);
@@ -855,16 +953,15 @@ function FeedBody({ data }: { data: CastingFeedData }) {
   const visible = ordered
     .filter((c) => !declined.has(c.id))
     .filter((c) => (filter === "new" ? isNew(c) : filter === "mine" ? isMine(c) : true));
-  // «Открыта к турам» выключено — показываем только личные приглашения клуба.
-  const invitedOnly = ordered.filter((c) => c.invite && !declined.has(c.id));
   const renderCard = (c: FeedCasting) => (
     <TicketCard
       key={c.id}
       c={c}
-      me={data.me}
+      me={me}
       response={responses[c.id]}
       pending={pending[c.id] ?? null}
       failure={failures[c.id] ?? null}
+      locked={lockedFor(c)}
       onApply={() => void handleApply(c.id)}
       onWithdraw={() => void handleWithdraw(c.id)}
       onDecline={() => void handleDecline(c.id)}
@@ -879,7 +976,7 @@ function FeedBody({ data }: { data: CastingFeedData }) {
     <section aria-label={t.title}>
       <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         <div className="min-w-0">
-          <SectionHeader eyebrow={t.eyebrow} title={t.title} icon={Sparkles} count={open ? counts.new : undefined} />
+          <SectionHeader eyebrow={t.eyebrow} title={t.title} icon={Sparkles} count={blocked ? undefined : counts.new} />
         </div>
         <OpenToToursSwitch value={open} busy={openBusy} onChange={handleOpen} t={t} />
       </div>
@@ -889,21 +986,16 @@ function FeedBody({ data }: { data: CastingFeedData }) {
         {t.rule}
       </p>
 
-      {!open ? (
-        <div className="mt-6 flex flex-col items-start gap-4 rounded-2xl border border-dashed border-zinc-800 p-6 sm:flex-row sm:items-center">
-          <span className={`flex size-11 shrink-0 items-center justify-center rounded-full border ${ICON_RING.zinc}`}>
-            <EyeOff className="size-5" strokeWidth={1.5} aria-hidden />
-          </span>
-          <div className="min-w-0">
-            <p className={`${cormorant.className} text-xl font-medium text-zinc-100`}>{t.hidden.title}</p>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-400">{t.hidden.text}</p>
-          </div>
-        </div>
-      ) : null}
-      {!open && invitedOnly.length > 0 && (
-        <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,21rem),1fr))] gap-5">{invitedOnly.map(renderCard)}</div>
-      )}
-      {!open ? null : (
+      <div id="casting-access" className="scroll-mt-24">
+        <CastingAccessBanner
+          me={me}
+          open={open}
+          lang={lang}
+          onProfileSaved={(v) => setMe((cur) => ({ ...cur, height: v.height, languages: v.languages }))}
+        />
+      </div>
+
+      {blocked ? null : (
         <>
           <div className="mt-6">
             <FilterTabs

@@ -7,6 +7,8 @@
  *   insert отклика — только своего, только 'ready', только если
  *   partner_me_can_respond(casting_id): полная верификация, тумблер
  *   «Открыта к турам», нет в Blacklist, кастинг открыт и не истёк;
+ *   (с 14.11.2026 лента показывает и кастинги, где отклик закрыт —
+ *   у них FeedCasting.canRespond = false и кнопка заблокирована);
  *   update — отозвать свой отклик ('ready' → 'withdrawn'), вернуть
  *   отозванный — только с тем же допуском.
  * ──────────────────────────────────────────────────────────────────── */
@@ -110,4 +112,30 @@ export async function markCastingsSeen(): Promise<void> {
   if (!error && data?.length === 0) {
     await supabase.from("partner_resident_settings").insert({ resident_id: user.id, castings_seen_at: now });
   }
+}
+
+/**
+ * Рост и языки для кастингов — RPC partner_resident_set_casting_profile
+ * (миграция 20261114090000). Прямой записью нельзя: у резидентки нет
+ * UPDATE на profiles.height и грантов на partner_resident_settings.languages.
+ * null в поле — не менять его.
+ */
+export type CastingProfileResult =
+  | { ok: true; height: number | null; languages: string[] }
+  | { ok: false; reason: "invalid" | "forbidden" | "network" };
+
+export async function setCastingProfile(input: { height?: number | null; languages?: string[] | null }): Promise<CastingProfileResult> {
+  const { data, error } = await supabase.rpc("partner_resident_set_casting_profile", {
+    p_height: input.height ?? null,
+    p_languages: input.languages ?? null,
+  });
+  if (error) {
+    if (error.code === "22023") return { ok: false, reason: "invalid" };
+    if (error.code === "42501") return { ok: false, reason: "forbidden" };
+    return { ok: false, reason: "network" };
+  }
+  const row = (data ?? {}) as { height?: unknown; languages?: unknown };
+  const height = typeof row.height === "number" ? row.height : typeof row.height === "string" ? Number(row.height) || null : null;
+  const languages = Array.isArray(row.languages) ? row.languages.filter((x): x is string => typeof x === "string") : [];
+  return { ok: true, height, languages };
 }

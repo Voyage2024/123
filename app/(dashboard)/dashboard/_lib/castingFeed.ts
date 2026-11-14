@@ -7,9 +7,11 @@
  *     гонорар, кто платит перелёт и отель, требования;
  *   · менеджера — только по репутации (Ключ, оценка, число туров),
  *     без имени и контактов: до рукопожатия никаких личных сообщений;
- *   · только кастинги, куда её пустит база (partner_me_can_respond):
- *     полная верификация, тумблер «Открыта к турам», не в Blacklist,
- *     кастинг открыт и не истёк.
+ *   · с 14.11.2026 (миграция 20261114090000) — ВСЕ открытые кастинги
+ *     своего сегмента и 'all', как только анкета одобрена (без бана и
+ *     Blacklist). KYC 3 и «Открыта к турам» нужны только для отклика:
+ *     у кастинга флаг canRespond, в me.blockers — что мешает (баннер
+ *     CastingAccessBanner). Рост и языки ленту не фильтруют.
  *
  * Данные — RPC public.partner_resident_feed(), миграция
  * supabase/migrations/20261015120000_partner_resident_feed.sql;
@@ -77,13 +79,33 @@ export type FeedCasting = {
   /** Кастинг опубликован после последнего визита резидентки */
   fresh: boolean;
   response: { status: ResponseStatus; at: number; optionUntil: number | null } | null;
+  /** База пустит отклик (partner_me_can_respond). Старая RPC отдавала только такие кастинги → true */
+  canRespond: boolean;
 };
+
+/**
+ * Что мешает резидентке (partner_resident_feed → me.blockers):
+ *   review         анкета не одобрена — ленты нет совсем
+ *   banned         временный/постоянный бан — ленты нет
+ *   restricted     ограничение клуба (Blacklist) — ленты нет
+ *   kyc            KYC ниже требуемого — лента видна, отклик закрыт
+ *   open_to_tours  тумблер выключен — лента видна, отклик закрыт
+ */
+export const BLOCKERS = ["review", "banned", "restricted", "kyc", "open_to_tours"] as const;
+export type Blocker = (typeof BLOCKERS)[number];
 
 export type ResidentProfile = {
   height: number | null;
   languages: string[];
   /** «Открыта к турам» — partner_resident_settings.open_to_tours */
   openToTours: boolean;
+  kycLevel: number;
+  /** Минимальный KYC для отклика (voyage_casting_response_min_kyc) */
+  requiredKyc: number;
+  /** null — старая версия RPC без этих полей */
+  canView: boolean | null;
+  canRespond: boolean | null;
+  blockers: Blocker[];
 };
 
 export type CastingFeedData = {
@@ -183,6 +205,7 @@ function parseCasting(r: Raw): FeedCasting | null {
     })(),
     fresh: r.fresh === true,
     response: parseResponse(r.response),
+    canRespond: r.can_respond === false ? false : true,
   };
 }
 
@@ -195,6 +218,14 @@ export function parseFeed(raw: unknown): CastingFeedData {
       height: num(me.height),
       languages: langs(me.languages),
       openToTours: me.open_to_tours === true,
+      kycLevel: num(me.kyc_level) ?? 0,
+      requiredKyc: num(me.required_kyc) ?? 3,
+      canView: typeof me.can_view === "boolean" ? me.can_view : null,
+      canRespond: typeof me.can_respond === "boolean" ? me.can_respond : null,
+      blockers: arr(me.blockers).flatMap((b) => {
+        const v = oneOf(b, BLOCKERS);
+        return v ? [v] : [];
+      }),
     },
     castings: arr(root.castings).flatMap((x) => {
       const c = parseCasting(obj(x));
