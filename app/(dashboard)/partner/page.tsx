@@ -43,6 +43,9 @@ import {
   RefreshCw,
   RotateCw,
   ShieldAlert,
+  CalendarClock,
+  UsersRound,
+  ScanSearch,
   ShieldCheck,
   Sparkles,
   Star,
@@ -220,7 +223,7 @@ const T: Record<Lang, Dict> = {
     kpi: { castings: "Active castings", departures: "Departures · 72h", ready: "“Ready” responses", rating: "Resident rating" },
     quick: {
       eyebrow: "Quick access · Command",
-      items: { castings: { label: "Castings", hint: "Open calls and “Ready” replies" }, manifest: { label: "Manifest", hint: "Tours, crews, deal rooms" }, pulse: { label: "Pulse", hint: "Show rate and reviews" }, blacklist: { label: "Blacklist", hint: "Reasons, reports, appeals" }, keys: { label: "Keys", hint: "Your partner tier" }, settings: { label: "Notifications", hint: "Telegram work alerts" } },
+      items: { castings: { label: "Castings", hint: "Open calls and “Ready” replies" }, manifest: { label: "Manifest", hint: "Tours, crews, deal rooms" }, pulse: { label: "Pulse", hint: "Show rate and reviews" }, blacklist: { label: "Blacklist", hint: "Reasons, reports, appeals" }, keys: { label: "Keys", hint: "Your partner tier" }, settings: { label: "Notifications", hint: "Telegram work alerts" }, bookings: { label: "Tours & bookings", hint: "Timeline, cashbox, tickets" }, team: { label: "My team (Operators)", hint: "Applications, invites, access" }, guests: { label: "Guest check", hint: "Club guest base and flags" } },
     },
     in: (d) => `in ${d}`,
     ago: (d) => `${d} ago`,
@@ -347,7 +350,7 @@ const T: Record<Lang, Dict> = {
     kpi: { castings: "Активные кастинги", departures: "Вылеты · 72 ч", ready: "Ответы «Готова»", rating: "Оценка резиденток" },
     quick: {
       eyebrow: "Быстрый доступ · Штаб",
-      items: { castings: { label: "Кастинги", hint: "Открытые наборы и ответы «Готова»" }, manifest: { label: "Манифест", hint: "Туры, составы, комнаты сделки" }, pulse: { label: "Пульс", hint: "Явка и отзывы" }, blacklist: { label: "Чёрный список", hint: "Причины, заявки, апелляции" }, keys: { label: "Ключи", hint: "Ваш уровень партнёра" }, settings: { label: "Оповещения", hint: "Рабочие уведомления в Telegram" } },
+      items: { castings: { label: "Кастинги", hint: "Открытые наборы и ответы «Готова»" }, manifest: { label: "Манифест", hint: "Туры, составы, комнаты сделки" }, pulse: { label: "Пульс", hint: "Явка и отзывы" }, blacklist: { label: "Чёрный список", hint: "Причины, заявки, апелляции" }, keys: { label: "Ключи", hint: "Ваш уровень партнёра" }, settings: { label: "Оповещения", hint: "Рабочие уведомления в Telegram" }, bookings: { label: "Туры и букинги", hint: "Таймлайн, касса, билеты" }, team: { label: "Моя команда (Операторы)", hint: "Заявки, инвайты, доступы" }, guests: { label: "Пробивщик гостей", hint: "База гостей и отметки" } },
     },
     in: (d) => `через ${d}`,
     ago: (d) => `${d} назад`,
@@ -475,7 +478,7 @@ const T: Record<Lang, Dict> = {
     kpi: { castings: "Castings activos", departures: "Salidas · 72 h", ready: "Respuestas «Lista»", rating: "Valoración de residentes" },
     quick: {
       eyebrow: "Acceso rápido · Cuartel",
-      items: { castings: { label: "Castings", hint: "Convocatorias y respuestas «Lista»" }, manifest: { label: "Manifiesto", hint: "Tours, equipos, salas de acuerdo" }, pulse: { label: "Pulso", hint: "Asistencia y reseñas" }, blacklist: { label: "Lista negra", hint: "Motivos, reportes, apelaciones" }, keys: { label: "Llaves", hint: "Tu nivel de socio" }, settings: { label: "Avisos", hint: "Alertas de trabajo en Telegram" } },
+      items: { castings: { label: "Castings", hint: "Convocatorias y respuestas «Lista»" }, manifest: { label: "Manifiesto", hint: "Tours, equipos, salas de acuerdo" }, pulse: { label: "Pulso", hint: "Asistencia y reseñas" }, blacklist: { label: "Lista negra", hint: "Motivos, reportes, apelaciones" }, keys: { label: "Llaves", hint: "Tu nivel de socio" }, settings: { label: "Avisos", hint: "Alertas de trabajo en Telegram" }, bookings: { label: "Tours y reservas", hint: "Línea de tiempo, caja, billetes" }, team: { label: "Mi equipo (Operadores)", hint: "Solicitudes, invitaciones" }, guests: { label: "Verificar huésped", hint: "Base de huéspedes y marcas" } },
     },
     in: (d) => `en ${d}`,
     ago: (d) => `hace ${d}`,
@@ -601,7 +604,7 @@ const T: Record<Lang, Dict> = {
     kpi: { castings: "Castings ativos", departures: "Partidas · 72 h", ready: "Respostas «Pronta»", rating: "Avaliação das residentes" },
     quick: {
       eyebrow: "Acesso rápido · Quartel",
-      items: { castings: { label: "Castings", hint: "Convocatórias e respostas «Pronta»" }, manifest: { label: "Manifesto", hint: "Tours, equipes, salas de acordo" }, pulse: { label: "Pulso", hint: "Comparecimento e avaliações" }, blacklist: { label: "Lista negra", hint: "Motivos, denúncias, recursos" }, keys: { label: "Chaves", hint: "Seu nível de parceiro" }, settings: { label: "Avisos", hint: "Alertas de trabalho no Telegram" } },
+      items: { castings: { label: "Castings", hint: "Convocatórias e respostas «Pronta»" }, manifest: { label: "Manifesto", hint: "Tours, equipes, salas de acordo" }, pulse: { label: "Pulso", hint: "Comparecimento e avaliações" }, blacklist: { label: "Lista negra", hint: "Motivos, denúncias, recursos" }, keys: { label: "Chaves", hint: "Seu nível de parceiro" }, settings: { label: "Avisos", hint: "Alertas de trabalho no Telegram" }, bookings: { label: "Tours e reservas", hint: "Linha do tempo, caixa, passagens" }, team: { label: "Minha equipe (Operadores)", hint: "Solicitações, convites" }, guests: { label: "Verificar hóspede", hint: "Base de hóspedes e marcas" } },
     },
     in: (d) => `em ${d}`,
     ago: (d) => `há ${d}`,
@@ -1140,7 +1143,7 @@ function KpiStrip({ items }: { items: { label: string; value: string; icon: Luci
  * БЫСТРЫЙ ДОСТУП: разделы Штаба одной строкой
  * ══════════════════════════════════════════════════════════════════ */
 
-type QuickKey = "castings" | "manifest" | "pulse" | "blacklist" | "keys" | "settings";
+type QuickKey = "castings" | "manifest" | "pulse" | "blacklist" | "keys" | "settings" | "bookings" | "team" | "guests";
 
 const QUICK: { key: QuickKey; href: string; icon: LucideIcon }[] = [
   { key: "castings", href: ROUTES.castings, icon: Sparkles },
@@ -1151,12 +1154,21 @@ const QUICK: { key: QuickKey; href: string; icon: LucideIcon }[] = [
   { key: "settings", href: ROUTES.settings, icon: Bell },
 ];
 
+/** ОС туров (Этап 1): только менеджер и owner — admin к модулю доступа не имеет. */
+const QUICK_TOUR_OPS: { key: QuickKey; href: string; icon: LucideIcon }[] = [
+  { key: "bookings", href: ROUTES.bookings, icon: CalendarClock },
+  { key: "team", href: ROUTES.team, icon: UsersRound },
+  { key: "guests", href: ROUTES.guests, icon: ScanSearch },
+];
+
 function QuickAccess({ t }: { t: Dict }) {
+  const { role } = useAuth();
+  const items = role === "manager" || role === "owner" ? [...QUICK_TOUR_OPS, ...QUICK] : QUICK;
   return (
     <nav aria-label={t.quick.eyebrow} className="mt-6">
       <p className="mb-3 text-[10px] uppercase tracking-[0.3em] text-amber-200/60">{t.quick.eyebrow}</p>
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
-        {QUICK.map(({ key, href, icon: Icon }) => (
+        {items.map(({ key, href, icon: Icon }) => (
           <Link
             key={key}
             href={href}

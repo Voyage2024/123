@@ -1,6 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { processPartnerNotificationQueue } from "@/lib/server/telegram/partner-notifications";
+import { drainBookingNotifications } from "@/lib/server/telegram/booking-notifications";
+import { purgeExpiredTelegramMessages } from "@/lib/server/telegram/message-purge";
 import { logSecurityEvent, requestIp } from "@/lib/server/security-events";
 
 export const runtime = "nodejs";
@@ -86,6 +88,13 @@ export async function POST(request: Request) {
       notificationId,
       limit: 25,
     });
+    // Опрос по расписанию заодно досылает уведомления моделям о букингах
+    // (ОС туров) и удаляет просроченные сообщения с паролями.
+    if (isSchedulerPing) {
+      const bookings = await drainBookingNotifications({ limit: 25 });
+      const purged = await purgeExpiredTelegramMessages(25);
+      return NextResponse.json({ ok: true, ...summary, bookings, purged });
+    }
     return NextResponse.json({ ok: true, ...summary });
   } catch (error) {
     console.error("[partner-notifications] queue processing failed", error instanceof Error ? error.message : "unknown");

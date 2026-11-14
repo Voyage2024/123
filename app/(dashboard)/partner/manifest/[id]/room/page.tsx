@@ -47,6 +47,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
+import { useAuth } from "@/app/context/AuthContext";
 import { MIN, UNITS, fmtDur, useNow, type Units } from "@/app/(dashboard)/partner/_lib/clock";
 import type { ContractTerms, ProjectKey } from "@/app/(dashboard)/partner/_lib/command";
 import {
@@ -674,6 +675,18 @@ function Ambient() {
  * ШАПКА
  * ══════════════════════════════════════════════════════════════════ */
 
+/** ОС туров: переход к таймлайну букингов тура — только менеджер и owner (admin не видит). */
+const TOUR_OPS_LINK: Record<Lang, string> = { EN: "Bookings & tour room →", RU: "Букинги и сейф тура →", ES: "Reservas y sala del tour →", PT: "Reservas e sala do tour →" };
+function TourOpsLink({ tourId, lang }: { tourId: string; lang: Lang }) {
+  const { role } = useAuth();
+  if (role !== "manager" && role !== "owner") return null;
+  return (
+    <Link href={ROUTES.bookingsTour(tourId)} className="ml-auto rounded-full border border-amber-200/30 px-3 py-1 text-amber-100 transition hover:bg-amber-200/10">
+      {TOUR_OPS_LINK[lang] ?? TOUR_OPS_LINK.EN}
+    </Link>
+  );
+}
+
 function RoomHeader({ d, t, fmt, demo, lang }: { d: DealRoomData; t: Dict; fmt: Fmt; demo: boolean; lang: Lang }) {
   const { tour } = d;
   const ahead = fmt.ready && tour.departsAt > fmt.now;
@@ -694,6 +707,7 @@ function RoomHeader({ d, t, fmt, demo, lang }: { d: DealRoomData; t: Dict; fmt: 
         <Link href={ROUTES.tour(tour.id)} className="truncate text-zinc-300 transition hover:text-amber-200">
           {what}
         </Link>
+        <TourOpsLink tourId={tour.id} lang={lang} />
       </nav>
 
       <div className="mt-5 flex flex-wrap items-end justify-between gap-x-10 gap-y-6">

@@ -4,6 +4,7 @@ import { Api } from "grammy";
 import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
 import type { TelegramLang } from "@/lib/server/telegram/types";
 import { credentialDeleteHint, credentialKeyboard, siteLoginLine } from "@/lib/server/telegram/site-login";
+import { credentialTtlMinutes, scheduleMessagePurge } from "@/lib/server/telegram/message-purge";
 
 export type ApprovedCredentials = {
   deliveryId: string;
@@ -12,8 +13,8 @@ export type ApprovedCredentials = {
   login: string;
   password: string;
   fullName: string | null;
-  /** partner — текст про партнёрский кабинет вместо «анкета одобрена». */
-  audience?: "resident" | "partner";
+  /** partner — текст про партнёрский кабинет, operator — про диспетчерский пульт. */
+  audience?: "resident" | "partner" | "operator";
 };
 
 export type CredentialDeliveryResult =
@@ -42,7 +43,14 @@ function approvedMessage(lang: TelegramLang, input: ApprovedCredentials): string
   const safeName = input.fullName?.trim() ? ` ${escapeHtml(input.fullName.trim())}` : "";
   const safeLogin = escapeHtml(input.login);
   const safePassword = escapeHtml(input.password);
-  const greeting: Record<TelegramLang, string> = input.audience === "partner"
+  const greeting: Record<TelegramLang, string> = input.audience === "operator"
+    ? {
+        EN: `Hello${safeName}! Your VOYAGE operator desk is open.`,
+        RU: `Здравствуйте${safeName}! Ваш кабинет оператора VOYAGE открыт.`,
+        ES: `¡Hola${safeName}! Tu panel de operador de VOYAGE está abierto.`,
+        PT: `Olá${safeName}! Seu painel de operador VOYAGE está aberto.`,
+      }
+    : input.audience === "partner"
     ? {
         EN: `Hello${safeName}! Your VOYAGE partner workspace is open.`,
         RU: `Здравствуйте${safeName}! Ваш партнёрский кабинет VOYAGE открыт.`,
@@ -64,7 +72,14 @@ function approvedMessage(lang: TelegramLang, input: ApprovedCredentials): string
   const text = labels[lang];
   // Telegram HTML <code> displays a copy-friendly monospace credential. All
   // untrusted inserted values are escaped to prevent markup injection.
-  return `✅ ${greeting[lang]}\n\n<b>${text.site}</b>\n${text.login}: <code>${safeLogin}</code>\n${text.password}: <code>${safePassword}</code>\n${siteLoginLine(lang)}\n\n${text.security}\n${credentialDeleteHint(lang)}`;
+  const ttl = credentialTtlMinutes();
+  const autoDelete: Record<TelegramLang, string> = {
+    EN: `⏱ This message will be deleted automatically in ${ttl} min.`,
+    RU: `⏱ Сообщение удалится автоматически через ${ttl} мин.`,
+    ES: `⏱ Este mensaje se borrará automáticamente en ${ttl} min.`,
+    PT: `⏱ Esta mensagem será apagada automaticamente em ${ttl} min.`,
+  };
+  return `✅ ${greeting[lang]}\n\n<b>${text.site}</b>\n${text.login}: <code>${safeLogin}</code>\n${text.password}: <code>${safePassword}</code>\n${siteLoginLine(lang)}\n\n${text.security}\n${credentialDeleteHint(lang)}\n${autoDelete[lang]}`;
 }
 
 /** Sends credentials directly via Telegram Bot API from the Next.js server runtime. */
@@ -110,14 +125,15 @@ export async function sendApprovedCredentialsTelegram(input: ApprovedCredentials
     const message = approvedMessage(lang, {
       ...input,
       fullName: profile.full_name ?? input.fullName,
-      audience: input.audience ?? (profile.role === "manager" ? "partner" : "resident"),
+      audience: input.audience ?? (profile.role === "manager" ? "partner" : profile.role === "operator" ? "operator" : "resident"),
     });
-    await new Api(token).sendMessage(Number(input.telegramId), message, {
+    const sent = await new Api(token).sendMessage(Number(input.telegramId), message, {
       parse_mode: "HTML",
       link_preview_options: { is_disabled: true },
       protect_content: true,
       reply_markup: credentialKeyboard(lang),
     });
+    await scheduleMessagePurge(input.telegramId, sent.message_id);
 
     const now = new Date().toISOString();
     const { error: finishError } = await db.from("telegram_delivery_logs")

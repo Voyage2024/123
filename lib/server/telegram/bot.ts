@@ -20,6 +20,18 @@ import {
   partnerPromptFor,
 } from "@/lib/server/telegram/partner-registration";
 import {
+  OPERATOR_INVITE_RE,
+  beginOperatorRegistration,
+  handleOperatorAdminCallback,
+  handleOperatorRegistrationCallback,
+  handleOperatorRegistrationPhoto,
+  handleOperatorRegistrationText,
+  isOperatorStage,
+  parseOperatorPayload,
+  sendOperatorPrompt,
+} from "@/lib/server/telegram/operator-registration";
+import { credentialTtlMinutes, scheduleMessagePurge } from "@/lib/server/telegram/message-purge";
+import {
   CREDENTIAL_DELETE_CALLBACK,
   credentialDeleteHint,
   credentialDeletedToast,
@@ -264,6 +276,17 @@ export function createVoyageTelegramBot(token: string): Bot {
       await recoverTelegramIdentity(ctx, lang, payload.slice("recover_".length));
       return;
     }
+    // Операторы: /start operator или /start op_VYO-XXXX-XXXX (ссылка-приглашение менеджера).
+    const operatorLink = parseOperatorPayload(payload);
+    if (operatorLink) {
+      const current = await getConversationState(telegramId);
+      if (current && isOperatorStage(current.stage) && (!operatorLink.code || operatorLink.code === current.referral_code)) {
+        await sendOperatorPrompt(ctx, current);
+        return;
+      }
+      await beginOperatorRegistration(ctx, lang, operatorLink.code);
+      return;
+    }
     // Партнёры и менеджеры: /start partner или /start partner_VYP-XXXX-XXXX.
     const partnerLink = parsePartnerPayload(payload);
     if (partnerLink) {
@@ -320,6 +343,10 @@ export function createVoyageTelegramBot(token: string): Bot {
         await ctx.reply(partnerPromptFor(current));
         return;
       }
+      if (current && isOperatorStage(current.stage)) {
+        await sendOperatorPrompt(ctx, current);
+        return;
+      }
       if (current) {
         if (referralCode && current.referral_code && current.referral_code !== referralCode) {
           await ctx.reply(inviteLinkMessage(lang, true), { reply_markup: mainMenu(lang) });
@@ -361,6 +388,20 @@ export function createVoyageTelegramBot(token: string): Bot {
     await beginPartnerRegistration(ctx, lang, code);
   });
 
+  // /operator или /operator VYO-XXXX-XXXX — анкета оператора без deep link.
+  bot.command("operator", async (ctx) => {
+    if (!ctx.from || !ctx.chat || ctx.chat.type !== "private") return;
+    const lang = await contextLanguage(ctx);
+    const raw = typeof ctx.match === "string" ? ctx.match.trim().toUpperCase() : "";
+    const code = OPERATOR_INVITE_RE.test(raw) ? raw : null;
+    const current = await getConversationState(String(ctx.from.id));
+    if (current && isOperatorStage(current.stage) && (!code || code === current.referral_code)) {
+      await sendOperatorPrompt(ctx, current);
+      return;
+    }
+    await beginOperatorRegistration(ctx, lang, code);
+  });
+
   bot.command("myid", async (ctx) => {
     if (!ctx.from || !ctx.chat || ctx.chat.type !== "private") return;
     const lang = await contextLanguage(ctx);
@@ -385,25 +426,25 @@ export function createVoyageTelegramBot(token: string): Bot {
 
     const messages = {
       EN: {
-        unavailable: "Password reset is available only for an active, approved resident or partner linked to this Telegram account.",
+        unavailable: "Password reset is available only for an active, approved resident, partner or operator linked to this Telegram account.",
         failed: "I could not reset your password. Please contact VOYAGE support.",
         delivered: "Your new website password has been sent above.",
         fallback: "Telegram credential delivery had a temporary issue. Your updated website credentials are below. Sign in and change the password immediately.",
       },
       RU: {
-        unavailable: "Сброс пароля доступен только активному одобренному профилю резидентки или партнёра, привязанному к этому Telegram.",
+        unavailable: "Сброс пароля доступен только активному одобренному профилю резидентки, партнёра или оператора, привязанному к этому Telegram.",
         failed: "Не удалось сбросить пароль. Обратитесь в поддержку VOYAGE.",
         delivered: "Новый пароль от сайта отправлен выше.",
         fallback: "При отправке доступов возникла ошибка. Ниже ваши обновлённые данные для входа на сайт. После входа сразу смените пароль.",
       },
       ES: {
-        unavailable: "El restablecimiento solo está disponible para una residente o socio activo y aprobado vinculado a esta cuenta de Telegram.",
+        unavailable: "El restablecimiento solo está disponible para una residente, socio u operador activo y aprobado vinculado a esta cuenta de Telegram.",
         failed: "No se pudo restablecer la contraseña. Contacta con el soporte de VOYAGE.",
         delivered: "Tu nueva contraseña del sitio se ha enviado arriba.",
         fallback: "Hubo un problema temporal al enviar las credenciales. Aquí están tus datos actualizados. Cambia la contraseña después de iniciar sesión.",
       },
       PT: {
-        unavailable: "A redefinição só está disponível para uma residente ou parceiro ativo e aprovado vinculado a esta conta do Telegram.",
+        unavailable: "A redefinição só está disponível para uma residente, parceiro ou operador ativo e aprovado vinculado a esta conta do Telegram.",
         failed: "Não foi possível redefinir a senha. Entre em contato com o suporte VOYAGE.",
         delivered: "Sua nova senha do site foi enviada acima.",
         fallback: "Houve um problema temporário ao enviar as credenciais. Seus dados atualizados estão abaixo. Altere a senha após entrar.",
@@ -412,7 +453,7 @@ export function createVoyageTelegramBot(token: string): Bot {
 
     const banUntil = profile?.banned_until === "infinity" ? Number.POSITIVE_INFINITY : profile?.banned_until ? Date.parse(String(profile.banned_until)) : NaN;
     const banned = profile?.ban_permanent === true || profile?.banned_until === "infinity" || (Number.isFinite(banUntil) && banUntil > Date.now());
-    if (profileError || !profile || (profile.role !== "resident" && profile.role !== "manager") || profile.status !== "approved" || Number(profile.kyc_level ?? 0) < 0 || banned) {
+    if (profileError || !profile || (profile.role !== "resident" && profile.role !== "manager" && profile.role !== "operator") || profile.status !== "approved" || Number(profile.kyc_level ?? 0) < 0 || banned) {
       await ctx.reply(messages.unavailable, { reply_markup: mainMenu(lang) });
       return;
     }
@@ -472,12 +513,13 @@ export function createVoyageTelegramBot(token: string): Bot {
 
     const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
     try {
-      await ctx.reply(`${messages.fallback}\n\n<b>Login:</b> <code>${escapeHtml(login)}</code>\n<b>Password:</b> <code>${escapeHtml(password)}</code>\n${siteLoginLine(lang)}\n\n${credentialDeleteHint(lang)}`, {
+      const fallbackMessage = await ctx.reply(`${messages.fallback}\n\n<b>Login:</b> <code>${escapeHtml(login)}</code>\n<b>Password:</b> <code>${escapeHtml(password)}</code>\n${siteLoginLine(lang)}\n\n${credentialDeleteHint(lang)}`, {
         parse_mode: "HTML",
         reply_markup: credentialKeyboard(lang),
         protect_content: true,
         link_preview_options: { is_disabled: true },
       });
+      await scheduleMessagePurge(telegramId, fallbackMessage.message_id, credentialTtlMinutes());
     } catch (error) {
       console.error("[telegram-password] fallback delivery failed", error instanceof Error ? error.name : "unknown");
     }
@@ -514,6 +556,14 @@ export function createVoyageTelegramBot(token: string): Bot {
     await ctx.answerCallbackQuery();
     await beginPartnerRegistration(ctx, await contextLanguage(ctx), null);
   });
+  bot.callbackQuery("menu:operator", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await beginOperatorRegistration(ctx, await contextLanguage(ctx), null);
+  });
+  // Шаги анкеты оператора (подтверждение @username, пояс, менеджер, пропуск опыта).
+  bot.callbackQuery(/^opreg:[a-z]+(:[a-z0-9]+)?$/i, handleOperatorRegistrationCallback);
+  // Решение менеджера/владельца по заявке оператора прямо из уведомления.
+  bot.callbackQuery(/^oadm:(ok|no):[0-9a-f-]{36}$/i, handleOperatorAdminCallback);
   // Решение владельца/админа по партнёрской заявке прямо из уведомления.
   bot.callbackQuery(/^padm:(ok|no):[0-9a-f-]{36}$/i, handlePartnerAdminCallback);
   bot.callbackQuery("menu:faq", async (ctx) => {
@@ -563,6 +613,7 @@ export function createVoyageTelegramBot(token: string): Bot {
     if (!ctx.from || !ctx.chat || ctx.chat.type !== "private") return;
     const photos = ctx.message.photo;
     const photo = photos[photos.length - 1];
+    if (await handleOperatorRegistrationPhoto(ctx)) return;
     if (await handlePartnerRegistrationPhoto(ctx)) return;
     const handled = await handleRegistrationPhoto(ctx, photo.file_id);
     if (!handled) { const lang = await contextLanguage(ctx); await ctx.reply(copy(lang).welcome, { reply_markup: mainMenu(lang) }); }
@@ -570,6 +621,7 @@ export function createVoyageTelegramBot(token: string): Bot {
 
   bot.on("message:text", async (ctx) => {
     if (!ctx.from || !ctx.chat || ctx.chat.type !== "private") return;
+    if (await handleOperatorRegistrationText(ctx, ctx.message.text)) return;
     if (await handlePartnerRegistrationText(ctx, ctx.message.text)) return;
     const handled = await handleRegistrationText(ctx, ctx.message.text);
     if (!handled) {

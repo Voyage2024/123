@@ -82,6 +82,8 @@ type Dict = {
   failed: string;
   yourRating: (n: number, pending: boolean) => string;
   history: string;
+  /** ОС туров: расписание, билеты и жильё */
+  room: string;
 };
 
 const T: Record<Lang, Dict> = {
@@ -103,6 +105,7 @@ const T: Record<Lang, Dict> = {
     failed: "Couldn’t send — try again.",
     yourRating: (n, p) => `Your rating: ${n}/5${p ? " · in moderation" : ""}`,
     history: "Points history",
+    room: "Tour room",
   },
   RU: {
     eyebrow: "Туры с менеджерами клуба",
@@ -122,6 +125,7 @@ const T: Record<Lang, Dict> = {
     failed: "Не удалось отправить — повторите.",
     yourRating: (n, p) => `Ваша оценка: ${n}/5${p ? " · на модерации" : ""}`,
     history: "История баллов",
+    room: "Комната тура",
   },
   ES: {
     eyebrow: "Tours con gerentes del club",
@@ -141,6 +145,7 @@ const T: Record<Lang, Dict> = {
     failed: "No se pudo enviar: inténtalo de nuevo.",
     yourRating: (n, p) => `Tu valoración: ${n}/5${p ? " · en moderación" : ""}`,
     history: "Historial de puntos",
+    room: "Sala del tour",
   },
   PT: {
     eyebrow: "Tours com gerentes do clube",
@@ -160,6 +165,7 @@ const T: Record<Lang, Dict> = {
     failed: "Não foi possível enviar — tente de novo.",
     yourRating: (n, p) => `Sua avaliação: ${n}/5${p ? " · em moderação" : ""}`,
     history: "Histórico de pontos",
+    room: "Sala do tour",
   },
 };
 
@@ -267,6 +273,11 @@ function TourRow({
         >
           {tour.tourStatus === "closed" ? t.me[tour.myStatus] : t.tour[tour.tourStatus]}
         </span>
+        {tour.tourStatus !== "closed" && (tour.myStatus === "confirmed" || tour.myStatus === "flown") && (
+          <Link href={`/dashboard/tour-room/${tour.id}`} className="inline-flex min-h-9 items-center rounded-full border border-amber-200/30 px-3 text-xs text-amber-100 hover:bg-amber-200/10">
+            🗝 {t.room}
+          </Link>
+        )}
         {tour.points !== null && tour.points > 0 && (
           <Link href="/dashboard/gamification#points-history" className="text-xs font-medium text-amber-200 hover:text-amber-100">
             {t.points(tour.points)}

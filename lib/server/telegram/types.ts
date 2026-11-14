@@ -13,7 +13,15 @@ export type RegistrationStage =
   | "partner_regions"
   | "partner_contact"
   | "partner_email"
-  | "partner_submitting";
+  | "partner_submitting"
+  // Анкета оператора (/start operator, /operator, op_VYO-…)
+  | "operator_name"
+  | "operator_username"
+  | "operator_phone"
+  | "operator_timezone"
+  | "operator_manager"
+  | "operator_experience"
+  | "operator_submitting";
 
 export interface RegistrationAnswers {
   email?: string;
@@ -25,6 +33,15 @@ export interface RegistrationAnswers {
   partner_regions?: string;
   partner_contact?: string;
   partner_email?: string;
+  operator_name?: string;
+  operator_username?: string;
+  operator_username_confirmed?: string;
+  operator_phone?: string;
+  operator_timezone?: string;
+  operator_manager_id?: string;
+  operator_manager_name?: string;
+  operator_invite?: string;
+  operator_experience?: string;
 }
 
 export interface TelegramConversationState {

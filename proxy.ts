@@ -9,13 +9,18 @@ import {
   PARTNER_HOME_PATH,
   RESIDENT_HOME_PATH,
   ADMIN_HOME_PATH,
+  OPERATOR_HOME_PATH,
+  TOUR_OPS_MANAGE_ROLES,
+  PARTNER_TOUR_OPS_PREFIXES,
   type Role,
 } from "@/lib/rbac";
 import { bunkerGuard } from "@/lib/bunker/middleware"; // 👈 Импорт защиты бункера
 
 const LOGIN_PATH = "/login";
 const STAFF_HOME_PATH = ADMIN_HOME_PATH;
-const PROTECTED_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, PARTNER_HOME_PATH, "/profile", "/event", "/events"];
+const PROTECTED_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, PARTNER_HOME_PATH, OPERATOR_HOME_PATH, "/profile", "/event", "/events"];
+/** Кабинеты, куда оператору нельзя: его место — только /operator. */
+const OPERATOR_FORBIDDEN_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, PARTNER_HOME_PATH, "/profile", "/event", "/events"];
 // Only /login redirects authenticated users into their role-specific workspace.
 // The public homepage (/) must remain accessible to every authenticated role.
 const AUTHENTICATED_REDIRECT_ROUTES = [LOGIN_PATH];
@@ -69,11 +74,11 @@ export async function proxy(request: NextRequest) {
   const isProtected = PROTECTED_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix));
   if (!user) return isProtected ? redirectTo(request, response, LOGIN_PATH) : response;
 
+  // Роль нужна на всех защищённых кабинетах: оператора уводим из чужих
+  // разделов (в т.ч. /dashboard/*), а чужих — из /operator.
   const shouldResolveRole =
     AUTHENTICATED_REDIRECT_ROUTES.includes(pathname) ||
-    pathname === RESIDENT_HOME_PATH ||
-    matchesPrefix(pathname, STAFF_HOME_PATH) ||
-    matchesPrefix(pathname, PARTNER_HOME_PATH);
+    isProtected;
 
   let role: Role | null = null;
   let roleResolved = false;
@@ -103,6 +108,16 @@ export async function proxy(request: NextRequest) {
     return redirectTo(request, response, getRoleHomePath(role));
   }
 
+  // ── ОС туров: оператор живёт только в /operator ─────────────────────
+  if (matchesPrefix(pathname, OPERATOR_HOME_PATH)) {
+    if (!roleResolved || !role) return redirectTo(request, response, LOGIN_PATH);
+    if (role !== "operator") return redirectTo(request, response, getRoleHomePath(role));
+    return response;
+  }
+  if (role === "operator" && OPERATOR_FORBIDDEN_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix))) {
+    return redirectTo(request, response, OPERATOR_HOME_PATH);
+  }
+
   // The resident profile/onboarding screen must never be the landing page for staff.
   if (pathname === RESIDENT_HOME_PATH) {
     if (!roleResolved || !role) return redirectTo(request, response, LOGIN_PATH);
@@ -113,6 +128,14 @@ export async function proxy(request: NextRequest) {
   if (matchesPrefix(pathname, PARTNER_HOME_PATH)) {
     if (!roleResolved || !role) return redirectTo(request, response, LOGIN_PATH);
     if (!STAFF_ROLES.includes(role)) return redirectTo(request, response, RESIDENT_HOME_PATH);
+    // ОС туров (букинги, команда, пробивщик гостей) закрыта для admin:
+    // только manager и owner. Данные дополнительно режет RLS.
+    if (
+      PARTNER_TOUR_OPS_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix)) &&
+      !TOUR_OPS_MANAGE_ROLES.includes(role)
+    ) {
+      return redirectTo(request, response, PARTNER_HOME_PATH);
+    }
     // Manager, admin and owner can use /partner. More detailed per-tour ownership
     // remains enforced by the partner RPCs and RLS.
     return response;
@@ -125,6 +148,7 @@ export async function proxy(request: NextRequest) {
     if (role === "manager" && !matchesPrefix(pathname, "/admin/settings")) {
       return redirectTo(request, response, PARTNER_HOME_PATH);
     }
+    // /admin/tour-control — строго owner (правило в lib/rbac ADMIN_ROUTE_RULES).
     if (!getAdminAllowedRoles(pathname).includes(role)) {
       return redirectTo(request, response, getRoleHomePath(role));
     }

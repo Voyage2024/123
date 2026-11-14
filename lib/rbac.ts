@@ -6,17 +6,20 @@
  * Права должны совпадать с NAV_SECTIONS в Sidebar.tsx и RLS в базе.
  * ──────────────────────────────────────────────────────────────────── */
 
-export const ROLES = ["owner", "admin", "manager", "resident"] as const;
+export const ROLES = ["owner", "admin", "manager", "resident", "operator"] as const;
 export type Role = (typeof ROLES)[number];
 export const DEFAULT_ROLE: Role = "resident";
 
 export const RESIDENT_HOME_PATH = "/dashboard";
 export const ADMIN_HOME_PATH = "/admin";
 export const PARTNER_HOME_PATH = "/partner";
+/** Диспетчерский пульт оператора (ОС туров). */
+export const OPERATOR_HOME_PATH = "/operator";
 
 /** Default landing page after login; admin/owner can still navigate to both workspaces. */
 export function getRoleHomePath(role: Role): string {
   if (role === "manager") return PARTNER_HOME_PATH;
+  if (role === "operator") return OPERATOR_HOME_PATH;
   if (role === "admin" || role === "owner") return ADMIN_HOME_PATH;
   return RESIDENT_HOME_PATH;
 }
@@ -27,6 +30,19 @@ export const isRole = (value: unknown): value is Role =>
 export const STAFF_ROLES: readonly Role[] = ["manager", "admin", "owner"];
 export const ADMIN_ROLES: readonly Role[] = ["admin", "owner"];
 export const OWNER_ROLES: readonly Role[] = ["owner"];
+
+/* ── ОС туров, букингов и операторов (Этап 1) ──────────────────────────
+ * admin сюда НЕ допускается: is_admin() в базе = admin или owner, поэтому
+ * модуль везде проверяет роли явно. Списки ниже — единый источник для
+ * proxy.ts, серверных layout-гардов и бокового меню. */
+export const TOUR_OPS_MANAGE_ROLES: readonly Role[] = ["manager", "owner"];
+export const TOUR_OPS_DESK_ROLES: readonly Role[] = ["manager", "owner", "operator"];
+export const OPERATOR_ROLES: readonly Role[] = ["operator"];
+
+/** Разделы /partner, закрытые для admin (только manager и owner). */
+export const PARTNER_TOUR_OPS_PREFIXES = ["/partner/bookings", "/partner/team", "/partner/guests"] as const;
+/** Owner-only раздел в /admin. */
+export const OWNER_TOUR_CONTROL_PREFIX = "/admin/tour-control";
 
 type RouteRule = { prefix: string; roles: readonly Role[] };
 
@@ -45,6 +61,8 @@ export const ADMIN_ROUTE_RULES: RouteRule[] = [
   { prefix: "/admin/settings", roles: STAFF_ROLES },
   { prefix: "/admin/roles", roles: OWNER_ROLES },
   { prefix: "/admin/global-tours", roles: OWNER_ROLES },
+  // ОС туров: сводный контроль — строго owner, admin не видит.
+  { prefix: "/admin/tour-control", roles: OWNER_ROLES },
 ];
 
 export const matchesPrefix = (pathname: string, prefix: string) =>

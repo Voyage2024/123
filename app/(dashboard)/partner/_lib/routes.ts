@@ -28,6 +28,11 @@ export const ROUTES = {
   resident: (id: string) => `/partner/residents/${id}`,
   pulse: "/partner/pulse",
   keys: "/partner/keys",
+  /** ОС туров (Этап 1) — только manager/owner, admin исключён (proxy.ts + layout) */
+  bookings: "/partner/bookings",
+  bookingsTour: (id: string) => `/partner/bookings/${id}`,
+  team: "/partner/team",
+  guests: "/partner/guests",
   /** Telegram-оповещения и профиль менеджера */
   settings: "/admin/settings",
 } as const;

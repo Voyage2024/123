@@ -13,7 +13,7 @@ export default function Header() {
   const router = useRouter();
 
   // Настройки профиля: у резидента свой маршрут, у персонала — админский
-  const settingsHref = role === "resident" ? "/dashboard/settings" : "/admin/settings";
+  const settingsHref = role === "resident" ? "/dashboard/settings" : role === "operator" ? "/operator/profile" : "/admin/settings";
 
   const handleLogout = async () => {
     setIsMenuOpen(false);
