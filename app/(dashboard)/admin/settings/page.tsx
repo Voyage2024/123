@@ -3,6 +3,7 @@
 import RoleGuard from "@/app/components/RoleGuard";
 import AccountSettings, { AccountSettingsHeader } from "@/app/components/AccountSettings";
 import AdminTelegramNotificationSettings from "@/app/components/admin/AdminTelegramNotificationSettings";
+import MfaSettings from "@/app/components/security/MfaSettings";
 import NotificationPreferences from "@/app/components/NotificationPreferences";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -14,6 +15,8 @@ export default function AdminSettingsPage() {
         <div className="mx-auto max-w-2xl">
           <AccountSettingsHeader eyebrow={role === "manager" ? "Partner" : "Admin"} />
           <AccountSettings />
+          {/* owner/admin: двухэтапный вход (TOTP); менеджеру компонент не показывается */}
+          <MfaSettings />
           {/* Менеджер, админ, владелец: рабочие Telegram-оповещения кабинета */}
           <NotificationPreferences variant="manager" />
           <AdminTelegramNotificationSettings />

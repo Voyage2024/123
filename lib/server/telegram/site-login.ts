@@ -56,3 +56,31 @@ export function siteLoginLine(lang: TelegramLang): string {
 export function siteLoginKeyboard(lang: TelegramLang): InlineKeyboard {
   return new InlineKeyboard().url(COPY[lang].button, buttonUrl());
 }
+
+/* ── Сообщения с паролем ──────────────────────────────────────────────
+ * protect_content запрещает пересылку и сохранение, а кнопка «Удалить»
+ * стирает сообщение из чата (бот удаляет своё сообщение, callback
+ * CREDENTIAL_DELETE_CALLBACK обрабатывает bot.ts). */
+
+export const CREDENTIAL_DELETE_CALLBACK = "cred:del";
+
+const CREDENTIAL_COPY: Record<TelegramLang, { button: string; hint: string; done: string }> = {
+  RU: { button: "🗑 Удалить это сообщение", hint: "🔒 После входа удалите это сообщение кнопкой ниже.", done: "Сообщение удалено" },
+  EN: { button: "🗑 Delete this message", hint: "🔒 After signing in, delete this message with the button below.", done: "Message deleted" },
+  ES: { button: "🗑 Borrar este mensaje", hint: "🔒 Después de entrar, borra este mensaje con el botón de abajo.", done: "Mensaje borrado" },
+  PT: { button: "🗑 Apagar esta mensagem", hint: "🔒 Depois de entrar, apague esta mensagem com o botão abaixo.", done: "Mensagem apagada" },
+};
+
+/** Кнопки под сообщением с паролем: «Войти на сайт» + «Удалить сообщение». */
+export function credentialKeyboard(lang: TelegramLang): InlineKeyboard {
+  return siteLoginKeyboard(lang).row().text(CREDENTIAL_COPY[lang].button, CREDENTIAL_DELETE_CALLBACK);
+}
+
+/** Строка-подсказка в конец сообщения с паролем. */
+export function credentialDeleteHint(lang: TelegramLang): string {
+  return CREDENTIAL_COPY[lang].hint;
+}
+
+export function credentialDeletedToast(lang: TelegramLang): string {
+  return CREDENTIAL_COPY[lang].done;
+}

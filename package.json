@@ -2,12 +2,6 @@
   "name": "voyage-app",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
     "@supabase/ssr": "^0.12.7",
@@ -17,10 +11,10 @@
     "js-cookie": "^3.0.8",
     "lucide-react": "^1.21.0",
     "marked": "^18.1.1",
-    "next": "16.2.9",
+    "next": "^16.4.5",
     "pdf-lib": "^1.17.1",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "react": "^19.2.9",
+    "react-dom": "^19.2.9",
     "sanitize-html": "^2.18.1",
     "tailwindcss-animate": "^1.0.7"
   },
@@ -32,7 +26,7 @@
     "@types/react-dom": "^19",
     "@types/sanitize-html": "^2.16.2",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "^16.4.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

@@ -7,6 +7,7 @@ import { cancelRegistration, beginRegistration, getConversationState, saveConver
 import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
 import { getPreferredTelegramLanguage } from "@/lib/server/telegram/preferences";
 import { sendApprovedCredentialsTelegram } from "@/lib/server/telegram/credentials";
+import { logSecurityEvent } from "@/lib/server/security-events";
 import { languageFromTelegram, type TelegramLang } from "@/lib/server/telegram/types";
 import { handlePartnerContractSignCallback } from "@/lib/server/telegram/partner-notifications";
 import {
@@ -18,7 +19,13 @@ import {
   parsePartnerPayload,
   partnerPromptFor,
 } from "@/lib/server/telegram/partner-registration";
-import { siteLoginKeyboard, siteLoginLine } from "@/lib/server/telegram/site-login";
+import {
+  CREDENTIAL_DELETE_CALLBACK,
+  credentialDeleteHint,
+  credentialDeletedToast,
+  credentialKeyboard,
+  siteLoginLine,
+} from "@/lib/server/telegram/site-login";
 
 function isBanned(profile: { banned_until?: string | null; ban_permanent?: boolean | null }): boolean {
   if (profile.ban_permanent === true || profile.banned_until === "infinity") return true;
@@ -202,11 +209,13 @@ async function recoverTelegramIdentity(
     return;
   }
 
+  await logSecurityEvent("password.reset_telegram", profileId, { via: "identity_recovery", telegram_id: String(ctx.from.id), email: login });
+
   const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   try {
     await ctx.reply(
-      `${replyCopy.success}\n\n<b>Login:</b> <code>${escapeHtml(login)}</code>\n<b>Password:</b> <code>${escapeHtml(password)}</code>\n${siteLoginLine(lang)}`,
-      { parse_mode: "HTML", reply_markup: siteLoginKeyboard(lang), link_preview_options: { is_disabled: true } },
+      `${replyCopy.success}\n\n<b>Login:</b> <code>${escapeHtml(login)}</code>\n<b>Password:</b> <code>${escapeHtml(password)}</code>\n${siteLoginLine(lang)}\n\n${credentialDeleteHint(lang)}`,
+      { parse_mode: "HTML", reply_markup: credentialKeyboard(lang), protect_content: true, link_preview_options: { is_disabled: true } },
     );
   } catch (error) {
     // Never log the plaintext password. The account has been rebound; an owner can issue a new link if delivery failed.
@@ -444,6 +453,8 @@ export function createVoyageTelegramBot(token: string): Bot {
       return;
     }
 
+    await logSecurityEvent("password.reset_telegram", profile.id, { via: "/password", telegram_id: telegramId, email: login, role: profile.role });
+
     try {
       const delivered = await sendApprovedCredentialsTelegram({
           deliveryId,
@@ -461,9 +472,10 @@ export function createVoyageTelegramBot(token: string): Bot {
 
     const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
     try {
-      await ctx.reply(`${messages.fallback}\n\n<b>Login:</b> <code>${escapeHtml(login)}</code>\n<b>Password:</b> <code>${escapeHtml(password)}</code>\n${siteLoginLine(lang)}`, {
+      await ctx.reply(`${messages.fallback}\n\n<b>Login:</b> <code>${escapeHtml(login)}</code>\n<b>Password:</b> <code>${escapeHtml(password)}</code>\n${siteLoginLine(lang)}\n\n${credentialDeleteHint(lang)}`, {
         parse_mode: "HTML",
-        reply_markup: siteLoginKeyboard(lang),
+        reply_markup: credentialKeyboard(lang),
+        protect_content: true,
         link_preview_options: { is_disabled: true },
       });
     } catch (error) {
@@ -480,6 +492,18 @@ export function createVoyageTelegramBot(token: string): Bot {
     const lang = await contextLanguage(ctx);
     const supportUsername = (process.env.TELEGRAM_SUPPORT_USERNAME ?? "voyage_support").replace(/^@/, "");
     await ctx.reply(copy(lang).supportText.replace("{{username}}", supportUsername), { reply_markup: mainMenu(lang) });
+  });
+
+  // «🗑 Удалить это сообщение» под сообщениями с паролем.
+  bot.callbackQuery(CREDENTIAL_DELETE_CALLBACK, async (ctx) => {
+    const lang = await contextLanguage(ctx);
+    try {
+      await ctx.deleteMessage();
+      await ctx.answerCallbackQuery({ text: credentialDeletedToast(lang) });
+    } catch {
+      // старше 48 часов Telegram удалить не даст — пользователь удалит сам
+      await ctx.answerCallbackQuery().catch(() => {});
+    }
   });
 
   bot.callbackQuery("menu:register", async (ctx) => {

@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { processPartnerNotificationQueue } from "@/lib/server/telegram/partner-notifications";
+import { logSecurityEvent, requestIp } from "@/lib/server/security-events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +19,10 @@ function constantTimeSecretEqual(received: string, expected: string): boolean {
  * and an optional 30-second queue poller.
  *
  * Secret: PARTNER_NOTIFICATIONS_WEBHOOK_SECRET. Accepted headers, in order:
- *   x-webhook-secret            — new trigger (migration 20261022092000)
- *   x-voyage-webhook-secret     — legacy header, kept for the poller during rotation
+ *   x-webhook-secret            — trigger (migration 20261022092000) and the poller
  *   Authorization: Bearer <secret>
+ * The legacy x-voyage-webhook-secret header is no longer accepted: its old value
+ * leaked in a DB dump (security-hardening, 2026-11-09).
  */
 export async function POST(request: Request) {
   const expectedSecret = (process.env.PARTNER_NOTIFICATIONS_WEBHOOK_SECRET ?? "").trim();
@@ -31,11 +33,16 @@ export async function POST(request: Request) {
 
   const receivedSecret = (
     request.headers.get("x-webhook-secret")
-    ?? request.headers.get("x-voyage-webhook-secret")
     ?? request.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
     ?? ""
   ).trim();
   if (!constantTimeSecretEqual(receivedSecret, expectedSecret)) {
+    const ip = requestIp(request);
+    await logSecurityEvent("webhook.bad_secret", null, {
+      endpoint: "/api/telegram/notify",
+      ip,
+      legacy_header: request.headers.has("x-voyage-webhook-secret"),
+    }, { dedupeKey: `webhook.bad_secret:telegram-notify:${ip}` });
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 

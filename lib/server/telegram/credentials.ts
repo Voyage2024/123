@@ -3,7 +3,7 @@ import "server-only";
 import { Api } from "grammy";
 import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
 import type { TelegramLang } from "@/lib/server/telegram/types";
-import { siteLoginKeyboard, siteLoginLine } from "@/lib/server/telegram/site-login";
+import { credentialDeleteHint, credentialKeyboard, siteLoginLine } from "@/lib/server/telegram/site-login";
 
 export type ApprovedCredentials = {
   deliveryId: string;
@@ -64,7 +64,7 @@ function approvedMessage(lang: TelegramLang, input: ApprovedCredentials): string
   const text = labels[lang];
   // Telegram HTML <code> displays a copy-friendly monospace credential. All
   // untrusted inserted values are escaped to prevent markup injection.
-  return `✅ ${greeting[lang]}\n\n<b>${text.site}</b>\n${text.login}: <code>${safeLogin}</code>\n${text.password}: <code>${safePassword}</code>\n${siteLoginLine(lang)}\n\n${text.security}`;
+  return `✅ ${greeting[lang]}\n\n<b>${text.site}</b>\n${text.login}: <code>${safeLogin}</code>\n${text.password}: <code>${safePassword}</code>\n${siteLoginLine(lang)}\n\n${text.security}\n${credentialDeleteHint(lang)}`;
 }
 
 /** Sends credentials directly via Telegram Bot API from the Next.js server runtime. */
@@ -115,7 +115,8 @@ export async function sendApprovedCredentialsTelegram(input: ApprovedCredentials
     await new Api(token).sendMessage(Number(input.telegramId), message, {
       parse_mode: "HTML",
       link_preview_options: { is_disabled: true },
-      reply_markup: siteLoginKeyboard(lang),
+      protect_content: true,
+      reply_markup: credentialKeyboard(lang),
     });
 
     const now = new Date().toISOString();

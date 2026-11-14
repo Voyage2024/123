@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import type { Role } from "@/app/context/AuthContext";
+import { MFA_ENFORCED_ROLES, sessionNeedsMfa } from "@/lib/server/mfa";
 
 export class AuthorizationError extends Error {
   constructor(message = "You are not authorized to perform this action.") {
@@ -32,6 +33,10 @@ export async function requireRole(allowed: readonly Role[]): Promise<{ userId: s
     throw new AuthorizationError("You do not have permission to perform this action.");
   }
   if (isBanActive(profile)) throw new AuthorizationError("Access is restricted for this account.");
+  // owner/admin с включённым двухэтапным входом: без кода (aal2) — отказ.
+  if (MFA_ENFORCED_ROLES.has(String(profile.role)) && (await sessionNeedsMfa(supabase))) {
+    throw new AuthorizationError("Please confirm the sign-in code.");
+  }
 
   return { userId: auth.user.id, role: profile.role as Role };
 }

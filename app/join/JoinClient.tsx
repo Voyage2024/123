@@ -41,6 +41,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { notifyCurrentReferralRegistration } from "@/app/actions/referral-notifications";
 import { useLanguage } from "@/app/context/LanguageContext";
+import TurnstileWidget from "@/app/components/security/TurnstileWidget";
 import { LANGS, normalizeCircleKey, normalizeLang, type CircleKey, type Lang } from "@/lib/gamification";
 import { KEY_TTL_DAYS, inviteErrorCode, normalizeInviteCode, type InvitePreviewRow } from "@/lib/patronage";
 import { cormorant } from "@/app/components/profile/fonts";
@@ -59,7 +60,13 @@ type AuthError =
   | "invalidEmail"
   | "notConfirmed"
   | "signupDisabled"
+  | "captcha"
   | "generic";
+
+/** Cloudflare Turnstile → CAPTCHA Supabase Auth; без ключа сайта проверки нет. */
+const CAPTCHA_ENABLED = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim());
+/** Минимум пароля при регистрации; тот же минимум задайте в Supabase → Auth → Passwords. */
+const MIN_PASSWORD = 12;
 
 const en = {
   tagline: "Private Club",
@@ -90,7 +97,10 @@ const en = {
   fullName: "Full name",
   email: "Email",
   password: "Password",
-  passwordHint: "At least 8 characters",
+  captchaLang: "EN",
+  captchaLoading: "Checking your browser…",
+  captchaUnavailable: "Security check did not load. Refresh the page.",
+  passwordHint: "At least 12 characters",
   showPassword: "Show password",
   hidePassword: "Hide password",
   submitSignUp: "Create access & accept",
@@ -99,7 +109,7 @@ const en = {
   back: "Back to the invitation",
   errName: "Please enter your full name.",
   errEmail: "Please check the email address.",
-  errPassword: "At least 8 characters, please.",
+  errPassword: "At least 12 characters, please.",
   authError: {
     invalidCredentials: "Email or password is incorrect.",
     userExists: "This email is already registered — please sign in instead.",
@@ -108,6 +118,7 @@ const en = {
     invalidEmail: "This email address doesn't look right.",
     notConfirmed: "Please confirm your email first — the link is in your inbox.",
     signupDisabled: "New registrations are paused. Please write to the concierge.",
+    captcha: "Please complete the security check and try again.",
     generic: "Something went wrong. Please try again.",
   } as Record<AuthError, string>,
   // подтверждение почты
@@ -206,7 +217,10 @@ const ru: Dict = {
   fullName: "Имя и фамилия",
   email: "Почта",
   password: "Пароль",
-  passwordHint: "Не короче 8 символов",
+  captchaLang: "RU",
+  captchaLoading: "Проверяем браузер…",
+  captchaUnavailable: "Проверка безопасности не загрузилась. Обновите страницу.",
+  passwordHint: "Не короче 12 символов",
   showPassword: "Показать пароль",
   hidePassword: "Скрыть пароль",
   submitSignUp: "Создать доступ и принять",
@@ -215,7 +229,7 @@ const ru: Dict = {
   back: "Назад к приглашению",
   errName: "Укажите имя и фамилию.",
   errEmail: "Проверьте адрес почты.",
-  errPassword: "Пароль — не короче 8 символов.",
+  errPassword: "Пароль — не короче 12 символов.",
   authError: {
     invalidCredentials: "Неверная почта или пароль.",
     userExists: "Эта почта уже зарегистрирована — войдите в аккаунт.",
@@ -224,6 +238,7 @@ const ru: Dict = {
     invalidEmail: "Адрес почты выглядит неверно.",
     notConfirmed: "Сначала подтвердите почту — ссылка во входящих.",
     signupDisabled: "Регистрация сейчас закрыта. Напишите консьержу.",
+    captcha: "Пройдите проверку безопасности и повторите.",
     generic: "Что-то пошло не так. Попробуйте ещё раз.",
   },
   confirmTitle: "Проверьте почту",
@@ -312,7 +327,10 @@ const es: Dict = {
   fullName: "Nombre y apellido",
   email: "Correo",
   password: "Contraseña",
-  passwordHint: "Al menos 8 caracteres",
+  captchaLang: "ES",
+  captchaLoading: "Comprobando su navegador…",
+  captchaUnavailable: "La verificación de seguridad no se cargó. Recargue la página.",
+  passwordHint: "Al menos 12 caracteres",
   showPassword: "Mostrar contraseña",
   hidePassword: "Ocultar contraseña",
   submitSignUp: "Crear acceso y aceptar",
@@ -321,7 +339,7 @@ const es: Dict = {
   back: "Volver a la invitación",
   errName: "Indique su nombre y apellido.",
   errEmail: "Revise la dirección de correo.",
-  errPassword: "Al menos 8 caracteres, por favor.",
+  errPassword: "Al menos 12 caracteres, por favor.",
   authError: {
     invalidCredentials: "Correo o contraseña incorrectos.",
     userExists: "Este correo ya está registrado: inicie sesión.",
@@ -330,6 +348,7 @@ const es: Dict = {
     invalidEmail: "La dirección de correo no parece correcta.",
     notConfirmed: "Primero confirme su correo: el enlace está en su bandeja de entrada.",
     signupDisabled: "Los registros están pausados. Escriba al conserje.",
+    captcha: "Complete la verificación de seguridad e inténtelo de nuevo.",
     generic: "Algo salió mal. Inténtelo de nuevo.",
   },
   confirmTitle: "Revise su correo",
@@ -418,7 +437,10 @@ const pt: Dict = {
   fullName: "Nome e sobrenome",
   email: "E-mail",
   password: "Senha",
-  passwordHint: "Pelo menos 8 caracteres",
+  captchaLang: "PT",
+  captchaLoading: "Verificando seu navegador…",
+  captchaUnavailable: "A verificação de segurança não carregou. Atualize a página.",
+  passwordHint: "Pelo menos 12 caracteres",
   showPassword: "Mostrar senha",
   hidePassword: "Ocultar senha",
   submitSignUp: "Criar acesso e aceitar",
@@ -427,7 +449,7 @@ const pt: Dict = {
   back: "Voltar ao convite",
   errName: "Informe seu nome e sobrenome.",
   errEmail: "Verifique o endereço de e-mail.",
-  errPassword: "Pelo menos 8 caracteres, por favor.",
+  errPassword: "Pelo menos 12 caracteres, por favor.",
   authError: {
     invalidCredentials: "E-mail ou senha incorretos.",
     userExists: "Este e-mail já está cadastrado — entre na sua conta.",
@@ -436,6 +458,7 @@ const pt: Dict = {
     invalidEmail: "Este e-mail não parece correto.",
     notConfirmed: "Confirme seu e-mail primeiro — o link está na sua caixa de entrada.",
     signupDisabled: "Os cadastros estão pausados. Escreva para o concierge.",
+    captcha: "Conclua a verificação de segurança e tente novamente.",
     generic: "Algo deu errado. Tente novamente.",
   },
   confirmTitle: "Confira seu e-mail",
@@ -556,6 +579,7 @@ function authErrorCode(error: unknown): AuthError {
   const e = (error ?? {}) as { message?: string; code?: string; status?: number };
   const code = e.code ?? "";
   const msg = (e.message ?? "").toLowerCase();
+  if (code === "captcha_failed" || msg.includes("captcha")) return "captcha";
   if (code === "invalid_credentials" || msg.includes("invalid login credentials")) return "invalidCredentials";
   if (code === "user_already_exists" || code === "email_exists" || msg.includes("already registered"))
     return "userExists";
@@ -1001,9 +1025,13 @@ function AuthPanel({
     name: string;
     email: string;
     password: string;
+    captchaToken?: string;
   }) => Promise<AuthError | null>;
 }) {
   const [name, setName] = useState(guestName ?? "");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const onCaptchaToken = useCallback((token: string) => setCaptchaToken(token), []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
@@ -1021,13 +1049,18 @@ function AuthPanel({
     const errs = {
       name: mode === "signup" && cleanName.length < 2,
       email: !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()),
-      password: password.length < 8,
+      password: mode === "signup" ? password.length < MIN_PASSWORD : password.length < 1,
     };
     setFieldErr(errs);
     if (errs.name || errs.email || errs.password) return;
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      setError("captcha");
+      return;
+    }
     setBusy(true);
     setError(null);
-    const result = await onSubmit({ mode, name: cleanName, email: email.trim(), password });
+    const result = await onSubmit({ mode, name: cleanName, email: email.trim(), password, captchaToken: captchaToken || undefined });
+    if (CAPTCHA_ENABLED) setCaptchaReset((v) => v + 1);
     setBusy(false);
     if (result) {
       setError(result);
@@ -1162,6 +1195,16 @@ function AuthPanel({
             </div>
           </Field>
 
+          {CAPTCHA_ENABLED && (
+            <TurnstileWidget
+              lang={t.captchaLang}
+              action={mode === "signup" ? "join_signup" : "join_signin"}
+              resetVersion={captchaReset}
+              onTokenChange={onCaptchaToken}
+              labels={{ loading: t.captchaLoading, unavailable: t.captchaUnavailable }}
+            />
+          )}
+
           {error && (
             <p
               role="alert"
@@ -1196,6 +1239,9 @@ function AuthPanel({
 function ConfirmPanel({ t, email, code, onChange }: { t: Dict; email: string; code: string; onChange: () => void }) {
   const [left, setLeft] = useState(RESEND_COOLDOWN_S);
   const [sent, setSent] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const onCaptchaToken = useCallback((token: string) => setCaptchaToken(token), []);
   useEffect(() => {
     if (left <= 0) return;
     const id = setTimeout(() => setLeft((s) => s - 1), 1000);
@@ -1203,21 +1249,35 @@ function ConfirmPanel({ t, email, code, onChange }: { t: Dict; email: string; co
   }, [left]);
 
   const resend = async () => {
+    if (CAPTCHA_ENABLED && !captchaToken) return;
     setLeft(RESEND_COOLDOWN_S);
     const { error } = await supabase.auth.resend({
       type: "signup",
       email,
-      options: { emailRedirectTo: `${window.location.origin}/join?key=${encodeURIComponent(code)}` },
+      options: {
+        emailRedirectTo: `${window.location.origin}/join?key=${encodeURIComponent(code)}`,
+        ...(captchaToken ? { captchaToken } : {}),
+      },
     });
+    if (CAPTCHA_ENABLED) setCaptchaReset((v) => v + 1);
     setSent(!error);
   };
 
   return (
     <Notice icon={Mail} title={t.confirmTitle} body={t.confirmBody(email)}>
+      {CAPTCHA_ENABLED && left <= 0 && (
+        <TurnstileWidget
+          lang={t.captchaLang}
+          action="join_resend"
+          resetVersion={captchaReset}
+          onTokenChange={onCaptchaToken}
+          labels={{ loading: t.captchaLoading, unavailable: t.captchaUnavailable }}
+        />
+      )}
       <button
         type="button"
         onClick={() => void resend()}
-        disabled={left > 0}
+        disabled={left > 0 || (CAPTCHA_ENABLED && !captchaToken)}
         className={`${BTN_GHOST} disabled:cursor-not-allowed disabled:opacity-50`}
       >
         {sent && left > 0 ? (
@@ -1380,7 +1440,7 @@ export default function JoinClient() {
     setView({ kind: "checking" });
   };
 
-  const submitAuth = async (f: { mode: "signup" | "signin"; name: string; email: string; password: string }) => {
+  const submitAuth = async (f: { mode: "signup" | "signin"; name: string; email: string; password: string; captchaToken?: string }) => {
     if (!code) return "generic" as AuthError;
     const intent = view.kind === "auth" ? view.intent : "accept";
     try {
@@ -1392,6 +1452,7 @@ export default function JoinClient() {
           options: {
             data: { full_name: f.name, invite_key: code },
             emailRedirectTo: `${window.location.origin}/join?key=${encodeURIComponent(code)}`,
+            ...(f.captchaToken ? { captchaToken: f.captchaToken } : {}),
           },
         });
         if (error) return authErrorCode(error);
@@ -1404,7 +1465,11 @@ export default function JoinClient() {
         return null; // сессия появилась — превью перечитается и ключ активируется сам
       }
       if (intent === "accept") savePending(code, readPending()?.name ?? preview?.guest_name ?? null);
-      const { error } = await supabase.auth.signInWithPassword({ email: f.email, password: f.password });
+      const { error } = await supabase.auth.signInWithPassword({
+        email: f.email,
+        password: f.password,
+        ...(f.captchaToken ? { options: { captchaToken: f.captchaToken } } : {}),
+      });
       if (error) return authErrorCode(error);
       if (intent === "status") setView({ kind: "checking" });
       return null;

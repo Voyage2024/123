@@ -33,11 +33,14 @@ const TURNSTILE_LANG: Record<string, string> = {
 
 export default function TurnstileWidget({
   lang,
+  action = "join_request",
   resetVersion,
   onTokenChange,
   labels,
 }: {
   lang: string;
+  /** Метка в аналитике Cloudflare: "login", "join_signup", "join_request"… */
+  action?: string;
   resetVersion: number;
   onTokenChange: (token: string) => void;
   labels: { loading: string; unavailable: string };
@@ -60,7 +63,7 @@ export default function TurnstileWidget({
       sitekey: siteKey,
       theme: "dark",
       language: TURNSTILE_LANG[String(lang).toUpperCase()] ?? "auto",
-      action: "join_request",
+      action,
       callback: (token) => callbackRef.current(token),
       "error-callback": () => callbackRef.current(""),
       "expired-callback": () => callbackRef.current(""),
@@ -75,7 +78,7 @@ export default function TurnstileWidget({
       widgetIdRef.current = null;
       callbackRef.current("");
     };
-  }, [lang, scriptReady, siteKey]);
+  }, [action, lang, scriptReady, siteKey]);
 
   useEffect(() => {
     if (resetVersion < 1 || !widgetIdRef.current || !window.turnstile) return;

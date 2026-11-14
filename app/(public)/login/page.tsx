@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, KeyRound } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, KeyRound, ShieldCheck } from "lucide-react";
+import type { User } from "@supabase/supabase-js";
+import TurnstileWidget from "@/app/components/security/TurnstileWidget";
 import { isRole, useAuth } from "@/app/context/AuthContext";
 import { getRoleHomePath } from "@/lib/rbac";
 import { useLanguage } from "@/app/context/LanguageContext";
@@ -48,6 +50,13 @@ const translations = {
     partnerSlogan: "Discreet service for those who build the tours. Crews, contracts and reputation under one VOYAGE seal.",
     welcome: (name: string) => `Good day, ${name}. Opening your Command…`,
     defaultName: "Resident",
+    mfaTitle: "Two-step verification",
+    mfaHint: "Enter the 6-digit code from your authenticator app.",
+    mfaCode: "Code",
+    mfaVerify: "Confirm",
+    mfaBack: "Use another account",
+    captchaLoading: "Checking your browser…",
+    captchaUnavailable: "Security check did not load. Refresh the page.",
     errors: {
       invalidCredentials: "Incorrect username or password. Please try again.",
       emailNotConfirmed: "Your email is not confirmed yet. Please check your inbox.",
@@ -55,6 +64,8 @@ const translations = {
       profileCheck: "We could not verify your account role. Please try again or contact support.",
       network: "Connection error. Please check your internet and try again.",
       generic: "Something went wrong. Please try again.",
+      mfaInvalid: "Wrong or expired code. Try the current one.",
+      captchaRequired: "Please complete the security check.",
     },
   },
   RU: {
@@ -78,6 +89,13 @@ const translations = {
     partnerSlogan: "Тихий сервис для тех, кто собирает туры. Составы, контракты и репутация — под одной печатью VOYAGE.",
     welcome: (name: string) => `Добрый день, ${name}. Открываем ваш Штаб…`,
     defaultName: "Резидент",
+    mfaTitle: "Двухэтапная проверка",
+    mfaHint: "Введите 6-значный код из приложения-аутентификатора.",
+    mfaCode: "Код",
+    mfaVerify: "Подтвердить",
+    mfaBack: "Войти в другой аккаунт",
+    captchaLoading: "Проверяем браузер…",
+    captchaUnavailable: "Проверка безопасности не загрузилась. Обновите страницу.",
     errors: {
       invalidCredentials: "Неверный логин или пароль. Попробуйте ещё раз.",
       emailNotConfirmed: "Email ещё не подтверждён. Проверьте почту.",
@@ -85,6 +103,8 @@ const translations = {
       profileCheck: "Не удалось проверить роль аккаунта. Попробуйте ещё раз или обратитесь в поддержку.",
       network: "Ошибка соединения. Проверьте интернет и попробуйте снова.",
       generic: "Что-то пошло не так. Попробуйте ещё раз.",
+      mfaInvalid: "Неверный или устаревший код. Введите текущий.",
+      captchaRequired: "Пройдите проверку безопасности.",
     },
   },
   ES: {
@@ -108,6 +128,13 @@ const translations = {
     partnerSlogan: "Un servicio discreto para quienes crean los tours. Equipos, contratos y reputación bajo un mismo sello VOYAGE.",
     welcome: (name: string) => `Buenos días, ${name}. Abriendo su Cuartel…`,
     defaultName: "Residente",
+    mfaTitle: "Verificación en dos pasos",
+    mfaHint: "Introduce el código de 6 dígitos de tu app de autenticación.",
+    mfaCode: "Código",
+    mfaVerify: "Confirmar",
+    mfaBack: "Usar otra cuenta",
+    captchaLoading: "Comprobando tu navegador…",
+    captchaUnavailable: "La verificación de seguridad no se cargó. Recarga la página.",
     errors: {
       invalidCredentials: "Usuario o contraseña incorrectos. Inténtalo de nuevo.",
       emailNotConfirmed: "Tu correo aún no está confirmado. Revisa tu bandeja de entrada.",
@@ -115,6 +142,8 @@ const translations = {
       profileCheck: "No pudimos verificar el rol de tu cuenta. Inténtalo de nuevo o contacta con soporte.",
       network: "Error de conexión. Revisa tu internet e inténtalo de nuevo.",
       generic: "Algo salió mal. Inténtalo de nuevo.",
+      mfaInvalid: "Código incorrecto o caducado. Usa el actual.",
+      captchaRequired: "Completa la verificación de seguridad.",
     },
   },
   PT: {
@@ -138,6 +167,13 @@ const translations = {
     partnerSlogan: "Um serviço discreto para quem monta os tours. Equipes, contratos e reputação sob um só selo VOYAGE.",
     welcome: (name: string) => `Bom dia, ${name}. Abrindo seu Quartel…`,
     defaultName: "Residente",
+    mfaTitle: "Verificação em duas etapas",
+    mfaHint: "Digite o código de 6 dígitos do seu app autenticador.",
+    mfaCode: "Código",
+    mfaVerify: "Confirmar",
+    mfaBack: "Usar outra conta",
+    captchaLoading: "Verificando seu navegador…",
+    captchaUnavailable: "A verificação de segurança não carregou. Atualize a página.",
     errors: {
       invalidCredentials: "Usuário ou senha incorretos. Tente novamente.",
       emailNotConfirmed: "Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada.",
@@ -145,6 +181,8 @@ const translations = {
       profileCheck: "Não foi possível verificar a função da sua conta. Tente novamente ou contacte o suporte.",
       network: "Erro de conexão. Verifique sua internet e tente novamente.",
       generic: "Algo deu errado. Tente novamente.",
+      mfaInvalid: "Código incorreto ou expirado. Use o atual.",
+      captchaRequired: "Conclua a verificação de segurança.",
     },
   },
 } as const;
@@ -183,6 +221,35 @@ export default function LoginPage() {
   const [errorKey, setErrorKey] = useState<ErrorKey | null>(null);
   /** Приветствие партнёра, пока открывается Штаб */
   const [welcome, setWelcome] = useState<string | null>(null);
+  /* Cloudflare Turnstile → Supabase Auth CAPTCHA. Без NEXT_PUBLIC_TURNSTILE_SITE_KEY
+     виджета нет и токен не передаётся (CAPTCHA в Supabase тогда должна быть выключена). */
+  const captchaEnabled = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim());
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const onCaptchaToken = useCallback((token: string) => setCaptchaToken(token), []);
+  /* Второй шаг входа для аккаунтов с TOTP (owner/admin включают в настройках). */
+  const [mfa, setMfa] = useState<{ factorId: string; user: User } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+
+  // Вернулись сюда с уже открытой сессией без кода (например, /admin
+  // отправил на /login?mfa=required) — сразу показываем второй шаг.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (cancelled || !aal || aal.nextLevel !== "aal2" || aal.currentLevel === "aal2") return;
+      const [{ data: userData }, { data: factors }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.auth.mfa.listFactors(),
+      ]);
+      const factor = factors?.totp?.find((f) => f.status === "verified");
+      if (!cancelled && userData.user && factor) setMfa({ factorId: factor.id, user: userData.user });
+    })().catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   /** Фокус формы — по нему персонажи слева меняют реплики */
   const [focusedField, setFocusedField] = useState<LoginField>(null);
   const [lastField, setLastField] = useState<LoginField>(null);
@@ -223,11 +290,20 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrorKey(null);
 
+    if (captchaEnabled && !captchaToken) {
+      setErrorKey("captchaRequired");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: normalizeLogin(email),
         password,
+        ...(captchaEnabled ? { options: { captchaToken } } : {}),
       });
+      // Токен Turnstile одноразовый: после любой попытки берём новый.
+      if (captchaEnabled) setCaptchaReset((v) => v + 1);
 
       if (error || !data.user) {
         setErrorKey(error ? mapAuthError(error.message, error.status) : "generic");
@@ -236,6 +312,66 @@ export default function LoginPage() {
         return;
       }
 
+      // Включена двухэтапная проверка → сначала код, потом всё остальное.
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const factor = factors?.totp?.find((f) => f.status === "verified");
+        if (factor) {
+          setMfa({ factorId: factor.id, user: data.user });
+          setMfaCode("");
+          setPassword("");
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      await finishLogin(data.user);
+    } catch (err) {
+      console.error("Login error:", err);
+      setErrorKey("network");
+      setIsLoading(false);
+    }
+  };
+
+  const handleMfa = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (isLoading || !mfa) return;
+    const code = mfaCode.replace(/\s+/g, "");
+    if (!/^[0-9]{6}$/.test(code)) {
+      setErrorKey("mfaInvalid");
+      return;
+    }
+    setIsLoading(true);
+    setErrorKey(null);
+    try {
+      const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: mfa.factorId, code });
+      if (error) {
+        setErrorKey(error.status === 429 ? "tooManyRequests" : "mfaInvalid");
+        setMfaCode("");
+        setIsLoading(false);
+        return;
+      }
+      await finishLogin(mfa.user);
+    } catch (err) {
+      console.error("MFA error:", err);
+      setErrorKey("network");
+      setIsLoading(false);
+    }
+  };
+
+  const cancelMfa = async () => {
+    await supabase.auth.signOut();
+    Cookies.remove("voyage_token");
+    setMfa(null);
+    setMfaCode("");
+    setErrorKey(null);
+  };
+
+  /** Роль, cookie-подсказка и переход в кабинет — после пароля (и кода, если включён). */
+  const finishLogin = async (authUser: User) => {
+    const data = { user: authUser };
+    {
       // Resolve the real role before choosing a destination. public.profiles is the
       // source of truth; a missing/invalid row must never be silently treated as resident.
       const { data: profile, error: profileError } = await supabase
@@ -252,6 +388,7 @@ export default function LoginPage() {
         Cookies.remove("voyage_token");
         setErrorKey("profileCheck");
         setPassword("");
+        setMfa(null);
         setIsLoading(false);
         return;
       }
@@ -280,10 +417,6 @@ export default function LoginPage() {
       // `replace` prevents returning to the login form via browser Back.
       if (profile.role === "manager") setWelcome(t.welcome(userName.split(/\s+/)[0] || userName));
       router.replace(getRoleHomePath(profile.role));
-    } catch (err) {
-      console.error("Login error:", err);
-      setErrorKey("network");
-      setIsLoading(false);
     }
   };
 
@@ -326,7 +459,61 @@ export default function LoginPage() {
         </h1>
         <p className="mt-2 text-center text-xs text-zinc-500">{t.enterDetails}</p>
 
-        {/* Форма */}
+        {mfa ? (
+          <form className="mt-8 space-y-4" onSubmit={handleMfa}>
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200/15 bg-amber-200/[0.04] px-4 py-3">
+              <ShieldCheck size={18} strokeWidth={1.5} className="mt-0.5 shrink-0 text-amber-200/80" />
+              <div>
+                <p className="text-sm text-zinc-100">{t.mfaTitle}</p>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-500">{t.mfaHint}</p>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="mfa-code" className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                {t.mfaCode}
+              </label>
+              <input
+                id="mfa-code"
+                name="mfa-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9 ]{6,7}"
+                maxLength={7}
+                autoFocus
+                value={mfaCode}
+                onChange={(e) => {
+                  setMfaCode(e.target.value);
+                  if (errorKey) setErrorKey(null);
+                }}
+                disabled={isLoading}
+                aria-invalid={hasError}
+                aria-describedby={hasError ? "login-error" : undefined}
+                className={`${inputBase} ${inputState} px-4 text-center tracking-[0.5em]`}
+                style={{ paddingLeft: "1rem", fontSize: 18 }}
+                required
+              />
+            </div>
+            {hasError && (
+              <div id="login-error" role="alert" className="flex items-start gap-2.5 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3.5 py-3 text-xs leading-relaxed text-red-300">
+                <AlertCircle size={15} strokeWidth={1.75} className="mt-px shrink-0 text-red-400" />
+                <span>{t.errors[errorKey]}</span>
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={isLoading}
+              aria-busy={isLoading}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-100 py-3 text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-950 transition-colors hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isLoading ? <Loader2 size={15} className="animate-spin" /> : <ShieldCheck size={15} />}
+              {t.mfaVerify}
+            </button>
+            <button type="button" onClick={cancelMfa} disabled={isLoading} className="w-full text-center text-xs text-zinc-500 transition-colors hover:text-amber-200/80">
+              {t.mfaBack}
+            </button>
+          </form>
+        ) : (
         <form className="mt-8 space-y-4" onSubmit={handleLogin} noValidate={false}>
           {/* Email */}
           <div>
@@ -433,6 +620,16 @@ export default function LoginPage() {
             </a>
           </div>
 
+          {captchaEnabled && (
+            <TurnstileWidget
+              lang={String(lang)}
+              action="login"
+              resetVersion={captchaReset}
+              onTokenChange={onCaptchaToken}
+              labels={{ loading: t.captchaLoading, unavailable: t.captchaUnavailable }}
+            />
+          )}
+
           {/* Кнопка входа */}
           <button
             type="submit"
@@ -453,6 +650,7 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+        )}
 
         {welcome && (
           <p role="status" className={`${cormorant.className} mt-6 text-center text-lg italic text-amber-100/90`}>
