@@ -13,17 +13,68 @@
  *     скрывает кастинги и не блокирует отклик, только помогает менеджеру
  *     увидеть совпадение с требованиями.
  *
+ * С 20261114100000 у каждого кастинга свой минимальный KYC: чек-лист
+ * показывает, на сколько открытых кастингов уже хватает уровня, а под ним —
+ * раскрывающееся описание всех четырёх уровней с отметкой «вы здесь».
+ *
  * Данные — me.blockers из partner_resident_feed (миграция 20261114090000),
  * запись роста/языков — setCastingProfile (_lib/actions.ts).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Clock, Languages, Loader2, Lock, Ruler, ShieldAlert, ShieldCheck, ToggleRight } from "lucide-react";
+import { ArrowRight, Camera, Check, ChevronDown, Clock, Languages, Loader2, Lock, Ruler, ShieldAlert, ShieldCheck, ToggleRight } from "lucide-react";
 import type { Lang } from "@/app/context/LanguageContext";
 import { BTN_GHOST, BTN_GOLD, ICON_RING, PILL, cormorant } from "@/app/(dashboard)/partner/_components/PartnerUI";
 import type { ResidentProfile } from "@/app/(dashboard)/dashboard/_lib/castingFeed";
 import { setCastingProfile } from "@/app/(dashboard)/dashboard/_lib/actions";
+import { KYC_LEVELS, kycCopy } from "@/lib/kyc-levels";
+import { KycSteps } from "@/app/components/profile/KycLevelBadge";
+
+export const PROFILE_PHOTO_HREF = "/dashboard";
+
+/** Тексты гибкого KYC (20261114100000) — отдельно, чтобы не трогать основной словарь */
+const KYC_EXTRA: Record<Lang, {
+  avail: (have: number, ok: number, total: number) => string;
+  allOpen: (have: number) => string;
+  photo: string;
+  photoCta: string;
+  lockedPhoto: string;
+  youAreHere: string;
+}> = {
+  RU: {
+    avail: (have, ok, total) => `Ваш KYC ${have}: откликаться можно на ${ok} из ${total} кастингов`,
+    allOpen: (have) => `Ваш KYC ${have}: уровня хватает для всех открытых кастингов`,
+    photo: "Загрузите хотя бы одно фото в профиль",
+    photoCta: "Добавить фото",
+    lockedPhoto: "Отклик — после загрузки фото",
+    youAreHere: "вы здесь",
+  },
+  EN: {
+    avail: (have, ok, total) => `Your KYC ${have}: you can reply to ${ok} of ${total} castings`,
+    allOpen: (have) => `Your KYC ${have}: enough for every open casting`,
+    photo: "Upload at least one photo to your profile",
+    photoCta: "Add a photo",
+    lockedPhoto: "Replies open after you upload a photo",
+    youAreHere: "you are here",
+  },
+  ES: {
+    avail: (have, ok, total) => `Tu KYC ${have}: puedes responder a ${ok} de ${total} castings`,
+    allOpen: (have) => `Tu KYC ${have}: suficiente para todos los castings abiertos`,
+    photo: "Sube al menos una foto a tu perfil",
+    photoCta: "Añadir foto",
+    lockedPhoto: "Respuesta tras subir una foto",
+    youAreHere: "estás aquí",
+  },
+  PT: {
+    avail: (have, ok, total) => `Seu KYC ${have}: dá para responder a ${ok} de ${total} castings`,
+    allOpen: (have) => `Seu KYC ${have}: suficiente para todos os castings abertos`,
+    photo: "Envie pelo menos uma foto para o perfil",
+    photoCta: "Adicionar foto",
+    lockedPhoto: "Resposta após enviar uma foto",
+    youAreHere: "você está aqui",
+  },
+};
 
 /** Те же коды, что в форме кастинга (CastingBriefFields.LANGUAGE_CODES) */
 const LANGUAGE_CODES = ["EN", "RU", "ES", "PT", "FR", "IT", "DE", "AR"] as const;
@@ -228,12 +279,22 @@ export const ACCESS_COPY: Record<Lang, Dict> = {
   },
 };
 
-/** Подпись для заблокированной кнопки «Готова в тур» */
-export function lockedLabel(me: ResidentProfile, open: boolean, lang: Lang): string {
+/**
+ * Подпись для заблокированной кнопки «Готова в тур».
+ * casting — уровень конкретного кастинга; без него — общий порог (старая RPC).
+ */
+export function lockedLabel(
+  me: ResidentProfile,
+  open: boolean,
+  lang: Lang,
+  casting?: { minKyc: number; kycOk: boolean },
+): string {
   const t = (ACCESS_COPY[lang] ?? ACCESS_COPY.EN).locked;
-  const kyc = me.blockers.includes("kyc");
-  if (kyc && !open) return t.both(me.requiredKyc);
-  if (kyc) return t.kyc(me.requiredKyc);
+  const need = casting ? casting.minKyc : me.requiredKyc;
+  const kyc = casting ? !casting.kycOk : me.blockers.includes("kyc");
+  if (kyc && need === 0 && !me.hasPhoto) return (KYC_EXTRA[lang] ?? KYC_EXTRA.EN).lockedPhoto;
+  if (kyc && !open) return t.both(need);
+  if (kyc) return t.kyc(need);
   return t.open;
 }
 
@@ -279,7 +340,11 @@ export default function CastingAccessBanner({
   }
 
   const needKyc = me.blockers.includes("kyc");
-  const showSteps = needKyc || !open;
+  const needPhoto = me.blockers.includes("photo");
+  const x = KYC_EXTRA[lang] ?? KYC_EXTRA.EN;
+  // Часть кастингов закрыта по уровню, хотя на другие KYC уже хватает
+  const partial = me.openCastings !== null && me.openCastingsKycOk !== null && me.openCastingsKycOk < me.openCastings;
+  const showSteps = needKyc || needPhoto || partial || !open;
   const showProfile = me.height === null || me.languages.length === 0;
   if (!showSteps && !showProfile) return null;
 
@@ -294,12 +359,31 @@ export default function CastingAccessBanner({
           <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">{t.steps.text}</p>
           <ul className="mt-4 space-y-2.5 text-sm">
             <Step done icon={ShieldCheck} text={t.steps.approved} />
+            {needPhoto && (
+              <Step
+                done={false}
+                icon={Camera}
+                text={x.photo}
+                action={
+                  <Link href={PROFILE_PHOTO_HREF} className="inline-flex items-center gap-1 text-xs text-amber-200 underline-offset-4 hover:underline">
+                    {x.photoCta}
+                    <ArrowRight className="size-3" aria-hidden />
+                  </Link>
+                }
+              />
+            )}
             <Step
-              done={!needKyc}
+              done={!needKyc && !partial}
               icon={ShieldCheck}
-              text={t.steps.kyc(Math.min(me.kycLevel, me.requiredKyc), me.requiredKyc)}
+              text={
+                me.openCastings !== null && me.openCastingsKycOk !== null && me.openCastings > 0
+                  ? partial || needKyc
+                    ? x.avail(me.kycLevel, me.openCastingsKycOk, me.openCastings)
+                    : x.allOpen(me.kycLevel)
+                  : t.steps.kyc(Math.min(me.kycLevel, me.requiredKyc), me.requiredKyc)
+              }
               action={
-                needKyc ? (
+                needKyc || partial ? (
                   <Link href={KYC_HREF} className="inline-flex items-center gap-1 text-xs text-amber-200 underline-offset-4 hover:underline">
                     {t.steps.kycCta}
                     <ArrowRight className="size-3" aria-hidden />
@@ -314,6 +398,7 @@ export default function CastingAccessBanner({
               action={!open ? <span className="text-xs text-zinc-500">{t.steps.openHint}</span> : null}
             />
           </ul>
+          <KycLevelsExplainer level={me.kycLevel} lang={lang} />
         </div>
       )}
       {showProfile && <ProfileCard me={me} t={t.profile} onSaved={onProfileSaved} />}
@@ -429,5 +514,36 @@ function ProfileCard({
         {state === "failed" && <span className="text-xs text-rose-200">{t.failed}</span>}
       </div>
     </div>
+  );
+}
+
+/** Раскрывающееся описание уровней KYC для резидентки — без визуального шума */
+export function KycLevelsExplainer({ level, lang }: { level: number; lang: Lang }) {
+  const k = kycCopy(lang);
+  const x = KYC_EXTRA[lang] ?? KYC_EXTRA.EN;
+  return (
+    <details className="group mt-4 rounded-xl border border-zinc-800/80 bg-zinc-950/40 px-3 py-2">
+      <summary className="flex min-h-9 cursor-pointer list-none items-center justify-between gap-2 text-xs text-zinc-300">
+        {k.levelsTitle}
+        <ChevronDown className="size-3.5 text-zinc-500 transition group-open:rotate-180" aria-hidden />
+      </summary>
+      <ol className="mt-2 space-y-2 pb-1">
+        {KYC_LEVELS.map((lvl) => {
+          const here = lvl === Math.max(0, Math.min(3, Math.round(level)));
+          return (
+            <li key={lvl} className={`flex gap-2.5 rounded-lg px-2 py-1.5 ${here ? "bg-amber-200/[0.06]" : ""}`}>
+              <span className="mt-0.5"><KycSteps level={lvl} tone={lvl <= level ? "ok" : "need"} /></span>
+              <span className="min-w-0 text-[12px] leading-snug">
+                <span className={here ? "text-amber-100" : "text-zinc-200"}>
+                  {k.label(lvl)} · {k.levels[lvl].name}
+                </span>
+                {here && <span className="ml-1.5 text-[10px] uppercase tracking-[0.14em] text-amber-200/70">{x.youAreHere}</span>}
+                <span className="block text-zinc-500">{k.levels[lvl].resident}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </details>
   );
 }

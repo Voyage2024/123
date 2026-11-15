@@ -21,7 +21,12 @@ export type RegistrationStage =
   | "operator_timezone"
   | "operator_manager"
   | "operator_experience"
-  | "operator_submitting";
+  | "operator_submitting"
+  // Анкета скаута (/scout, /start scout, sc_VYS-…)
+  | "scout_name"
+  | "scout_phone"
+  | "scout_about"
+  | "scout_submitting";
 
 export interface RegistrationAnswers {
   email?: string;
@@ -42,6 +47,11 @@ export interface RegistrationAnswers {
   operator_manager_name?: string;
   operator_invite?: string;
   operator_experience?: string;
+  scout_name?: string;
+  scout_phone?: string;
+  scout_about?: string;
+  scout_invite?: string;
+  scout_invite_issuer?: string;
 }
 
 export interface TelegramConversationState {

@@ -5,6 +5,7 @@ import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
 import { getPreferredTelegramLanguage } from "@/lib/server/telegram/preferences";
 import type { TelegramLang } from "@/lib/server/telegram/types";
 import { projectLabels, toProjectKey, type ProjectKey } from "@/lib/project-types";
+import { SCOUT_TEMPLATES, scoutKeyboard, scoutNotificationBody } from "@/lib/server/telegram/scout-notifications";
 import { countryFlag, countryName } from "@/lib/countries";
 
 type JsonRecord = Record<string, unknown>;
@@ -754,7 +755,7 @@ async function processOne(row: NotificationRow): Promise<keyof Omit<DrainSummary
 
   const db = getTelegramServiceClient();
   const { data: profile, error: profileError } = await db.from("profiles")
-    .select("id,telegram_id")
+    .select("id,telegram_id,role")
     .eq("id", row.recipient_id)
     .maybeSingle();
 
@@ -792,11 +793,16 @@ async function processOne(row: NotificationRow): Promise<keyof Omit<DrainSummary
     const payload = record(row.payload);
     const lang = await getPreferredTelegramLanguage(telegramId);
     const club = CLUB_TEMPLATES.has(row.template);
-    const message = club ? clubNotificationBody(row.template, payload, lang) : notificationBody(row.template, payload, lang);
-    const keyboard = club ? clubKeyboard(row.template, payload, lang) : keyboardFor(row, payload, lang);
+    const scout = SCOUT_TEMPLATES.has(row.template);
+    const message = scout
+      ? scoutNotificationBody(row.template, payload, lang)
+      : club ? clubNotificationBody(row.template, payload, lang) : notificationBody(row.template, payload, lang);
+    const keyboard = scout
+      ? scoutKeyboard(row.template, payload, lang, getSiteLink, valueText(profile.role))
+      : club ? clubKeyboard(row.template, payload, lang) : keyboardFor(row, payload, lang);
     await telegramBotApi().sendMessage(telegramId, message, {
       reply_markup: keyboard,
-      ...(club ? { parse_mode: "HTML" as const } : {}),
+      ...(club || scout ? { parse_mode: "HTML" as const } : {}),
     });
 
     const { error: sentError } = await db.from("partner_notifications")

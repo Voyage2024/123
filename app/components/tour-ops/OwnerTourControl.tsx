@@ -4,12 +4,13 @@
  * /admin/tour-control — «Контроль туров и букингов» (только owner)
  *   сводка за период: активные туры, модели, операторы, заказы, оборот;
  *   по направлениям и менеджерам; загрузка туров; все операторы.
+ *   скаут-бонусы: к выплате / выплачено → «Скауты и бонусы» (/admin/tour-control/scouts).
  * admin сюда не попадает: proxy.ts + rbac (OWNER_ROLES) + RPC is_owner().
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, Gauge, Headset, Loader2, MapPin, Users } from "lucide-react";
+import { ArrowLeft, BadgeDollarSign, CalendarClock, Gauge, Headset, Loader2, MapPin, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { BTN_GHOST, BTN_GOLD, PageHeader, PageShell, Panel, SectionHeader, StatStrip } from "@/app/(dashboard)/partner/_components/PartnerUI";
 import { reassignOperator } from "@/app/actions/operator-team";
@@ -17,6 +18,8 @@ import { arr, errorCode, num, obj, str } from "@/lib/tour-ops/types";
 import { opsError } from "@/lib/tour-ops/i18n";
 import { fmtDateTime, fmtDay, fmtMoney, viewerTimezone } from "@/lib/tour-ops/time";
 import { Chip, INPUT, Notice, STATUS_TONE, Tabs, useOps } from "@/app/components/tour-ops/ops-ui";
+import { scoutDict } from "@/lib/scouting/i18n";
+import { parseOwnerOverview, type OwnerScoutOverview } from "@/lib/scouting/types";
 
 type Period = "month" | "d30" | "d90";
 
@@ -34,14 +37,18 @@ export default function OwnerTourControl() {
   const [operators, setOperators] = useState<Record<string, unknown>[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [scout, setScout] = useState<OwnerScoutOverview | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     const r = periodRange(period);
-    const [ov, ops] = await Promise.all([
+    const [ov, ops, sc] = await Promise.all([
       supabase.rpc("voyage_owner_tour_overview", { p_from: r.from, p_to: r.to }),
       supabase.rpc("voyage_owner_operators"),
+      supabase.rpc("voyage_owner_scout_overview"),
     ]);
+    // блок скаутов необязателен: без миграции 20261114101000 просто не показываем
+    setScout(sc.error ? null : parseOwnerOverview(sc.data));
     setLoading(false);
     if (ov.error || ops.error) {
       setError(opsError(t, errorCode((ov.error ?? ops.error)?.message)));
@@ -79,6 +86,24 @@ export default function OwnerTourControl() {
               { label: t.owner.bookings, value: String(num(totals.bookings)), icon: Gauge, hint: `${t.owner.turnover}: ${turnoverText}` },
             ]}
           />
+
+          {scout && (
+            <Panel className="mt-6 flex flex-wrap items-center justify-between gap-4 p-5">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+                  <BadgeDollarSign className="size-3.5 text-amber-200/70" /> {scoutDict(lang).cashbox.title} · {scout.settings.percent}%
+                </p>
+                <p className="mt-1.5 text-[13px] text-zinc-300">
+                  {scoutDict(lang).owner.totalsPending}:{" "}
+                  <span className="text-amber-100">{scout.totals.map((x) => fmtMoney(x.pending, x.currency, lang)).join(" · ") || "0"}</span>
+                  {" · "}
+                  {scoutDict(lang).owner.totalsPaid}: {scout.totals.map((x) => fmtMoney(x.paid, x.currency, lang)).join(" · ") || "0"}
+                  {scout.claims.length > 0 && <span className="text-zinc-500"> · {scoutDict(lang).owner.claims}: {scout.claims.length}</span>}
+                </p>
+              </div>
+              <Link href="/admin/tour-control/scouts" className={BTN_GHOST}>{scoutDict(lang).owner.openLink}</Link>
+            </Panel>
+          )}
 
           <div className="mt-8 grid gap-4 lg:grid-cols-2">
             <Panel className="p-5">

@@ -53,6 +53,8 @@ import { OrganizerBadgePill, usePublishers } from "@/app/components/organizer/Or
 import { ORGANIZER_TEXT, VOYAGE_MANAGEMENT_ID } from "@/lib/organizer";
 import { pickI18n, toCastingLang, toI18n, type CastingLang, type I18nText } from "@/lib/casting-i18n";
 import { InviteResidentsPanel } from "@/app/(dashboard)/partner/castings/[id]/InviteResidentsPanel";
+import KycLevelBadge from "@/app/components/profile/KycLevelBadge";
+import { kycCopy, toKycLevel } from "@/lib/kyc-levels";
 
 type Casting = {
   id: string;
@@ -69,6 +71,8 @@ type Casting = {
   title_i18n?: unknown;
   source_lang?: string | null;
   catalog_tour_id?: string | null;
+  /** Минимальный KYC для отклика (миграция 20261114100000); нет колонки — 3 */
+  min_kyc_level?: number | null;
 };
 
 type CatalogTourHead = { id: string; city: string; title: I18nText };
@@ -214,7 +218,10 @@ export default function CastingResponsesPage() {
       setLoading(false);
       return;
     }
-    setCasting(castingData as Casting);
+    // Уровень KYC — отдельным запросом: на базе без миграции 20261114100000 колонки нет,
+    // и тогда работает прежнее правило KYC 3.
+    const { data: kycRow } = await supabase.from("partner_castings").select("min_kyc_level").eq("id", id).maybeSingle();
+    setCasting({ ...(castingData as Casting), min_kyc_level: toKycLevel((kycRow as { min_kyc_level?: unknown } | null)?.min_kyc_level, 3) });
     if (castingData.catalog_tour_id) {
       const { data: tourRow } = await supabase
         .from("tour_catalog")
@@ -329,7 +336,7 @@ export default function CastingResponsesPage() {
               <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-amber-100/60">Partner workspace · Response board</p>
               <h1 className="mt-3 font-serif text-3xl text-zinc-50 sm:text-4xl">{castingTitle ?? casting.city}</h1>
               <p className="mt-1.5 text-sm text-zinc-400">{casting.city} <span className="text-amber-100/50">/</span> {projectLabel(casting.project_type, lang)}{tourTitle && <> <span className="text-amber-100/50">·</span> <span className="text-amber-100/80">Тур: {tourTitle}</span></>}</p>
-              <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-400"><span className="inline-flex items-center gap-1.5"><CalendarClock size={13} /> {date(casting.starts_on)} – {date(casting.ends_on)}</span><span className="inline-flex items-center gap-1.5"><MapPin size={13} /> {casting.slots} мест</span><span className="inline-flex items-center gap-1.5"><Clock size={13} /> Закрытие: {date(casting.closes_at, true)}</span></p>
+              <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-400"><span className="inline-flex items-center gap-1.5"><CalendarClock size={13} /> {date(casting.starts_on)} – {date(casting.ends_on)}</span><span className="inline-flex items-center gap-1.5"><MapPin size={13} /> {casting.slots} мест</span><span className="inline-flex items-center gap-1.5"><Clock size={13} /> Закрытие: {date(casting.closes_at, true)}</span><KycLevelBadge level={casting.min_kyc_level ?? 3} lang={lang} title={kycCopy(lang).levels[toKycLevel(casting.min_kyc_level, 3)].manager} /></p>
               {isAdmin && organizer && (
                 <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
                   <span className="text-zinc-500">{ORGANIZER_TEXT.ru.publishedBy}:</span>
@@ -431,6 +438,7 @@ export default function CastingResponsesPage() {
                         <span className="inline-flex items-center gap-1"><Languages size={12} className="text-zinc-600" /> {(row.languages ?? []).length ? row.languages!.join(" · ") : "Языки не указаны"}</span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-1.5">
+                        {(status === "ready" || status === "option") && (Number(row.kyc_level) || 0) < (casting?.min_kyc_level ?? 3) && <span title={kycCopy(lang).raiseWarning} className="inline-flex items-center gap-1 rounded-lg border border-amber-300/35 bg-amber-300/[0.08] px-2 py-1 text-[9px] text-amber-100"><ShieldCheck size={11} /> {kycCopy(lang).belowRequired(casting?.min_kyc_level ?? 3)}</span>}
                         {isKycElite(row.kyc_level) ? <VipBadge lang={lang} variant="compact" /> : <span className="inline-flex items-center gap-1 rounded-lg border border-amber-300/20 bg-amber-300/5 px-2 py-1 text-[9px] text-amber-100/80"><ShieldCheck size={11} /> KYC {Math.max(0, Number(row.kyc_level) || 0)}/3</span>}
                         <span className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 bg-black/15 px-2 py-1 text-[9px] text-zinc-300"><Sparkles size={11} className="text-amber-200/60" /> {row.circle || "voyager"}</span>
                         <span className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 bg-black/15 px-2 py-1 text-[9px] text-zinc-300"><Star size={11} className="text-amber-200/60" /> Influence {row.influence_index ?? 0}</span>

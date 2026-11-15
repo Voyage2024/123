@@ -64,7 +64,7 @@ const t: Record<Lang, Labels> = {
     language: "Language",
     account: "Account",
     close: "Close",
-    roles: { owner: "Owner", admin: "Admin", manager: "Manager", resident: "Resident", operator: "Operator", guest: "Guest" },
+    roles: { owner: "Owner", admin: "Admin", manager: "Manager", resident: "Resident", operator: "Operator", scout: "Scout", guest: "Guest" },
   },
   RU: {
     login: "Вход для резидентов",
@@ -78,7 +78,7 @@ const t: Record<Lang, Labels> = {
     language: "Язык",
     account: "Аккаунт",
     close: "Закрыть",
-    roles: { owner: "Владелец", admin: "Админ", manager: "Менеджер", resident: "Резидент", operator: "Оператор", guest: "Гостья" },
+    roles: { owner: "Владелец", admin: "Админ", manager: "Менеджер", resident: "Резидент", operator: "Оператор", scout: "Скаут", guest: "Гостья" },
   },
   ES: {
     login: "Acceso de miembros",
@@ -92,7 +92,7 @@ const t: Record<Lang, Labels> = {
     language: "Idioma",
     account: "Cuenta",
     close: "Cerrar",
-    roles: { owner: "Propietario", admin: "Admin", manager: "Gerente", resident: "Residente", operator: "Operador", guest: "Invitada" },
+    roles: { owner: "Propietario", admin: "Admin", manager: "Gerente", resident: "Residente", operator: "Operador", scout: "Scout", guest: "Invitada" },
   },
   PT: {
     login: "Área do membro",
@@ -106,7 +106,7 @@ const t: Record<Lang, Labels> = {
     language: "Idioma",
     account: "Conta",
     close: "Fechar",
-    roles: { owner: "Proprietário", admin: "Admin", manager: "Gerente", resident: "Residente", operator: "Operador", guest: "Convidada" },
+    roles: { owner: "Proprietário", admin: "Admin", manager: "Gerente", resident: "Residente", operator: "Operador", scout: "Scout", guest: "Convidada" },
   },
 };
 
@@ -454,8 +454,8 @@ function VoyageNavbar() {
   const roleLabel = role ? (labels.roles[role] ?? role) : null;
   const roleTone = ROLE_TONE[role ?? ""] ?? "text-zinc-500";
   const isLeadership = role === "owner" || role === "admin";
-  const workspaceHref = role === "manager" ? "/partner" : role === "operator" ? "/operator" : role === "owner" || role === "admin" ? "/admin" : "/dashboard";
-  const workspaceLabel = role === "manager" || role === "operator" ? labels.command : role === "owner" || role === "admin" ? labels.adminConsole : labels.dashboard;
+  const workspaceHref = role === "manager" ? "/partner" : role === "operator" ? "/operator" : role === "scout" ? "/scout" : role === "owner" || role === "admin" ? "/admin" : "/dashboard";
+  const workspaceLabel = role === "manager" || role === "operator" || role === "scout" ? labels.command : role === "owner" || role === "admin" ? labels.adminConsole : labels.dashboard;
 
   // Без имени AuthContext подставляет «Резидент» — для любой роли это
   // выглядело бы как понижение, поэтому берём часть почты до @

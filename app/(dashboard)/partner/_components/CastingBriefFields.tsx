@@ -18,6 +18,8 @@
  *                          owner/admin передают организатора (VOYAGE Management или партнёр)
  *   updateCasting(id, v) — правка брифа; rowToBrief(row) — строка базы → значения формы
  *   deleteCasting(id)    — удаление (только owner/admin)
+ *   KycPicker            — минимальный KYC для отклика (0–3) с описанием уровней,
+ *                          колонка min_kyc_level (миграция 20261114100000)
  *
  * Колонки и ограничения — миграции 20261015120000_partner_resident_feed.sql
  * и 20261103090000_tour_catalog_casting_i18n_invites.sql (тур, title_i18n,
@@ -42,6 +44,8 @@ import {
   type I18nText,
 } from "@/lib/casting-i18n";
 import { TOUR_CATALOG_COLUMNS, parseCatalogTour, type CatalogTour } from "@/lib/tour-catalog";
+import { KYC_LEVELS, kycCopy, toKycLevel, type KycLevel } from "@/lib/kyc-levels";
+import { KycSteps } from "@/app/components/profile/KycLevelBadge";
 
 /** Тур (1–2 недели) и Ивент (до 1 дня) — lib/project-types.ts */
 export const PROJECT_TYPES: readonly ProjectKey[] = PROJECTS;
@@ -75,6 +79,8 @@ export type BriefValues = {
   hotelPaidBy: Payer;
   heightMin: string; // пусто — без требования
   languages: string[];
+  /** Минимальный KYC резидентки для отклика (0–3) */
+  minKyc: KycLevel;
 };
 
 export const EMPTY_BRIEF: BriefValues = {
@@ -95,6 +101,7 @@ export const EMPTY_BRIEF: BriefValues = {
   hotelPaidBy: "manager",
   heightMin: "",
   languages: [],
+  minKyc: 3,
 };
 
 /* ── проверка ─────────────────────────────────────────────────────── */
@@ -164,6 +171,7 @@ export function briefToRow(v: BriefValues) {
     hotel_paid_by: v.hotelPaidBy,
     height_min: v.heightMin.trim() === "" ? null : Number(v.heightMin),
     languages: v.languages,
+    min_kyc_level: v.minKyc,
     // Триггер partner_castings_sync_i18n пересчитает brief из brief_i18n; здесь — для старой базы.
     brief: pickI18n(briefI18n, v.sourceLang, v.sourceLang),
   };
@@ -302,6 +310,8 @@ export function rowToBrief(row: Record<string, unknown>): BriefValues {
     hotelPaidBy: payer(row.hotel_paid_by),
     heightMin: row.height_min === null || row.height_min === undefined ? "" : String(row.height_min),
     languages: Array.isArray(row.languages) ? row.languages.filter((x): x is string => typeof x === "string") : [],
+    // Колонки нет (миграция не применена) — прежнее правило KYC 3
+    minKyc: toKycLevel(row.min_kyc_level, 3),
   };
 }
 
@@ -702,6 +712,7 @@ export function CastingBriefFields({
   tours = [],
   toursLoading = false,
   allowNoTour = false,
+  kycRaiseFrom,
 }: {
   value: BriefValues;
   onChange: (next: BriefValues) => void;
@@ -712,6 +723,8 @@ export function CastingBriefFields({
   toursLoading?: boolean;
   /** Правка старого кастинга: можно оставить без тура */
   allowNoTour?: boolean;
+  /** Правка: уровень KYC, сохранённый в базе, — при повышении показываем предупреждение */
+  kycRaiseFrom?: number;
 }) {
   const { lang } = useLanguage();
   const t = T[lang] ?? T.EN;
@@ -864,6 +877,15 @@ export function CastingBriefFields({
         <p className="text-[11px] text-zinc-500">{t.audienceHint}</p>
       </div>
 
+      <div className="md:col-span-2">
+        <KycPicker
+          value={value.minKyc}
+          onChange={(minKyc) => set({ minKyc })}
+          lang={lang}
+          raised={kycRaiseFrom !== undefined && value.minKyc > kycRaiseFrom}
+        />
+      </div>
+
       <div className="space-y-2">
         <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-zinc-400">{t.dates}</p>
         <div className="grid grid-cols-2 gap-2">
@@ -973,5 +995,64 @@ export function CastingBriefFields({
       </div>
 
     </div>
+  );
+}
+
+/* ── минимальный KYC ──────────────────────────────────────────────── */
+
+/**
+ * Четыре карточки-уровня. Описание каждого уровня видно сразу, без
+ * наведения: менеджер выбирает, понимая, что получает. Выбранная карточка
+ * подсвечена, у KYC 3 — пометка «по умолчанию».
+ */
+export function KycPicker({
+  value,
+  onChange,
+  lang,
+  raised = false,
+}: {
+  value: KycLevel;
+  onChange: (v: KycLevel) => void;
+  lang: Lang;
+  /** Уровень повышен относительно сохранённого — предупредить про уже поданные отклики */
+  raised?: boolean;
+}) {
+  const k = kycCopy(lang);
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-[10px] font-medium uppercase tracking-[0.22em] text-zinc-400">{k.pickerTitle}</legend>
+      <div role="radiogroup" aria-label={k.pickerTitle} className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {KYC_LEVELS.map((lvl) => {
+          const on = lvl === value;
+          const c = k.levels[lvl];
+          return (
+            <button
+              key={lvl}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(lvl)}
+              className={`flex min-h-[7.5rem] flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition ${
+                on
+                  ? "border-amber-200/50 bg-amber-200/10 shadow-[0_0_30px_-18px_rgba(253,230,138,0.6)]"
+                  : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-600"
+              }`}
+            >
+              <span className="flex w-full items-center justify-between gap-2">
+                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide ${on ? "text-amber-100" : "text-zinc-200"}`}>
+                  <KycSteps level={lvl} tone={on ? "own" : "need"} />
+                  {k.label(lvl)}
+                </span>
+                {lvl === 3 && <span className="text-[9px] uppercase tracking-[0.16em] text-zinc-500">{k.recommended}</span>}
+              </span>
+              <span className={`text-[12px] font-medium ${on ? "text-amber-50" : "text-zinc-300"}`}>{c.name}</span>
+              <span className={`text-[11px] leading-snug ${on ? "text-amber-100/70" : "text-zinc-500"}`}>{c.manager}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-zinc-500">{k.pickerHint}</p>
+      {raised && <p role="status" className="rounded-lg border border-amber-300/25 bg-amber-300/[0.06] px-3 py-2 text-[11px] leading-snug text-amber-100">{k.raiseWarning}</p>}
+    </fieldset>
   );
 }

@@ -7,11 +7,13 @@
  * Механика ленты — в ../_components/CastingFeed:
  *   «Открыта к турам» → «Готова в тур» → опцион → рукопожатие.
  * Лента живая: данные из partner_resident_feed (см. _components/CastingFeed).
+ * Сверху — личные приглашения в тур от менеджера-скаута (_components/TourInvitesInbox).
  * Ниже — «Мои туры»: итоги, баллы и отзыв о менеджере (_components/MyPartnerTours).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { EyeOff, Handshake, Hourglass, MousePointerClick, Sparkles, ToggleRight } from "lucide-react";
 import CastingFeed from "@/app/(dashboard)/dashboard/_components/CastingFeed";
+import TourInvitesInbox from "@/app/(dashboard)/dashboard/_components/TourInvitesInbox";
 import MyPartnerTours from "@/app/(dashboard)/dashboard/_components/MyPartnerTours";
 import PageExplainerHeader, {
   ResidentPageShell,
@@ -102,6 +104,10 @@ export default function ResidentCastingsPage() {
         stepIcons={[ToggleRight, MousePointerClick, Handshake]}
         cards={[{ icon: EyeOff }, { icon: Hourglass, href: "/dashboard/tours" }]}
       />
+
+      <div className="mt-10 empty:hidden">
+        <TourInvitesInbox />
+      </div>
 
       <div className="mt-10">
         <CastingFeed />

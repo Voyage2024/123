@@ -17,6 +17,8 @@
  * supabase/migrations/20261015120000_partner_resident_feed.sql;
  * с 20261103090000 — заголовок и бриф на RU/EN/ES/PT, статичный тур и
  * личное приглашение (приглашённая видит кастинг и без «Открыта к турам»).
+ * с 20261114100000 — у каждого кастинга свой минимальный KYC (minKyc 0–3);
+ * KYC 0 = «Базовый профиль», нужен хотя бы одно фото (blocker photo).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { supabase } from "@/lib/supabase";
@@ -81,6 +83,10 @@ export type FeedCasting = {
   response: { status: ResponseStatus; at: number; optionUntil: number | null } | null;
   /** База пустит отклик (partner_me_can_respond). Старая RPC отдавала только такие кастинги → true */
   canRespond: boolean;
+  /** Минимальный KYC для отклика на этот кастинг (без миграции — общий порог) */
+  minKyc: number;
+  /** KYC резидентки хватает именно для этого кастинга */
+  kycOk: boolean;
 };
 
 /**
@@ -88,10 +94,11 @@ export type FeedCasting = {
  *   review         анкета не одобрена — ленты нет совсем
  *   banned         временный/постоянный бан — ленты нет
  *   restricted     ограничение клуба (Blacklist) — ленты нет
- *   kyc            KYC ниже требуемого — лента видна, отклик закрыт
+ *   kyc            KYC ниже, чем у любого открытого кастинга — лента видна, отклик закрыт
+ *   photo          KYC 0 и ни одного фото — даже кастинги «Базовый профиль» закрыты
  *   open_to_tours  тумблер выключен — лента видна, отклик закрыт
  */
-export const BLOCKERS = ["review", "banned", "restricted", "kyc", "open_to_tours"] as const;
+export const BLOCKERS = ["review", "banned", "restricted", "kyc", "photo", "open_to_tours"] as const;
 export type Blocker = (typeof BLOCKERS)[number];
 
 export type ResidentProfile = {
@@ -100,8 +107,13 @@ export type ResidentProfile = {
   /** «Открыта к турам» — partner_resident_settings.open_to_tours */
   openToTours: boolean;
   kycLevel: number;
-  /** Минимальный KYC для отклика (voyage_casting_response_min_kyc) */
+  /** Самый низкий KYC среди открытых кастингов её сегмента (без кастингов — 3) */
   requiredKyc: number;
+  /** Есть аватар или фото анкеты (нужно для KYC 0) */
+  hasPhoto: boolean;
+  /** Открытых кастингов её сегмента / из них по KYC подходит (null — старая RPC) */
+  openCastings: number | null;
+  openCastingsKycOk: number | null;
   /** null — старая версия RPC без этих полей */
   canView: boolean | null;
   canRespond: boolean | null;
@@ -206,6 +218,8 @@ function parseCasting(r: Raw): FeedCasting | null {
     fresh: r.fresh === true,
     response: parseResponse(r.response),
     canRespond: r.can_respond === false ? false : true,
+    minKyc: num(r.min_kyc_level) ?? 3,
+    kycOk: r.kyc_ok === false ? false : true,
   };
 }
 
@@ -220,6 +234,9 @@ export function parseFeed(raw: unknown): CastingFeedData {
       openToTours: me.open_to_tours === true,
       kycLevel: num(me.kyc_level) ?? 0,
       requiredKyc: num(me.required_kyc) ?? 3,
+      hasPhoto: me.has_photo === false ? false : true,
+      openCastings: num(me.open_castings),
+      openCastingsKycOk: num(me.open_castings_kyc_ok),
       canView: typeof me.can_view === "boolean" ? me.can_view : null,
       canRespond: typeof me.can_respond === "boolean" ? me.can_respond : null,
       blockers: arr(me.blockers).flatMap((b) => {

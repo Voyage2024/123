@@ -10,6 +10,7 @@ import {
   RESIDENT_HOME_PATH,
   ADMIN_HOME_PATH,
   OPERATOR_HOME_PATH,
+  SCOUT_HOME_PATH,
   TOUR_OPS_MANAGE_ROLES,
   PARTNER_TOUR_OPS_PREFIXES,
   type Role,
@@ -18,9 +19,11 @@ import { bunkerGuard } from "@/lib/bunker/middleware"; // 👈 Импорт за
 
 const LOGIN_PATH = "/login";
 const STAFF_HOME_PATH = ADMIN_HOME_PATH;
-const PROTECTED_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, PARTNER_HOME_PATH, OPERATOR_HOME_PATH, "/profile", "/event", "/events"];
+const PROTECTED_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, PARTNER_HOME_PATH, OPERATOR_HOME_PATH, SCOUT_HOME_PATH, "/profile", "/event", "/events", "/settings"];
 /** Кабинеты, куда оператору нельзя: его место — только /operator. */
-const OPERATOR_FORBIDDEN_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, PARTNER_HOME_PATH, "/profile", "/event", "/events"];
+const OPERATOR_FORBIDDEN_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, PARTNER_HOME_PATH, SCOUT_HOME_PATH, "/profile", "/event", "/events", "/settings"];
+/** Скауту — только /scout: ни кабинета резидентки, ни /partner, /admin, /operator. */
+const SCOUT_FORBIDDEN_PREFIXES = [RESIDENT_HOME_PATH, STAFF_HOME_PATH, PARTNER_HOME_PATH, OPERATOR_HOME_PATH, "/profile", "/event", "/events", "/settings"];
 // Only /login redirects authenticated users into their role-specific workspace.
 // The public homepage (/) must remain accessible to every authenticated role.
 const AUTHENTICATED_REDIRECT_ROUTES = [LOGIN_PATH];
@@ -116,6 +119,18 @@ export async function proxy(request: NextRequest) {
   }
   if (role === "operator" && OPERATOR_FORBIDDEN_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix))) {
     return redirectTo(request, response, OPERATOR_HOME_PATH);
+  }
+
+  // ── Скауты: только /scout, и /scout — только скауту ─────────────────
+  // manager и owner работают со скаутингом в /partner/models и
+  // /admin/tour-control/scouts, поэтому их отсюда отправляем домой.
+  if (matchesPrefix(pathname, SCOUT_HOME_PATH)) {
+    if (!roleResolved || !role) return redirectTo(request, response, LOGIN_PATH);
+    if (role !== "scout") return redirectTo(request, response, getRoleHomePath(role));
+    return response;
+  }
+  if (role === "scout" && SCOUT_FORBIDDEN_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix))) {
+    return redirectTo(request, response, SCOUT_HOME_PATH);
   }
 
   // The resident profile/onboarding screen must never be the landing page for staff.

@@ -84,6 +84,8 @@ import {
 import { applyToCasting, declineInvite, markCastingsSeen, setOpenToTours, withdrawResponse, type ActionResult } from "@/app/(dashboard)/dashboard/_lib/actions";
 import { pickI18n, pickedLang } from "@/lib/casting-i18n";
 import CastingAccessBanner, { hardBlocker, lockedLabel } from "@/app/(dashboard)/dashboard/_components/CastingAccessBanner";
+import KycLevelBadge from "@/app/components/profile/KycLevelBadge";
+import { kycCopy, toKycLevel } from "@/lib/kyc-levels";
 
 /* ══════════════════════════════════════════════════════════════════
  * ПЕРЕВОДЫ
@@ -691,8 +693,18 @@ function TicketCard({
           ))}
         </dl>
 
+        {/* Уровень KYC кастинга — всегда виден: зелёный, если уровня хватает */}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <KycLevelBadge
+            level={c.minKyc}
+            lang={lang}
+            tone={c.kycOk || c.invite ? "ok" : "miss"}
+            title={`${kycCopy(lang).needed(c.minKyc)} · ${kycCopy(lang).levels[toKycLevel(c.minKyc)].resident} · ${kycCopy(lang).youHave(me.kycLevel)}`}
+          />
+        </div>
+
         {(c.heightMin !== null || c.languages.length > 0) && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {c.heightMin !== null && <Requirement icon={Ruler} text={t.height(c.heightMin)} fit={heightFit} />}
             {c.languages.length > 0 && <Requirement icon={Languages} text={c.languages.join(" · ")} fit={langFit} />}
             {heightFit === "ok" && langFit === "ok" ? (
@@ -941,7 +953,7 @@ function FeedBody({ data, onReload }: { data: CastingFeedData; onReload: () => P
 
   /** Подпись заблокированной кнопки: null — отклик доступен или уже есть */
   const lockedFor = (c: FeedCasting): string | null =>
-    c.canRespond || hasReply(responses[c.id]) ? null : lockedLabel(me, open, lang);
+    c.canRespond || hasReply(responses[c.id]) ? null : lockedLabel(me, open, lang, c);
 
   const isNew = (c: FeedCasting) => c.fresh && !hasReply(responses[c.id]);
   const isMine = (c: FeedCasting) => hasReply(responses[c.id]);

@@ -6,7 +6,7 @@
  * Права должны совпадать с NAV_SECTIONS в Sidebar.tsx и RLS в базе.
  * ──────────────────────────────────────────────────────────────────── */
 
-export const ROLES = ["owner", "admin", "manager", "resident", "operator"] as const;
+export const ROLES = ["owner", "admin", "manager", "resident", "operator", "scout"] as const;
 export type Role = (typeof ROLES)[number];
 export const DEFAULT_ROLE: Role = "resident";
 
@@ -15,11 +15,14 @@ export const ADMIN_HOME_PATH = "/admin";
 export const PARTNER_HOME_PATH = "/partner";
 /** Диспетчерский пульт оператора (ОС туров). */
 export const OPERATOR_HOME_PATH = "/operator";
+/** Кабинет скаута: его модели и ссылки, начисления и выплаты, профиль. */
+export const SCOUT_HOME_PATH = "/scout";
 
 /** Default landing page after login; admin/owner can still navigate to both workspaces. */
 export function getRoleHomePath(role: Role): string {
   if (role === "manager") return PARTNER_HOME_PATH;
   if (role === "operator") return OPERATOR_HOME_PATH;
+  if (role === "scout") return SCOUT_HOME_PATH;
   if (role === "admin" || role === "owner") return ADMIN_HOME_PATH;
   return RESIDENT_HOME_PATH;
 }
@@ -39,8 +42,16 @@ export const TOUR_OPS_MANAGE_ROLES: readonly Role[] = ["manager", "owner"];
 export const TOUR_OPS_DESK_ROLES: readonly Role[] = ["manager", "owner", "operator"];
 export const OPERATOR_ROLES: readonly Role[] = ["operator"];
 
+/* ── Скауты ────────────────────────────────────────────────────────────
+ * scout — самостоятельная роль: не staff, не резидент, не участник клуба.
+ * Кабинет — только /scout. В базе роль проверяется через voyage_ops_role()
+ * (у приостановленного скаута — null), admin скаутов не видит. */
+export const SCOUT_ROLES: readonly Role[] = ["scout"];
+/** Кто приводит моделей по ссылкам VYM (общий механизм закрепления). */
+export const SCOUTING_ROLES: readonly Role[] = ["manager", "scout"];
+
 /** Разделы /partner, закрытые для admin (только manager и owner). */
-export const PARTNER_TOUR_OPS_PREFIXES = ["/partner/bookings", "/partner/team", "/partner/guests"] as const;
+export const PARTNER_TOUR_OPS_PREFIXES = ["/partner/bookings", "/partner/team", "/partner/guests", "/partner/models"] as const;
 /** Owner-only раздел в /admin. */
 export const OWNER_TOUR_CONTROL_PREFIX = "/admin/tour-control";
 

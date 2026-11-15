@@ -227,7 +227,9 @@ async function finalizeRegistration(ctx: Context, state: TelegramConversationSta
     source_metadata: {
       telegram_id: telegramId,
       telegram_username: state.telegram_username,
-      ...(state.referral_code ? { referral_code: state.referral_code, referral_channel: "telegram" } : {}),
+      ...(state.referral_code
+        ? { referral_code: state.referral_code, referral_channel: /^VYM-/.test(state.referral_code) ? "scout" : "telegram" }
+        : {}),
     },
     temp_password: null,
     is_npc: false,
@@ -242,7 +244,14 @@ async function finalizeRegistration(ctx: Context, state: TelegramConversationSta
     return;
   }
 
-  if (state.referral_code) {
+  // Скаут-ссылка менеджера (VYM-…): закрепление не фатально и не трогает club_invites.
+  const scoutCode = state.referral_code && /^VYM-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(state.referral_code) ? state.referral_code : null;
+  if (scoutCode) {
+    const { attachScoutAfterRegistration } = await import("@/lib/server/telegram/scout-invite");
+    await attachScoutAfterRegistration(ctx, state.telegram_language, scoutCode, authResult.user.id).catch((error: unknown) => {
+      console.error("[telegram-webhook] scout attach failed", error instanceof Error ? error.name : "unknown");
+    });
+  } else if (state.referral_code) {
     const { error: referralError } = await db.rpc("club_redeem_invite_from_telegram", {
       p_code: state.referral_code,
       p_guest_profile_id: authResult.user.id,

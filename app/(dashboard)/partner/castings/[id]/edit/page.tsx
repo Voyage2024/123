@@ -51,6 +51,8 @@ export default function EditCastingPage() {
   const [organizerId, setOrganizerId] = useState("");
   const [initialOrganizer, setInitialOrganizer] = useState("");
   const [hasTour, setHasTour] = useState(false);
+  /** Сохранённый уровень KYC — при повышении форма предупреждает про уже поданные отклики */
+  const [savedKyc, setSavedKyc] = useState<number | undefined>(undefined);
   const [errors, setErrors] = useState<BriefErrorKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -78,7 +80,9 @@ export default function EditCastingPage() {
         return;
       }
       const row = data as Record<string, unknown>;
-      setValues(rowToBrief(row));
+      const brief = rowToBrief(row);
+      setValues(brief);
+      setSavedKyc(brief.minKyc);
       const current = STATUS_OPTIONS.find((option) => option.value === row.status)?.value ?? "open";
       setStatus(current);
       setOrganizerId(String(row.manager_id ?? ""));
@@ -202,6 +206,7 @@ export default function EditCastingPage() {
                 tours={tours}
                 toursLoading={toursLoading}
                 allowNoTour
+                kycRaiseFrom={savedKyc}
               />
 
               {notice && (

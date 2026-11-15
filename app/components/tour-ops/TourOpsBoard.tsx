@@ -7,6 +7,7 @@
  *              «впритык» при зазоре меньше буфера, статусы в один клик
  *   Касса      завершено / в работе / отменено, по моделям и операторам
  *   Операторы  привязка операторов команды к туру и моделям
+ *   Приглашения прямые приглашения своих (закреплённых) моделей в тур
  *   Сейф       билеты моделей, апартаменты, заселение
  *   Настройки  пояс, валюта, доля модели, буфер
  *
@@ -27,8 +28,10 @@ import { Chip, DualTime, Field, GUEST_TONE, INPUT, Modal, Notice, STATUS_TONE, T
 import GuestDesk from "@/app/components/tour-ops/GuestDesk";
 import TourTeamPanel from "@/app/components/tour-ops/TourTeamPanel";
 import VaultPanel from "@/app/components/tour-ops/VaultPanel";
+import TourInvitesPanel, { ScoutCashboxBlock } from "@/app/components/scouting/TourInvitesPanel";
+import { scoutDict } from "@/lib/scouting/i18n";
 
-type TabKey = "timeline" | "cashbox" | "team" | "vault" | "settings";
+type TabKey = "timeline" | "cashbox" | "team" | "invites" | "vault" | "settings";
 
 export default function TourOpsBoard({ tourId, backHref, ownerView = false }: { tourId: string; backHref: string; ownerView?: boolean }) {
   const { t, lang } = useOps();
@@ -82,7 +85,13 @@ export default function TourOpsBoard({ tourId, backHref, ownerView = false }: { 
   const manage = board.access === "owner" || board.access === "manager";
   const tabs: { key: TabKey; label: string }[] = [
     { key: "timeline", label: t.board.tabs.timeline },
-    ...(manage ? [{ key: "cashbox" as const, label: t.board.tabs.cashbox }, { key: "team" as const, label: t.board.tabs.team }] : []),
+    ...(manage
+      ? [
+          { key: "cashbox" as const, label: t.board.tabs.cashbox },
+          { key: "team" as const, label: t.board.tabs.team },
+          { key: "invites" as const, label: scoutDict(lang).tourInvite.tab },
+        ]
+      : []),
     { key: "vault", label: manage ? t.board.tabs.vault : t.board.tabs.housing },
     ...(manage ? [{ key: "settings" as const, label: t.board.tabs.settings }] : []),
   ];
@@ -116,6 +125,7 @@ export default function TourOpsBoard({ tourId, backHref, ownerView = false }: { 
         {tab === "timeline" && <Timeline board={board} t={t} lang={lang} reload={load} />}
         {tab === "cashbox" && manage && <Cashbox tourId={tourId} board={board} t={t} lang={lang} />}
         {tab === "team" && manage && <TourTeamPanel board={board} reload={load} />}
+        {tab === "invites" && manage && <TourInvitesPanel tourId={tourId} closed={board.tour.status === "closed" || board.tour.status === "cancelled"} />}
         {tab === "vault" && <VaultPanel board={board} reload={load} />}
         {tab === "settings" && manage && <SettingsPanel board={board} t={t} reload={load} />}
       </div>
@@ -662,6 +672,7 @@ function Cashbox({ tourId, board, t, lang }: { tourId: string; board: TourBoard;
           <p className="mt-1 text-[12px] text-zinc-500">{t.cashbox.bookings(num(cancelled.count))}</p>
         </Panel>
       </div>
+      <ScoutCashboxBlock scout={data.scout} agency={num(completed.agency)} currency={cur} modelNames={names} lang={lang} />
       {num(completed.count) === 0 && <Notice>{t.cashbox.noData}</Notice>}
       <div className="grid gap-4 lg:grid-cols-3">
         <CashList title={t.cashbox.byModel} rows={arr(data.by_model).map((r) => { const o = obj(r); return { label: names.get(str(o.model_id)) ?? "—", value: m(o.total), sub: `${t.cashbox.model} ${m(o.model)} · ${t.cashbox.agency} ${m(o.agency)}` }; })} />

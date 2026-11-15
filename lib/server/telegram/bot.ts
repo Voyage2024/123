@@ -31,6 +31,18 @@ import {
   sendOperatorPrompt,
 } from "@/lib/server/telegram/operator-registration";
 import { credentialTtlMinutes, scheduleMessagePurge } from "@/lib/server/telegram/message-purge";
+import { SCOUT_CALLBACK_RE, handleScoutCallback, handleScoutStart, parseScoutPayload } from "@/lib/server/telegram/scout-invite";
+import {
+  SCOUT_ADMIN_CALLBACK_RE,
+  SCOUT_RECRUIT_RE,
+  SCOUT_REG_CALLBACK_RE,
+  handleScoutAdminCallback,
+  handleScoutRegistrationCallback,
+  handleScoutRegistrationPhoto,
+  handleScoutRegistrationText,
+  parseScoutRecruitPayload,
+  resumeOrBeginScout,
+} from "@/lib/server/telegram/scout-registration";
 import {
   CREDENTIAL_DELETE_CALLBACK,
   credentialDeleteHint,
@@ -287,6 +299,18 @@ export function createVoyageTelegramBot(token: string): Bot {
       await beginOperatorRegistration(ctx, lang, operatorLink.code);
       return;
     }
+    // Скауты: /start scout или /start sc_VYS-XXXX-XXXX (ссылка owner или менеджера).
+    const scoutRecruit = parseScoutRecruitPayload(payload);
+    if (scoutRecruit) {
+      await resumeOrBeginScout(ctx, lang, scoutRecruit.code);
+      return;
+    }
+    // Модели по скаут-ссылке менеджера: /start mod_VYM-XXXX-XXXX.
+    const scoutCode = parseScoutPayload(payload);
+    if (scoutCode) {
+      await handleScoutStart(ctx, lang, scoutCode);
+      return;
+    }
     // Партнёры и менеджеры: /start partner или /start partner_VYP-XXXX-XXXX.
     const partnerLink = parsePartnerPayload(payload);
     if (partnerLink) {
@@ -402,6 +426,14 @@ export function createVoyageTelegramBot(token: string): Bot {
     await beginOperatorRegistration(ctx, lang, code);
   });
 
+  // /scout или /scout VYS-XXXX-XXXX — анкета скаута без deep link.
+  bot.command("scout", async (ctx) => {
+    if (!ctx.from || !ctx.chat || ctx.chat.type !== "private") return;
+    const lang = await contextLanguage(ctx);
+    const raw = typeof ctx.match === "string" ? ctx.match.trim().toUpperCase() : "";
+    await resumeOrBeginScout(ctx, lang, SCOUT_RECRUIT_RE.test(raw) ? raw : null);
+  });
+
   bot.command("myid", async (ctx) => {
     if (!ctx.from || !ctx.chat || ctx.chat.type !== "private") return;
     const lang = await contextLanguage(ctx);
@@ -453,7 +485,7 @@ export function createVoyageTelegramBot(token: string): Bot {
 
     const banUntil = profile?.banned_until === "infinity" ? Number.POSITIVE_INFINITY : profile?.banned_until ? Date.parse(String(profile.banned_until)) : NaN;
     const banned = profile?.ban_permanent === true || profile?.banned_until === "infinity" || (Number.isFinite(banUntil) && banUntil > Date.now());
-    if (profileError || !profile || (profile.role !== "resident" && profile.role !== "manager" && profile.role !== "operator") || profile.status !== "approved" || Number(profile.kyc_level ?? 0) < 0 || banned) {
+    if (profileError || !profile || (profile.role !== "resident" && profile.role !== "manager" && profile.role !== "operator" && profile.role !== "scout") || profile.status !== "approved" || Number(profile.kyc_level ?? 0) < 0 || banned) {
       await ctx.reply(messages.unavailable, { reply_markup: mainMenu(lang) });
       return;
     }
@@ -566,6 +598,10 @@ export function createVoyageTelegramBot(token: string): Bot {
   bot.callbackQuery(/^oadm:(ok|no):[0-9a-f-]{36}$/i, handleOperatorAdminCallback);
   // Решение владельца/админа по партнёрской заявке прямо из уведомления.
   bot.callbackQuery(/^padm:(ok|no):[0-9a-f-]{36}$/i, handlePartnerAdminCallback);
+  bot.callbackQuery(SCOUT_CALLBACK_RE, handleScoutCallback);
+  // Анкета скаута (пропуск «о себе») и решение owner по заявке скаута.
+  bot.callbackQuery(SCOUT_REG_CALLBACK_RE, handleScoutRegistrationCallback);
+  bot.callbackQuery(SCOUT_ADMIN_CALLBACK_RE, handleScoutAdminCallback);
   bot.callbackQuery("menu:faq", async (ctx) => {
     await ctx.answerCallbackQuery();
     const lang = await contextLanguage(ctx);
@@ -614,6 +650,7 @@ export function createVoyageTelegramBot(token: string): Bot {
     const photos = ctx.message.photo;
     const photo = photos[photos.length - 1];
     if (await handleOperatorRegistrationPhoto(ctx)) return;
+    if (await handleScoutRegistrationPhoto(ctx)) return;
     if (await handlePartnerRegistrationPhoto(ctx)) return;
     const handled = await handleRegistrationPhoto(ctx, photo.file_id);
     if (!handled) { const lang = await contextLanguage(ctx); await ctx.reply(copy(lang).welcome, { reply_markup: mainMenu(lang) }); }
@@ -622,6 +659,7 @@ export function createVoyageTelegramBot(token: string): Bot {
   bot.on("message:text", async (ctx) => {
     if (!ctx.from || !ctx.chat || ctx.chat.type !== "private") return;
     if (await handleOperatorRegistrationText(ctx, ctx.message.text)) return;
+    if (await handleScoutRegistrationText(ctx, ctx.message.text)) return;
     if (await handlePartnerRegistrationText(ctx, ctx.message.text)) return;
     const handled = await handleRegistrationText(ctx, ctx.message.text);
     if (!handled) {

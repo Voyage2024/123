@@ -14,7 +14,7 @@ export type ApprovedCredentials = {
   password: string;
   fullName: string | null;
   /** partner — текст про партнёрский кабинет, operator — про диспетчерский пульт. */
-  audience?: "resident" | "partner" | "operator";
+  audience?: "resident" | "partner" | "operator" | "scout";
 };
 
 export type CredentialDeliveryResult =
@@ -43,7 +43,14 @@ function approvedMessage(lang: TelegramLang, input: ApprovedCredentials): string
   const safeName = input.fullName?.trim() ? ` ${escapeHtml(input.fullName.trim())}` : "";
   const safeLogin = escapeHtml(input.login);
   const safePassword = escapeHtml(input.password);
-  const greeting: Record<TelegramLang, string> = input.audience === "operator"
+  const greeting: Record<TelegramLang, string> = input.audience === "scout"
+    ? {
+        EN: `Hello${safeName}! Your VOYAGE scout desk is open: links for models, their progress and your bonuses.`,
+        RU: `Здравствуйте${safeName}! Ваш кабинет скаута VOYAGE открыт: ссылки для моделей, их прогресс и ваши бонусы.`,
+        ES: `¡Hola${safeName}! Tu panel de scout de VOYAGE está abierto: enlaces para modelos, su progreso y tus bonos.`,
+        PT: `Olá${safeName}! Seu painel de scout VOYAGE está aberto: links para modelos, o progresso delas e seus bônus.`,
+      }
+    : input.audience === "operator"
     ? {
         EN: `Hello${safeName}! Your VOYAGE operator desk is open.`,
         RU: `Здравствуйте${safeName}! Ваш кабинет оператора VOYAGE открыт.`,
@@ -125,7 +132,7 @@ export async function sendApprovedCredentialsTelegram(input: ApprovedCredentials
     const message = approvedMessage(lang, {
       ...input,
       fullName: profile.full_name ?? input.fullName,
-      audience: input.audience ?? (profile.role === "manager" ? "partner" : profile.role === "operator" ? "operator" : "resident"),
+      audience: input.audience ?? (profile.role === "manager" ? "partner" : profile.role === "operator" ? "operator" : profile.role === "scout" ? "scout" : "resident"),
     });
     const sent = await new Api(token).sendMessage(Number(input.telegramId), message, {
       parse_mode: "HTML",

@@ -15,7 +15,7 @@ import { supabase } from "@/lib/supabase";
 // ---------------------------------------------------------------------------
 // Роли
 // ---------------------------------------------------------------------------
-export const ROLES = ["owner", "admin", "manager", "resident", "operator"] as const;
+export const ROLES = ["owner", "admin", "manager", "resident", "operator", "scout"] as const;
 export type Role = (typeof ROLES)[number];
 export type ResidentSegment = "working" | "elite";
 export const DEFAULT_ROLE: Role = "resident";

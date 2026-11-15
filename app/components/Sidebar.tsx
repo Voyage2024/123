@@ -53,6 +53,7 @@ import {
   Headset,
   UserCog,
   Gauge,
+  Gem,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth, type Role } from "@/app/context/AuthContext";
@@ -101,13 +102,18 @@ type NavKey =
   | "keys"
   | "toursBookings"
   | "myTeam"
+  | "myModels"
   | "guestDesk"
   | "dispatch"
   | "operatorGuests"
   | "operatorProfile"
+  | "scoutModels"
+  | "scoutCastings"
+  | "scoutEarnings"
+  | "scoutProfile"
   | "tourControl";
 
-type SectionKey = "club" | "market" | "operations" | "tourOps" | "dispatch" | "intelligence" | "authority" | "console" | "management" | "administration" | "owner" | "account";
+type SectionKey = "club" | "market" | "operations" | "tourOps" | "dispatch" | "scout" | "intelligence" | "authority" | "console" | "management" | "administration" | "owner" | "account";
 
 /** children — подпункты: рисуются веткой под родителем */
 type NavItem = { key: NavKey; href: string; icon: LucideIcon; children?: readonly NavItem[] };
@@ -168,6 +174,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { key: "toursBookings", href: "/partner/bookings", icon: CalendarClock },
       { key: "myTeam", href: "/partner/team", icon: UsersRound },
+      { key: "myModels", href: "/partner/models", icon: Gem },
       { key: "guestDesk", href: "/partner/guests", icon: ScanSearch },
     ],
   },
@@ -179,6 +186,17 @@ const NAV_SECTIONS: NavSection[] = [
       { key: "dispatch", href: "/operator", icon: Headset },
       { key: "operatorGuests", href: "/operator/guests", icon: ScanSearch },
       { key: "operatorProfile", href: "/operator/profile", icon: UserCog },
+    ],
+  },
+  // ── Кабинет скаута: только свои модели, ссылки, начисления, профиль ──
+  {
+    key: "scout",
+    roles: ["scout"],
+    items: [
+      { key: "scoutModels", href: "/scout", icon: Gem },
+      { key: "scoutCastings", href: "/scout/castings", icon: Sparkles },
+      { key: "scoutEarnings", href: "/scout/earnings", icon: Coins },
+      { key: "scoutProfile", href: "/scout/profile", icon: UserCog },
     ],
   },
   {
@@ -239,7 +257,7 @@ const NAV_SECTIONS: NavSection[] = [
 
 // Корневые адреса подсвечиваются только при точном совпадении
 // (иначе «Справочник» /admin горел бы на каждой странице админки)
-const INDEX_ROUTES = new Set(["/admin", "/dashboard", "/partner", "/operator"]);
+const INDEX_ROUTES = new Set(["/admin", "/dashboard", "/partner", "/operator", "/scout"]);
 
 function isActive(href: string, pathname: string) {
   if (pathname === href) return true;
@@ -258,6 +276,7 @@ const translations = {
   EN: {
     subtitle: {
       operator: "Dispatch Desk",
+      scout: "Scout Desk",
       resident: "Private Club",
       manager: "Partner Command",
       admin: "Admin Console",
@@ -266,6 +285,7 @@ const translations = {
     sections: {
       tourOps: "Tours & bookings",
       dispatch: "Dispatch",
+      scout: "Scouting",
       club: "Club",
       market: "Market",
       operations: "Operations",
@@ -280,10 +300,15 @@ const translations = {
     nav: {
       toursBookings: "Tours & Bookings",
       myTeam: "My Team (Operators)",
+      myModels: "My Models",
       guestDesk: "Guest Lookup",
       dispatch: "Dispatch Desk",
       operatorGuests: "Guest Lookup",
       operatorProfile: "My Profile",
+      scoutModels: "My Models & Links",
+      scoutCastings: "Open Castings",
+      scoutEarnings: "Earnings & Payouts",
+      scoutProfile: "My Profile",
       tourControl: "Tours & Bookings Control",
       myVoyage: "My Voyage",
       myApplications: "My Applications",
@@ -318,7 +343,7 @@ const translations = {
       blacklist: "Blacklist",
       keys: "Keys",
     },
-    roles: { owner: "Owner", admin: "Administrator", manager: "Manager", resident: "Resident", operator: "Operator" },
+    roles: { owner: "Owner", admin: "Administrator", manager: "Manager", resident: "Resident", operator: "Operator", scout: "Scout" },
     logout: "Sign out",
     pendingInvites: (n: number) => `${n} awaiting review`,
     pendingKyc: (n: number) => `${n} awaiting KYC review`,
@@ -333,6 +358,7 @@ const translations = {
   RU: {
     subtitle: {
       operator: "Диспетчерский пульт",
+      scout: "Кабинет скаута",
       resident: "Закрытый клуб",
       manager: "Штаб партнёра",
       admin: "Панель админа",
@@ -341,6 +367,7 @@ const translations = {
     sections: {
       tourOps: "Туры и букинги",
       dispatch: "Диспетчерская",
+      scout: "Скаутинг",
       club: "Клуб",
       market: "Рынок",
       operations: "Операции",
@@ -355,10 +382,15 @@ const translations = {
     nav: {
       toursBookings: "Туры и букинги",
       myTeam: "Моя команда (Операторы)",
+      myModels: "Мои модели",
       guestDesk: "Пробивщик гостей",
       dispatch: "Диспетчерский пульт",
       operatorGuests: "Пробивщик гостей",
       operatorProfile: "Мой профиль",
+      scoutModels: "Мои модели и ссылки",
+      scoutCastings: "Кастинги для моделей",
+      scoutEarnings: "Начисления и выплаты",
+      scoutProfile: "Профиль",
       tourControl: "Контроль туров и букингов",
       myVoyage: "Мой Voyage",
       myApplications: "Мои заявки",
@@ -393,7 +425,7 @@ const translations = {
       blacklist: "Чёрный список",
       keys: "Ключи",
     },
-    roles: { owner: "Владелец", admin: "Администратор", manager: "Менеджер", resident: "Резидент", operator: "Оператор" },
+    roles: { owner: "Владелец", admin: "Администратор", manager: "Менеджер", resident: "Резидент", operator: "Оператор", scout: "Скаут" },
     logout: "Выйти",
     pendingInvites: (n: number) => `${n} на модерации`,
     pendingKyc: (n: number) => `${n} ждут проверки KYC`,
@@ -408,6 +440,7 @@ const translations = {
   ES: {
     subtitle: {
       operator: "Centro de despacho",
+      scout: "Panel de scout",
       resident: "Club Privado",
       manager: "Centro del partner",
       admin: "Panel de admin",
@@ -416,6 +449,7 @@ const translations = {
     sections: {
       tourOps: "Tours y reservas",
       dispatch: "Despacho",
+      scout: "Scouting",
       club: "Club",
       market: "Mercado",
       operations: "Operaciones",
@@ -430,10 +464,15 @@ const translations = {
     nav: {
       toursBookings: "Tours y reservas",
       myTeam: "Mi equipo (Operadores)",
+      myModels: "Mis modelos",
       guestDesk: "Verificar huésped",
       dispatch: "Centro de despacho",
       operatorGuests: "Verificar huésped",
       operatorProfile: "Mi perfil",
+      scoutModels: "Mis modelos y enlaces",
+      scoutCastings: "Castings abiertos",
+      scoutEarnings: "Bonos y pagos",
+      scoutProfile: "Mi perfil",
       tourControl: "Control de tours y reservas",
       myVoyage: "Mi Voyage",
       myApplications: "Mis solicitudes",
@@ -468,7 +507,7 @@ const translations = {
       blacklist: "Lista negra",
       keys: "Llaves",
     },
-    roles: { owner: "Propietario", admin: "Administrador", manager: "Gerente", resident: "Residente", operator: "Operador" },
+    roles: { owner: "Propietario", admin: "Administrador", manager: "Gerente", resident: "Residente", operator: "Operador", scout: "Scout" },
     logout: "Cerrar sesión",
     pendingInvites: (n: number) => `${n} en moderación`,
     pendingKyc: (n: number) => `${n} esperan revisión KYC`,
@@ -483,6 +522,7 @@ const translations = {
   PT: {
     subtitle: {
       operator: "Central de despacho",
+      scout: "Painel do scout",
       resident: "Clube Privado",
       manager: "Central do parceiro",
       admin: "Painel do admin",
@@ -491,6 +531,7 @@ const translations = {
     sections: {
       tourOps: "Tours e reservas",
       dispatch: "Despacho",
+      scout: "Scouting",
       club: "Clube",
       market: "Mercado",
       operations: "Operações",
@@ -505,10 +546,15 @@ const translations = {
     nav: {
       toursBookings: "Tours e reservas",
       myTeam: "Minha equipe (Operadores)",
+      myModels: "Minhas modelos",
       guestDesk: "Verificar hóspede",
       dispatch: "Central de despacho",
       operatorGuests: "Verificar hóspede",
       operatorProfile: "Meu perfil",
+      scoutModels: "Minhas modelos e links",
+      scoutCastings: "Castings abertos",
+      scoutEarnings: "Bônus e pagamentos",
+      scoutProfile: "Meu perfil",
       tourControl: "Controle de tours e reservas",
       myVoyage: "Meu Voyage",
       myApplications: "Minhas solicitações",
@@ -543,7 +589,7 @@ const translations = {
       blacklist: "Lista negra",
       keys: "Chaves",
     },
-    roles: { owner: "Proprietário", admin: "Administrador", manager: "Gerente", resident: "Residente", operator: "Operador" },
+    roles: { owner: "Proprietário", admin: "Administrador", manager: "Gerente", resident: "Residente", operator: "Operador", scout: "Scout" },
     logout: "Sair",
     pendingInvites: (n: number) => `${n} em moderação`,
     pendingKyc: (n: number) => `${n} aguardam revisão KYC`,
@@ -642,6 +688,7 @@ const ROLE_BADGE: Record<Role, string> = {
   manager: "border-sky-400/25 bg-sky-950/40 text-sky-300/80",
   resident: "border-zinc-800/60 bg-zinc-900/40 text-zinc-500",
   operator: "border-emerald-400/25 bg-emerald-950/40 text-emerald-300/80",
+  scout: "border-fuchsia-400/25 bg-fuchsia-950/40 text-fuchsia-300/80",
 };
 
 const DESKTOP = "(min-width: 768px)";
