@@ -14,8 +14,12 @@
  * может быть несколько туров, у тура — несколько кастингов на разные
  * даты (миграция 20261124090000_geo_multi_tour_archive.sql).
  *
- * Партнёры видят активные туры; owner/admin создают, правят, скрывают и
- * удаляют (server actions app/actions/tour-catalog.ts + RLS tour_catalog).
+ * owner/admin создают, правят, скрывают и удаляют туры (server actions
+ * app/actions/tour-catalog.ts + RLS tour_catalog). Менеджер видит только
+ * «Мои направления» — туры, на которые его назначил владелец, правит их
+ * условия и создаёт кастинги (миграция 20261125090000_tour_catalog_managers.sql).
+ * Только owner: блок «Ответственные менеджеры», «Внутренняя заметка
+ * владельца» и «История изменений» (app/actions/tour-catalog-managers.ts).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
@@ -27,6 +31,17 @@ import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
 import { I18nTextFields } from "@/app/(dashboard)/partner/_components/I18nTextFields";
 import { CURRENCIES, LANGUAGE_CODES } from "@/app/(dashboard)/partner/_components/CastingBriefFields";
 import { deleteCatalogTour, listCatalogTours, saveCatalogTour, type CatalogFailure, type CatalogTourCasting } from "@/app/actions/tour-catalog";
+import {
+  assignCatalogManager,
+  getCatalogOwnerNote,
+  listCatalogAssignments,
+  saveCatalogOwnerNote,
+} from "@/app/actions/tour-catalog-managers";
+import { TourManagersBlock } from "@/app/(dashboard)/partner/castings/tours/_components/TourManagersBlock";
+import { OwnerNoteBlock } from "@/app/(dashboard)/partner/castings/tours/_components/OwnerNoteBlock";
+import { TourHistoryPanel } from "@/app/(dashboard)/partner/castings/tours/_components/TourHistoryPanel";
+import { MyDirections } from "@/app/(dashboard)/partner/castings/tours/_components/MyDirections";
+import { TOUR_MANAGERS_COPY } from "@/app/(dashboard)/partner/castings/tours/_components/tourManagersCopy";
 import { PROJECTS, projectLabels } from "@/lib/project-types";
 import {
   TITLE_MAX,
@@ -36,7 +51,16 @@ import {
   type CastingLang,
   type I18nText,
 } from "@/lib/casting-i18n";
-import { MAP_HUB_REGIONS, mapHubName, type CatalogTour, type MapHub, type TourAudience, type TourPayer } from "@/lib/tour-catalog";
+import {
+  MAP_HUB_REGIONS,
+  mapHubName,
+  type CatalogAssignment,
+  type CatalogTour,
+  type ManagerCandidate,
+  type MapHub,
+  type TourAudience,
+  type TourPayer,
+} from "@/lib/tour-catalog";
 import { countryFlag, countryName } from "@/lib/countries";
 
 type Dict = {
@@ -215,6 +239,8 @@ const T: Record<Lang, Dict> = {
     removeConfirm: "Точно удалить? Кастинги останутся, но потеряют ссылку на тур.",
     errors: {
       ...HUB_ERRORS.RU,
+      not_assigned: "Вы не назначены на этот тур — править его условия нельзя.",
+      protected: "Локацию, адрес и порядок тура меняет только владелец.",
       forbidden: "Править каталог могут только owner и admin.",
       invalid: "Проверьте поля формы.",
       slug_taken: "Такой адрес (slug) уже занят — укажите другой.",
@@ -265,6 +291,8 @@ const T: Record<Lang, Dict> = {
     removeConfirm: "Delete for sure? Castings stay but lose the link to the tour.",
     errors: {
       ...HUB_ERRORS.EN,
+      not_assigned: "You are not assigned to this tour, so you can’t edit its terms.",
+      protected: "Only the owner changes the tour’s location, slug and order.",
       forbidden: "Only the owner and admins can edit the catalog.",
       invalid: "Check the form fields.",
       slug_taken: "This slug is taken — choose another one.",
@@ -315,6 +343,8 @@ const T: Record<Lang, Dict> = {
     removeConfirm: "¿Eliminar seguro? Los castings se quedan, pero pierden el enlace al tour.",
     errors: {
       ...HUB_ERRORS.ES,
+      not_assigned: "No estás asignado a este tour: no puedes editar sus condiciones.",
+      protected: "Solo el owner cambia la ubicación, la dirección y el orden del tour.",
       forbidden: "Solo el owner y los admins pueden editar el catálogo.",
       invalid: "Revisa los campos del formulario.",
       slug_taken: "Este slug ya existe; elige otro.",
@@ -365,6 +395,8 @@ const T: Record<Lang, Dict> = {
     removeConfirm: "Excluir mesmo? Os castings ficam, mas perdem o vínculo com o tour.",
     errors: {
       ...HUB_ERRORS.PT,
+      not_assigned: "Você não está atribuído a este tour — não pode editar as condições.",
+      protected: "Só o owner muda o local, o endereço e a ordem do tour.",
       forbidden: "Só o owner e os admins podem editar o catálogo.",
       invalid: "Confira os campos do formulário.",
       slug_taken: "Este slug já existe — escolha outro.",
@@ -379,6 +411,8 @@ const T: Record<Lang, Dict> = {
 type Draft = {
   id: string | null;
   mapHubId: string;
+  /** Город тура — подпись локации, когда список локаций не загружен (менеджер) */
+  cityLabel: string;
   project: (typeof PROJECTS)[number];
   audience: TourAudience;
   sourceLang: CastingLang;
@@ -396,6 +430,7 @@ type Draft = {
 const EMPTY: Draft = {
   id: null,
   mapHubId: "",
+  cityLabel: "",
   project: "tour",
   audience: "all",
   sourceLang: "RU",
@@ -414,6 +449,7 @@ function toDraft(t: CatalogTour): Draft {
   return {
     id: t.id,
     mapHubId: t.mapHubId ?? "",
+    cityLabel: t.city,
     project: t.project,
     audience: t.audience,
     sourceLang: t.sourceLang,
@@ -438,6 +474,10 @@ export default function TourCatalogPage() {
   const { lang } = useLanguage();
   const t = T[lang] ?? T.EN;
   const isAdmin = role === "owner" || role === "admin";
+  const isOwner = role === "owner";
+  const isManager = role === "manager";
+  const [assignments, setAssignments] = useState<CatalogAssignment[]>([]);
+  const [myReload, setMyReload] = useState(0);
   const [tours, setTours] = useState<CatalogTour[]>([]);
   const [hubs, setHubs] = useState<MapHub[]>([]);
   const [castings, setCastings] = useState<CatalogTourCasting[]>([]);
@@ -445,7 +485,23 @@ export default function TourCatalogPage() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
 
+  // Владелец: активные назначения для карточек (кто ведёт тур)
+  const loadAssignments = useCallback(async () => {
+    if (!isOwner) return;
+    const res = await listCatalogAssignments(null);
+    if (res.ok) setAssignments(res.assignments.filter((a) => a.isActive));
+  }, [isOwner]);
+
+  useEffect(() => {
+    void loadAssignments();
+  }, [loadAssignments]);
+
   const load = useCallback(async () => {
+    // Менеджер работает в «Мои направления» (свой список, RPC voyage_my_catalog_tours)
+    if (isManager) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const res = await listCatalogTours({ includeInactive: isAdmin });
     setLoading(false);
@@ -457,7 +513,7 @@ export default function TourCatalogPage() {
     setTours(res.tours);
     setHubs(res.hubs);
     setCastings(res.castings);
-  }, [isAdmin, t]);
+  }, [isAdmin, isManager, t]);
 
   useEffect(() => {
     void load();
@@ -469,6 +525,8 @@ export default function TourCatalogPage() {
   const toursPerHub = new Map<string, number>();
   for (const x of tours) if (x.mapHubId) toursPerHub.set(x.mapHubId, (toursPerHub.get(x.mapHubId) ?? 0) + 1);
   const freeHubs = hubs.filter((h) => h.isActive && !toursPerHub.has(h.id));
+  const managersByTour = new Map<string, CatalogAssignment[]>();
+  for (const a of assignments) if (a.tourId) managersByTour.set(a.tourId, [...(managersByTour.get(a.tourId) ?? []), a]);
   const castingsByTour = new Map<string, CatalogTourCasting[]>();
   for (const c of castings) castingsByTour.set(c.tourId, [...(castingsByTour.get(c.tourId) ?? []), c]);
   const draftFromHub = (hub: MapHub): Draft => ({
@@ -537,7 +595,19 @@ export default function TourCatalogPage() {
         </section>
       )}
 
-      {loading ? (
+      {isManager ? (
+        <MyDirections
+          lang={lang}
+          reloadKey={myReload}
+          audiences={t.audiences}
+          feeLabel={t.fee}
+          feeOpen={t.feeOpen}
+          requirementsLabel={t.requirements}
+          conditionsLabel={t.conditions}
+          hiddenLabel={t.hidden}
+          onEdit={(tour) => setDraft(toDraft(tour))}
+        />
+      ) : loading ? (
         <div className="animate-pulse rounded-2xl border border-zinc-800 bg-zinc-900/30 p-8 text-sm text-zinc-500">…</div>
       ) : tours.length === 0 && !error ? (
         <p className="rounded-2xl border border-dashed border-zinc-800 p-8 text-center text-sm text-zinc-500">{t.empty}</p>
@@ -599,6 +669,22 @@ export default function TourCatalogPage() {
                     </ul>
                   </div>
                 )}
+                {isOwner && (
+                  <div className="mt-3">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">{(TOUR_MANAGERS_COPY[lang] ?? TOUR_MANAGERS_COPY.EN).coManagers}</p>
+                    {(managersByTour.get(tour.id) ?? []).length === 0 ? (
+                      <p className="mt-1 text-[11px] text-amber-200/70">{(TOUR_MANAGERS_COPY[lang] ?? TOUR_MANAGERS_COPY.EN).noManagers}</p>
+                    ) : (
+                      <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                        {(managersByTour.get(tour.id) ?? []).map((a) => (
+                          <li key={a.id} className="inline-flex items-center rounded-full border border-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300">
+                            {a.managerName}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 <p className="mt-3 text-xs text-zinc-500">
                   {t.fee}: {tour.feeAmount !== null && tour.feeCurrency ? `${tour.feeAmount} ${tour.feeCurrency}` : t.feeOpen}
                   {tour.heightMin ? ` · ${t.height(tour.heightMin)}` : ""}
@@ -629,17 +715,21 @@ export default function TourCatalogPage() {
         </ul>
       )}
 
-      {draft && isAdmin && (
+      {draft && (isAdmin || (isManager && draft.id)) && (
         <TourEditor
           draft={draft}
           t={t}
           lang={lang}
           hubs={hubs}
           toursPerHub={toursPerHub}
+          mode={isOwner ? "owner" : isManager ? "manager" : "admin"}
           onClose={() => setDraft(null)}
+          onAssignmentsChanged={() => void loadAssignments()}
           onSaved={() => {
             setDraft(null);
-            void load();
+            if (isManager) setMyReload((n) => n + 1);
+            else void load();
+            void loadAssignments();
           }}
         />
       )}
@@ -653,18 +743,50 @@ function TourEditor({
   lang,
   hubs,
   toursPerHub,
+  mode,
   onClose,
   onSaved,
+  onAssignmentsChanged,
 }: {
   draft: Draft;
   t: Dict;
   lang: Lang;
   hubs: MapHub[];
   toursPerHub: Map<string, number>;
+  /** owner — всё + менеджеры, заметка, история; admin — как раньше; manager — только условия своего тура */
+  mode: "owner" | "admin" | "manager";
   onClose: () => void;
   onSaved: () => void;
+  onAssignmentsChanged: () => void;
 }) {
   const [d, setD] = useState<Draft>(initial);
+  const isOwner = mode === "owner";
+  const isManagerMode = mode === "manager";
+  const mt = TOUR_MANAGERS_COPY[lang] ?? TOUR_MANAGERS_COPY.EN;
+  // Только owner: менеджеры для нового тура и приватная заметка
+  const [staged, setStaged] = useState<ManagerCandidate[]>([]);
+  const [note, setNote] = useState("");
+  const [noteSaved, setNoteSaved] = useState("");
+  const [noteUpdatedAt, setNoteUpdatedAt] = useState<string | null>(null);
+  const [noteLoading, setNoteLoading] = useState(Boolean(isOwner && initial.id));
+
+  useEffect(() => {
+    if (!isOwner || !initial.id) return;
+    let alive = true;
+    void (async () => {
+      const res = await getCatalogOwnerNote(initial.id as string);
+      if (!alive) return;
+      setNoteLoading(false);
+      if (res.ok) {
+        setNote(res.note.body);
+        setNoteSaved(res.note.body);
+        setNoteUpdatedAt(res.note.updatedAt);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [isOwner, initial.id]);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -700,11 +822,37 @@ function TourEditor({
       isActive: d.isActive,
       sortOrder: d.sortOrder,
     });
-    setSaving(false);
     if (!res.ok) {
+      setSaving(false);
       setError(res.reason === "invalid" && res.field ? t.errors.field(res.field) : t.errors[res.reason]);
       return;
     }
+    // Владелец: назначения нового тура и заметка — после сохранения тура (нужен id)
+    if (isOwner) {
+      const problems: string[] = [];
+      for (const m of staged) {
+        const a = await assignCatalogManager(res.tour.id, m.id);
+        if (!a.ok) problems.push(`${m.name}: ${mt.errors[a.reason]}`);
+      }
+      if (note !== noteSaved) {
+        const n = await saveCatalogOwnerNote(res.tour.id, note);
+        if (!n.ok) problems.push(`${mt.noteTitle}: ${mt.errors[n.reason]}`);
+        else {
+          setNoteSaved(n.note.body);
+          setNoteUpdatedAt(n.note.updatedAt);
+        }
+      }
+      if (problems.length > 0) {
+        // Тур уже сохранён: оставляем форму открытой в режиме правки
+        setSaving(false);
+        setStaged([]);
+        set({ id: res.tour.id });
+        onAssignmentsChanged();
+        setError(problems.join(" · "));
+        return;
+      }
+    }
+    setSaving(false);
     onSaved();
   };
 
@@ -742,6 +890,7 @@ function TourEditor({
             <select
               className={INPUT}
               value={d.mapHubId}
+              disabled={isManagerMode}
               required
               onChange={(e) => {
                 const hub = hubs.find((h) => h.id === e.target.value);
@@ -754,6 +903,9 @@ function TourEditor({
               }}
             >
               <option value="">{t.locationPick}</option>
+              {isManagerMode && d.mapHubId && !hubs.some((hub) => hub.id === d.mapHubId) && (
+                <option value={d.mapHubId}>{d.cityLabel || d.mapHubId}</option>
+              )}
               {/* Архивные локации показываем только у тура, который уже на них стоит */}
               {hubs.filter((hub) => hub.isActive || hub.id === initial.mapHubId).map((hub) => {
                 const count = toursPerHub.get(hub.id) ?? 0;
@@ -768,7 +920,7 @@ function TourEditor({
                 );
               })}
             </select>
-            <span className="block normal-case tracking-normal text-zinc-500">{t.locationHint}</span>
+            <span className="block normal-case tracking-normal text-zinc-500">{isManagerMode ? mt.managerLockedHint : t.locationHint}</span>
           </label>
           <label className={LABEL}>
             <span>{t.project}</span>
@@ -887,11 +1039,26 @@ function TourEditor({
             <input type="checkbox" className="size-4 accent-amber-200" checked={d.isActive} onChange={(e) => set({ isActive: e.target.checked })} />
             {d.isActive ? <Eye size={14} /> : <EyeOff size={14} />} {t.active}
           </label>
-          <label className="inline-flex items-center gap-2 text-xs text-zinc-400">
+          {!isManagerMode && <label className="inline-flex items-center gap-2 text-xs text-zinc-400">
             {t.sort}
             <input className={`${INPUT} w-20`} type="number" value={d.sortOrder} onChange={(e) => set({ sortOrder: Math.trunc(Number(e.target.value) || 0) })} />
-          </label>
+          </label>}
         </div>
+
+        {isOwner && (
+          <>
+            <TourManagersBlock
+              tourId={d.id}
+              lang={lang}
+              staged={staged}
+              onStagedChange={setStaged}
+              disabled={saving}
+              onChanged={onAssignmentsChanged}
+            />
+            <OwnerNoteBlock value={note} onChange={setNote} updatedAt={noteUpdatedAt} loading={noteLoading} disabled={saving} lang={lang} />
+            {d.id && <TourHistoryPanel tourId={d.id} lang={lang} />}
+          </>
+        )}
 
         {error && (
           <p role="alert" className="flex items-start gap-2 rounded-xl border border-rose-400/20 bg-rose-400/5 p-3 text-sm text-rose-200">
@@ -900,7 +1067,7 @@ function TourEditor({
         )}
 
         <div className="flex flex-col-reverse gap-3 border-t border-zinc-800 pt-5 sm:flex-row sm:items-center sm:justify-end">
-          {d.id && (
+          {d.id && !isManagerMode && (
             <div className="flex flex-col gap-1 sm:mr-auto">
               <button
                 type="button"

@@ -1,0 +1,87 @@
+## Owner
+PASS  owner: создаёт тур Dubai · Season (гонорар 500 USD)
+PASS  owner: внутренняя заметка
+PASS  owner: назначает VOYAGE Management
+PASS  owner: назначает Manager A
+PASS  owner: назначает Manager B
+PASS  owner: повторное активное назначение A нельзя (отказ: manager_already_assigned)
+PASS  owner: резидентку назначить нельзя (отказ: manager_not_eligible)
+PASS  owner: admin назначить нельзя (отказ: manager_not_eligible)
+PASS  owner: заблокированного менеджера C назначить нельзя (отказ: manager_not_eligible)
+PASS  owner: 3 активных назначения
+## Manager A
+PASS  A: видит назначенный тур
+PASS  A: не видит тур без назначения (bangkok-empty)
+PASS  A: «Мои направления» = dubai-season, london-multi, paris-single
+PASS  A: видит базовые условия (гонорар 500)
+PASS  A: правит условия тура
+PASS  A: локацию тура менять нельзя (отказ: catalog_field_forbidden)
+PASS  A: порядок (sort_order) менять нельзя (отказ: catalog_field_forbidden)
+PASS  A: slug менять нельзя (отказ: catalog_field_forbidden)
+PASS  A: чужой тур не правится (0 строк)
+PASS  A: создать тур в каталоге нельзя (отказ: row-level)
+PASS  A: удалить тур нельзя (0 строк)
+PASS  A: создаёт кастинг 5–20 декабря с гонораром 600
+PASS  A: второй кастинг 10–25 января (базовые 500)
+PASS  A: меняет условия своего кастинга (650)
+PASS  A: каталог не изменился (гонорар 500)
+PASS  A: кастинг на чужой тур нельзя (отказ: catalog_tour)
+PASS  A: подмена manager_id (кастинг от имени B) нельзя (отказ: organizer_forbidden)
+PASS  A: заметку не видит (0 строк)
+PASS  A: заметку записать нельзя (отказ: row-level)
+PASS  A: видит только свои назначения
+PASS  A: назначать менеджеров нельзя (отказ: owner_only)
+PASS  A: прямой insert в назначения нельзя (отказ: permission)
+PASS  A: история изменений недоступна (отказ: owner_only)
+PASS  A: TRUNCATE каталога нельзя (отказ: permission)
+PASS  A: ни один ответ RPC не содержит заметку
+## Manager B
+PASS  B: видит изменения A (рост 172)
+PASS  B: создаёт свой кастинг 1–15 февраля
+PASS  B: в «Мои направления» видит 3 кастинга тура, из них 1 свой
+PASS  B: кастинги A через таблицу не видит (RLS)
+PASS  B: отозвать назначение нельзя (отказ: owner_only)
+PASS  B: прямой update назначений нельзя (отказ: permission)
+PASS  B: заметку не читает
+## Admin (права не расширены)
+PASS  admin: заметку не видит
+PASS  admin: заметку записать нельзя (отказ: row-level)
+PASS  admin: назначения не видит
+PASS  admin: назначать нельзя (отказ: owner_only)
+PASS  admin: история недоступна (отказ: owner_only)
+PASS  admin: правит каталог как раньше
+## Поездка и отзыв назначения A
+PASS  A: поездка из первого кастинга (partner_create_tour)
+PASS  owner: отзывает A, открытые кастинги без поездки → VOYAGE Management
+PASS  кастинг января перешёл к VOYAGE Management, автор декабрьского (с поездкой) не изменился
+PASS  поездка цела, manager_id = A
+PASS  A: условия тура больше не правит (0 строк)
+PASS  A: новый кастинг на тур нельзя (отказ: catalog_tour_not_assigned)
+PASS  A: в старом кастинге менять условия нельзя (отказ: catalog_assignment_revoked)
+PASS  A: продлить приём откликов нельзя (отказ: catalog_assignment_revoked)
+PASS  A: старый кастинг → шорт-лист можно
+PASS  A: переоткрыть набор нельзя (отказ: catalog_assignment_revoked)
+PASS  A: закрыть старый кастинг можно
+PASS  A: свой старый кастинг и тур по нему видит (только чтение)
+PASS  A: в «Мои направления» тура больше нет
+PASS  A: вернуть себе назначение напрямую нельзя (отказ: permission)
+PASS  owner: полный доступ сохраняется
+PASS  owner: заметка на месте после отзыва
+PASS  owner: история назначений (кто назначил/отозвал)
+PASS  owner: история условий содержит правку менеджера A (роль manager, старое/новое)
+PASS  owner: в журнале нет текста заметки
+PASS  история назначений неизменна даже для postgres (отказ: assignment_history_immutable)
+PASS  журнал audit_logs неизменен (отказ: append-only)
+PASS  owner: повторно назначить A можно (новая строка истории)
+PASS  у A снова доступ
+## Резидентка
+PASS  R: видит активные туры как раньше
+PASS  R: назначения не видит
+PASS  R: заметку не видит
+PASS  R: «Мои направления» пусто
+PASS  R: кандидатов в менеджеры не получает (отказ: owner_only)
+PASS  R: лента кастингов без заметки и назначений
+PASS  R: править тур нельзя (0 строк)
+## anon
+PASS  anon: заметки — permission denied
+PASS  anon: RPC менеджера — permission denied

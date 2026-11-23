@@ -182,11 +182,13 @@ export function briefToRow(v: BriefValues) {
  *   forbidden — нет прав (RLS, права на колонки, триггер организатора);
  *   organizer — организатор не найден / заблокирован / профиль клуба не создан;
  *   tour      — тур из каталога выключен или удалён;
+ *   not_assigned — менеджер не назначен на этот тур (миграция 20261125090000);
+ *   revoked   — назначение на тур отозвано: набор можно только сворачивать;
  *   schema    — база старее кода (не применена миграция: тип tour/event, колонка);
  *   network   — всё остальное (сеть, таймаут).
  * Настоящая ошибка пишется в консоль — по ней видно, какая проверка сработала.
  */
-export type WriteFailure = "forbidden" | "organizer" | "tour" | "schema" | "network";
+export type WriteFailure = "forbidden" | "organizer" | "tour" | "not_assigned" | "revoked" | "schema" | "network";
 
 function classifyWriteError(
   op: "create" | "update" | "delete",
@@ -194,6 +196,9 @@ function classifyWriteError(
 ): WriteFailure {
   console.error(`[partner_castings:${op}]`, error.code, error.message, error.details ?? "", error.hint ?? "");
   const msg = error.message ?? "";
+  // Назначения менеджеров на туры каталога — миграция 20261125090000_tour_catalog_managers.sql
+  if (msg.includes("catalog_tour_not_assigned")) return "not_assigned";
+  if (msg.includes("catalog_assignment_revoked")) return "revoked";
   // catalog_tour_required — миграция 20261106090000: кастинг только под тур на локации карты
   if (msg.includes("catalog_tour_inactive") || msg.includes("catalog_tour_required") || msg.includes("partner_castings_catalog_tour_fkey")) return "tour";
   if (msg.includes("invalid_organizer") || error.code === "23503") return "organizer";
@@ -572,23 +577,33 @@ const T: Record<Lang, Dict> = {
 
 /* ── каталог туров ────────────────────────────────────────────────── */
 
-/** Активные туры каталога с локацией карты (map_hubs). Пустой список — миграции не применены или каталог пуст. */
+/**
+ * Туры, под которые текущий пользователь может создать кастинг.
+ * owner/admin — все активные туры на локациях карты; менеджер — только туры
+ * с активным назначением (RPC voyage_catalog_tours_for_casting, миграция
+ * 20261125090000). База всё равно проверит назначение при insert.
+ * Если RPC ещё нет (миграция не применена) — прежний запрос к tour_catalog.
+ */
 export function useCatalogTours(): { loading: boolean; tours: CatalogTour[] } {
   const [state, setState] = useState<{ loading: boolean; tours: CatalogTour[] }>({ loading: true, tours: [] });
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const { data, error } = await supabase
-        .from("tour_catalog")
-        .select(TOUR_CATALOG_COLUMNS)
-        .eq("is_active", true)
-        .not("map_hub_id", "is", null)
-        // Несколько туров в одной локации (миграция 20261124090000) — рядом в списке
-        .order("city")
-        .order("sort_order");
+      let { data, error } = await supabase.rpc("voyage_catalog_tours_for_casting").select(TOUR_CATALOG_COLUMNS);
+      if (error && (error.code === "PGRST202" || error.code === "42883")) {
+        ({ data, error } = await supabase
+          .from("tour_catalog")
+          .select(TOUR_CATALOG_COLUMNS)
+          .eq("is_active", true)
+          .not("map_hub_id", "is", null)
+          // Несколько туров в одной локации (миграция 20261124090000) — рядом в списке
+          .order("city")
+          .order("sort_order"));
+      }
       if (!alive) return;
       if (error) console.warn("[tour_catalog]", error.code, error.message);
-      setState({ loading: false, tours: error ? [] : (data ?? []).flatMap((row) => parseCatalogTour(row) ?? []) });
+      const rows: unknown[] = error || !Array.isArray(data) ? [] : data;
+      setState({ loading: false, tours: rows.flatMap((row) => parseCatalogTour(row) ?? []) });
     })();
     return () => {
       alive = false;

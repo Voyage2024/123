@@ -4,9 +4,17 @@
  * VOYAGE · каталог статичных туров — серверные методы
  * app/actions/tour-catalog.ts
  *
- *   listCatalogTours()     партнёр/admin/owner: туры + локации карты (map_hubs)
- *   saveCatalogTour(input) owner/admin: создать или изменить тур
+ *   listCatalogTours()     партнёр/admin/owner: туры + локации карты (map_hubs);
+ *                          менеджер получает только туры, на которые назначен
+ *                          (и туры своих прежних кастингов) — это решает RLS
+ *   listMyCatalogTours()   менеджер: «Мои направления» (RPC voyage_my_catalog_tours)
+ *   saveCatalogTour(input) owner/admin: создать или изменить тур;
+ *                          назначенный менеджер: изменить условия своего тура
+ *                          (без локации, адреса и порядка)
  *   deleteCatalogTour(id)  owner/admin: удалить (у кастингов catalog_tour_id → NULL)
+ *
+ * Назначения менеджеров и приватная заметка владельца —
+ * app/actions/tour-catalog-managers.ts (только owner).
  *
  * Направление тура — только локация из /admin/map-locations (map_hub_id);
  * город/регион ставит база (миграция 20261103100000_tour_catalog_map_hubs.sql).
@@ -34,6 +42,8 @@ import {
   TOUR_CATALOG_COLUMNS,
   parseCatalogTour,
   parseMapHub,
+  parseMyCatalogTour,
+  type MyCatalogTour,
   slugify,
   type CatalogTour,
   type MapHub,
@@ -49,6 +59,8 @@ export type CatalogFailure =
   | "hub_no_country"
   | "schema"
   | "not_found"
+  | "not_assigned"
+  | "protected"
   | "failed";
 /** Кастинг под туром каталога: один тур — много кастингов на разные даты */
 export type CatalogTourCasting = {
@@ -70,6 +82,7 @@ const AUDIENCES = ["all", "working", "elite"];
 function failureOf(error: { code?: string; message?: string }): CatalogFailure {
   console.error("[tour_catalog]", error.code, error.message);
   const msg = error.message ?? "";
+  if (msg.includes("catalog_field_forbidden")) return "protected";
   if (msg.includes("map_hub_required")) return "hub_required";
   if (msg.includes("map_hub_inactive")) return "hub_inactive";
   if (msg.includes("map_hub_country_required")) return "hub_no_country";
@@ -119,6 +132,26 @@ export async function listCatalogTours(opts: { includeInactive?: boolean } = {})
     hubs: (hubsRes.data ?? []).flatMap((row) => parseMapHub(row) ?? []),
     castings,
   };
+}
+
+export type MyCatalogListResult = { ok: true; tours: MyCatalogTour[] } | { ok: false; reason: CatalogFailure };
+
+/** «Мои направления» менеджера: активные назначения, соведущие, кастинги по туру. */
+export async function listMyCatalogTours(): Promise<MyCatalogListResult> {
+  try {
+    await requireRole(["manager"]);
+  } catch (error) {
+    if (error instanceof AuthorizationError) return { ok: false, reason: "forbidden" };
+    throw error;
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("voyage_my_catalog_tours");
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883") return { ok: false, reason: "schema" };
+    return { ok: false, reason: failureOf(error) };
+  }
+  const rows: unknown[] = Array.isArray(data) ? data : [];
+  return { ok: true, tours: rows.flatMap((row) => parseMyCatalogTour(row) ?? []) };
 }
 
 export type CatalogTourInput = {
@@ -189,9 +222,13 @@ function toRow(input: CatalogTourInput): { row: Record<string, unknown> } | { fi
   };
 }
 
+/** Поля, которые назначенный менеджер не меняет (база проверит ещё раз: tour_catalog_zz_manager_guard) */
+const MANAGER_LOCKED_FIELDS = ["map_hub_id", "city", "sort_order"] as const;
+
 export async function saveCatalogTour(input: CatalogTourInput): Promise<CatalogSaveResult> {
+  let role: string;
   try {
-    await requireRole(["admin", "owner"]);
+    ({ role } = await requireRole(["admin", "owner", "manager"]));
   } catch (error) {
     if (error instanceof AuthorizationError) return { ok: false, reason: "forbidden" };
     throw error;
@@ -202,6 +239,24 @@ export async function saveCatalogTour(input: CatalogTourInput): Promise<CatalogS
   if ("field" in built) return { ok: false, reason: "invalid", field: built.field };
 
   const supabase = await createClient();
+
+  // Менеджер: только правка тура, на который у него активное назначение.
+  // RLS tour_catalog_update и триггер-страж в базе проверяют то же самое.
+  if (role === "manager") {
+    if (!input.id) return { ok: false, reason: "forbidden" };
+    const { data: assigned, error: assignedError } = await supabase.rpc("voyage_catalog_i_manage", { p_tour: input.id });
+    if (assignedError) return { ok: false, reason: failureOf(assignedError) };
+    if (assigned !== true) return { ok: false, reason: "not_assigned" };
+    const row: Record<string, unknown> = { ...built.row };
+    for (const key of MANAGER_LOCKED_FIELDS) delete row[key];
+    const { data, error } = await supabase.from("tour_catalog").update(row).eq("id", input.id).select(TOUR_CATALOG_COLUMNS);
+    if (error) return { ok: false, reason: failureOf(error) };
+    const tour = parseCatalogTour(Array.isArray(data) ? data[0] : null);
+    if (!tour) return { ok: false, reason: "not_found" };
+    revalidatePath("/partner/castings/tours");
+    return { ok: true, tour };
+  }
+
   const { data: hub, error: hubError } = await supabase.from("map_hubs").select("id,is_active,country_code").eq("id", built.row.map_hub_id as string).maybeSingle();
   if (hubError) return { ok: false, reason: failureOf(hubError) };
   if (!hub) return { ok: false, reason: "hub_required" };

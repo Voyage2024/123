@@ -1,0 +1,18 @@
+Локальный стенд (дамп 20.10 + 40 миграций + geo-locations-final + синтетические сценарии tour_managers_seed.sql), 23.11.2026.
+Production НЕ затронут; реальные данные Production на стенде отсутствуют.
+
+M1 (прогноз, до backfill):
+slug          | result | will_assign | reasons              | authors
+bangkok-empty | MANUAL | 0 | no_castings          |
+greece-trip   | MANUAL | 0 | trip_manager_differs | Agency A [manager, поездка у другого, кастингов 1]
+italy-banned  | MANUAL | 0 | author_inactive      | Manager C [manager, неактивен, кастингов 1]
+seattle-admin | MANUAL | 0 | author_not_manager   | Admin [admin, кастингов 1]
+dubai         | AUTO   | 1 |                      | VOYAGE Management [manager, кастингов 1]
+london-multi  | AUTO   | 2 |                      | Agency A; Agency B
+paris-single  | AUTO   | 1 |                      | Agency A
+
+Backfill, 1-й прогон:
+NOTICE: VOYAGE backfill: туров 7, назначено автоматически 3 туров / 4 назначений; вручную: bangkok-empty (no_castings); greece-trip (trip_manager_differs); italy-banned (author_inactive); seattle-admin (author_not_manager)
+md5 всех строк partner_castings и partner_tours до/после: совпадает (авторы, UUID, связи не изменены).
+
+Backfill, 2-й прогон: 0 новых назначений, 0 новых строк отчёта (идемпотентно).

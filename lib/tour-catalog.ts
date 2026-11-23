@@ -8,8 +8,11 @@
  * (partner_castings.catalog_tour_id) и берёт из него значения по умолчанию.
  *
  * Направление тура = локация из /admin/map-locations (map_hubs, миграция
- * 20261103100000): город и регион тура база берёт из локации, одна
- * локация — один тур, вручную направление не заводится.
+ * 20261103100000): город и регион тура база берёт из локации, вручную
+ * направление не заводится. В одной локации может быть несколько туров
+ * (20261124090000). У тура — несколько назначенных менеджеров
+ * (tour_catalog_managers, 20261125090000); приватная заметка владельца
+ * хранится отдельно и в эти типы не входит.
  *
  * Без серверных импортов — подключается и в клиенте, и в server actions.
  * ──────────────────────────────────────────────────────────────────── */
@@ -171,4 +174,141 @@ export function slugify(value: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 60)
     .replace(/-+$/g, "");
+}
+
+/* ── Менеджеры туров (миграция 20261125090000_tour_catalog_managers.sql) ── */
+
+/** Назначение менеджера на тур каталога (история: активные и отозванные) */
+export type CatalogAssignment = {
+  id: string;
+  tourId: string | null;
+  tourLabel: string;
+  managerId: string | null;
+  managerName: string;
+  managerIsSystem: boolean;
+  /** Менеджер сейчас действующий (роль manager, одобрен, без бана) */
+  managerEligible: boolean;
+  assignedByName: string | null;
+  assignedAt: string;
+  note: string | null;
+  source: "owner" | "backfill";
+  isActive: boolean;
+  revokedAt: string | null;
+  revokedByName: string | null;
+  revokeReason: string | null;
+};
+
+export function parseCatalogAssignment(raw: unknown): CatalogAssignment | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const id = s(r.id);
+  if (!id) return null;
+  return {
+    id,
+    tourId: s(r.catalog_tour_id),
+    tourLabel: s(r.tour_label) ?? "",
+    managerId: s(r.manager_id),
+    managerName: s(r.manager_name) ?? "—",
+    managerIsSystem: r.manager_is_system === true,
+    managerEligible: r.manager_eligible === true,
+    assignedByName: s(r.assigned_by_name),
+    assignedAt: s(r.assigned_at) ?? "",
+    note: s(r.assign_note),
+    source: r.source === "backfill" ? "backfill" : "owner",
+    isActive: r.is_active === true,
+    revokedAt: s(r.revoked_at),
+    revokedByName: s(r.revoked_by_name),
+    revokeReason: s(r.revoke_reason),
+  };
+}
+
+/** Кандидат в менеджеры тура (поиск владельца) */
+export type ManagerCandidate = {
+  id: string;
+  name: string;
+  agency: string | null;
+  telegram: string | null;
+  isSystem: boolean;
+};
+
+export function parseManagerCandidate(raw: unknown): ManagerCandidate | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const id = s(r.id);
+  if (!id) return null;
+  return { id, name: s(r.name) ?? "—", agency: s(r.agency), telegram: s(r.telegram), isSystem: r.is_system === true };
+}
+
+/** Кастинг в карточке «Мои направления»: чужой — только даты и статус */
+export type DirectionCasting = {
+  id: string;
+  startsOn: string;
+  endsOn: string;
+  status: string;
+  slots: number;
+  closesAt: string | null;
+  isMine: boolean;
+  organizer: string;
+};
+
+/** Тур из «Мои направления» (RPC voyage_my_catalog_tours) */
+export type MyCatalogTour = CatalogTour & {
+  assignedAt: string | null;
+  coManagers: { name: string; isSystem: boolean; isMe: boolean; assignedAt: string | null }[];
+  castings: DirectionCasting[];
+};
+
+export function parseMyCatalogTour(raw: unknown): MyCatalogTour | null {
+  const tour = parseCatalogTour(raw);
+  if (!tour || !raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const list = (v: unknown): Record<string, unknown>[] =>
+    Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object") : [];
+  return {
+    ...tour,
+    assignedAt: s(r.assigned_at),
+    coManagers: list(r.co_managers).map((m) => ({
+      name: s(m.name) ?? "—",
+      isSystem: m.is_system === true,
+      isMe: m.is_me === true,
+      assignedAt: s(m.assigned_at),
+    })),
+    castings: list(r.castings).flatMap((c) => {
+      const id = s(c.id);
+      return id
+        ? [{
+            id,
+            startsOn: s(c.starts_on) ?? "",
+            endsOn: s(c.ends_on) ?? "",
+            status: s(c.status) ?? "",
+            slots: n(c.slots) ?? 0,
+            closesAt: s(c.closes_at),
+            isMine: c.is_mine === true,
+            organizer: s(c.organizer) ?? "—",
+          }]
+        : [];
+    }),
+  };
+}
+
+/** Запись истории тура (audit_logs, action tour_catalog.*) */
+export type TourHistoryEntry = {
+  id: string;
+  at: string;
+  action: string;
+  actorName: string | null;
+  actorRole: string | null;
+  changes: Record<string, { old: unknown; new: unknown }>;
+  metadata: Record<string, unknown>;
+};
+
+export function parseTourHistoryEntry(raw: unknown): TourHistoryEntry | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const id = r.id === undefined || r.id === null ? null : String(r.id);
+  const action = s(r.action);
+  if (!id || !action) return null;
+  const metadata = r.metadata && typeof r.metadata === "object" ? (r.metadata as Record<string, unknown>) : {};
+  const changes = metadata.changes && typeof metadata.changes === "object" ? (metadata.changes as Record<string, { old: unknown; new: unknown }>) : {};
+  return { id, at: s(r.at) ?? "", action, actorName: s(r.actor_name), actorRole: s(r.actor_role), changes, metadata };
 }
