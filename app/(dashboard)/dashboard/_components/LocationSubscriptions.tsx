@@ -31,6 +31,8 @@ type Copy = {
   unsubscribe: string;
   subscribedCount: (n: number) => string;
   tour: string;
+  tours: (n: number) => string;
+  archived: string;
   castings: (n: number) => string;
   noCountry: string;
   empty: string;
@@ -54,6 +56,8 @@ const T: Record<Lang, Copy> = {
     unsubscribe: "Отписаться",
     subscribedCount: (n) => (n === 0 ? "Пока нет подписок" : `Подписок: ${n}`),
     tour: "Тур открыт",
+    tours: (n) => `Туров: ${n}`,
+    archived: "Локация в архиве — новых туров не будет, можно отписаться",
     castings: (n) => `Кастингов: ${n}`,
     noCountry: "Страна уточняется",
     empty: "Под этот фильтр локаций нет.",
@@ -81,6 +85,8 @@ const T: Record<Lang, Copy> = {
     unsubscribe: "Unsubscribe",
     subscribedCount: (n) => (n === 0 ? "No subscriptions yet" : `Subscriptions: ${n}`),
     tour: "Tour open",
+    tours: (n) => `Tours: ${n}`,
+    archived: "Archived location — no new tours, you can unsubscribe",
     castings: (n) => `Castings: ${n}`,
     noCountry: "Country pending",
     empty: "No locations match this filter.",
@@ -108,6 +114,8 @@ const T: Record<Lang, Copy> = {
     unsubscribe: "Cancelar suscripción",
     subscribedCount: (n) => (n === 0 ? "Aún no hay suscripciones" : `Suscripciones: ${n}`),
     tour: "Tour abierto",
+    tours: (n) => `Tours: ${n}`,
+    archived: "Ubicación archivada: no habrá tours nuevos, puedes darte de baja",
     castings: (n) => `Castings: ${n}`,
     noCountry: "País por confirmar",
     empty: "No hay ubicaciones con este filtro.",
@@ -135,6 +143,8 @@ const T: Record<Lang, Copy> = {
     unsubscribe: "Cancelar assinatura",
     subscribedCount: (n) => (n === 0 ? "Nenhuma assinatura ainda" : `Assinaturas: ${n}`),
     tour: "Tour aberto",
+    tours: (n) => `Tours: ${n}`,
+    archived: "Local arquivado — sem novos tours, você pode cancelar",
     castings: (n) => `Castings: ${n}`,
     noCountry: "País a confirmar",
     empty: "Nenhuma localização neste filtro.",
@@ -316,11 +326,12 @@ export default function LocationSubscriptions() {
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm text-zinc-100">{hubName(hub)}</p>
                               {subtitle && <p className="truncate text-[11px] text-zinc-500">{subtitle}</p>}
+                              {!hub.isActive && <p className="mt-1 text-[10px] text-zinc-500">{t.archived}</p>}
                               {(hub.tourId || hub.openCastings > 0) && (
                                 <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-[#e6d3a3]/80">
                                   {hub.tourId && (
                                     <span className="inline-flex items-center gap-1">
-                                      <Plane size={10} /> {t.tour}
+                                      <Plane size={10} /> {hub.toursActive > 1 ? t.tours(hub.toursActive) : t.tour}
                                     </span>
                                   )}
                                   {hub.openCastings > 0 && (
@@ -334,7 +345,7 @@ export default function LocationSubscriptions() {
                             <button
                               type="button"
                               onClick={() => void toggle(hub)}
-                              disabled={busy}
+                              disabled={busy || (!hub.isActive && !hub.subscribed)}
                               aria-pressed={hub.subscribed}
                               aria-label={`${hub.subscribed ? t.unsubscribe : t.subscribe}: ${hubName(hub)}`}
                               title={hub.subscribed ? t.unsubscribe : t.subscribe}

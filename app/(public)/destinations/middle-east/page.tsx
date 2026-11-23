@@ -943,6 +943,14 @@ export default function MiddleEastPage() {
                   {hubs.map((hub) => {
                     const labelAbove =
                       hub.y > 82;
+                    // Точка у края карты (Uzbekistan x≈97) — подпись
+                    // прижимаем к краю, чтобы её не обрезал overflow-hidden
+                    const labelAlign =
+                      hub.x > 85
+                        ? "right-0"
+                        : hub.x < 15
+                          ? "left-0"
+                          : "left-1/2 -translate-x-1/2";
 
                     return (
                       <div
@@ -1010,7 +1018,7 @@ export default function MiddleEastPage() {
                               transition={{
                                 duration: 0.2,
                               }}
-                              className={`pointer-events-none absolute left-1/2 z-20 -translate-x-1/2 whitespace-nowrap ${
+                              className={`pointer-events-none absolute z-20 whitespace-nowrap ${labelAlign} ${
                                 labelAbove
                                   ? "bottom-full mb-3"
                                   : "top-full mt-3"

@@ -4,6 +4,8 @@
  *
  * Миграция 20261106090000_map_hub_subscriptions.sql:
  *   voyage_map_hub_directory()                  активные локации + подписка
+ *     (20261124090000: + tours_active/tours/is_active; архивная локация
+ *      приходит, только если на неё подписаны, — чтобы можно было отписаться)
  *   voyage_set_map_hub_subscription(hub, bool)  подписаться / отписаться
  *   resident_location_feed                      лента (только своя, RLS)
  *   voyage_location_feed_mark_read(ids?)        прочитано
@@ -27,6 +29,10 @@ export type HubEntry = {
   tourId: string | null;
   tourTitle: I18n;
   openCastings: number;
+  /** Активных туров каталога в локации (их может быть несколько) */
+  toursActive: number;
+  /** false — локация в архиве (видна только подписанным) */
+  isActive: boolean;
 };
 
 export type FeedKind = "tour_new" | "casting_open";
@@ -83,6 +89,9 @@ function parseHub(raw: unknown): HubEntry | null {
     tourId: str(r.tour_id),
     tourTitle: toI18n(r.tour_title),
     openCastings: Number(r.open_castings) || 0,
+    // До миграции 20261124090000 полей нет: тур есть → 1, локация активна
+    toursActive: Number(r.tours_active) || (str(r.tour_id) ? 1 : 0),
+    isActive: r.is_active !== false,
   };
 }
 

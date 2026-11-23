@@ -583,8 +583,9 @@ export function useCatalogTours(): { loading: boolean; tours: CatalogTour[] } {
         .select(TOUR_CATALOG_COLUMNS)
         .eq("is_active", true)
         .not("map_hub_id", "is", null)
-        .order("sort_order")
-        .order("city");
+        // Несколько туров в одной локации (миграция 20261124090000) — рядом в списке
+        .order("city")
+        .order("sort_order");
       if (!alive) return;
       if (error) console.warn("[tour_catalog]", error.code, error.message);
       setState({ loading: false, tours: error ? [] : (data ?? []).flatMap((row) => parseCatalogTour(row) ?? []) });

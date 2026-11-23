@@ -10,6 +10,7 @@
  *
  * Направление тура — только локация из /admin/map-locations (map_hub_id);
  * город/регион ставит база (миграция 20261103100000_tour_catalog_map_hubs.sql).
+ * В одной локации может быть несколько туров (миграция 20261124090000).
  *
  * Роль проверяется здесь (requireRole) и ещё раз в базе (RLS tour_catalog,
  * миграция 20261103090000_tour_catalog_casting_i18n_invites.sql).
@@ -49,7 +50,17 @@ export type CatalogFailure =
   | "schema"
   | "not_found"
   | "failed";
-export type CatalogListResult = { ok: true; tours: CatalogTour[]; hubs: MapHub[] } | { ok: false; reason: CatalogFailure };
+/** Кастинг под туром каталога: один тур — много кастингов на разные даты */
+export type CatalogTourCasting = {
+  id: string;
+  tourId: string;
+  startsOn: string;
+  endsOn: string;
+  status: string;
+};
+export type CatalogListResult =
+  | { ok: true; tours: CatalogTour[]; hubs: MapHub[]; castings: CatalogTourCasting[] }
+  | { ok: false; reason: CatalogFailure };
 export type CatalogSaveResult = { ok: true; tour: CatalogTour } | { ok: false; reason: CatalogFailure; field?: string };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -81,16 +92,32 @@ export async function listCatalogTours(opts: { includeInactive?: boolean } = {})
   const supabase = await createClient();
   let query = supabase.from("tour_catalog").select(TOUR_CATALOG_COLUMNS).order("sort_order").order("city");
   if (!opts.includeInactive) query = query.eq("is_active", true);
-  const [{ data, error }, hubsRes] = await Promise.all([
+  const [{ data, error }, hubsRes, castingsRes] = await Promise.all([
     query,
     supabase.from("map_hubs").select(MAP_HUB_COLUMNS).order("region").order("id"),
+    // Кастинги под турами (RLS: менеджер видит свои, owner/admin — все)
+    supabase
+      .from("partner_castings")
+      .select("id,catalog_tour_id,starts_on,ends_on,status")
+      .not("catalog_tour_id", "is", null)
+      .in("status", ["open", "shortlist"])
+      .order("starts_on")
+      .limit(500),
   ]);
   if (error) return { ok: false, reason: failureOf(error) };
   if (hubsRes.error) console.error("[map_hubs]", hubsRes.error.code, hubsRes.error.message);
+  if (castingsRes.error) console.error("[partner_castings]", castingsRes.error.code, castingsRes.error.message);
+  const castings: CatalogTourCasting[] = (castingsRes.data ?? []).flatMap((row) => {
+    const r = row as Record<string, unknown>;
+    return typeof r.id === "string" && typeof r.catalog_tour_id === "string"
+      ? [{ id: r.id, tourId: r.catalog_tour_id, startsOn: String(r.starts_on ?? ""), endsOn: String(r.ends_on ?? ""), status: String(r.status ?? "") }]
+      : [];
+  });
   return {
     ok: true,
     tours: (data ?? []).flatMap((row) => parseCatalogTour(row) ?? []),
     hubs: (hubsRes.data ?? []).flatMap((row) => parseMapHub(row) ?? []),
+    castings,
   };
 }
 
@@ -181,12 +208,16 @@ export async function saveCatalogTour(input: CatalogTourInput): Promise<CatalogS
   if (built.row.is_active && hub.is_active === false) return { ok: false, reason: "hub_inactive" };
   // Локация = страна + город: без страны тур не создаётся и не включается (миграция 20261106090000)
   if (!hub.country_code && (!input.id || built.row.is_active)) return { ok: false, reason: "hub_no_country" };
-  // Адрес тура = id локации; если он занят старым туром без локации — с суффиксом.
-  const baseSlug = slugify(String(built.row.map_hub_id)) || "tour";
+  // Адрес тура = id локации; в одной локации может быть несколько туров
+  // (миграция 20261124090000), поэтому следующий получает суффикс -2, -3 …
+  const baseSlug = (slugify(String(built.row.map_hub_id)) || "tour").slice(0, 52).replace(/-+$/g, "");
   const insert = (slug: string) => supabase.from("tour_catalog").insert({ ...built.row, slug }).select(TOUR_CATALOG_COLUMNS);
   let { data, error } = input.id
     ? await supabase.from("tour_catalog").update(built.row).eq("id", input.id).select(TOUR_CATALOG_COLUMNS)
     : await insert(baseSlug);
+  for (let n = 2; !input.id && n <= 30 && error?.code === "23505" && (error.message ?? "").includes("slug"); n += 1) {
+    ({ data, error } = await insert(`${baseSlug}-${n}`));
+  }
   if (!input.id && error?.code === "23505" && (error.message ?? "").includes("slug")) {
     ({ data, error } = await insert(`${baseSlug}-${Date.now().toString(36)}`.slice(0, 60)));
   }

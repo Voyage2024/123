@@ -149,6 +149,9 @@ const T: Record<
     countryMissing: string;
     countryRequired: string;
     countryInUse: string;
+    inUseArchive: string;
+    archivedDone: string;
+    xyRequired: string;
     subscribers: (n: number) => string;
   }
 > = {
@@ -212,6 +215,9 @@ const T: Record<
     countryMissing: "No country",
     countryRequired: "Choose the location’s country.",
     countryInUse: "This location has a tour — the country can be changed but not cleared.",
+    inUseArchive: "This location has linked data (subscriptions, applications, tours or castings) and cannot be deleted. Move it to the archive instead? It disappears from the map, all history stays.",
+    archivedDone: "Location moved to the archive.",
+    xyRequired: "An active location needs X and Y between 0 and 100.",
     subscribers: (n) => `Subscribers: ${n}`,
   },
   RU: {
@@ -274,6 +280,9 @@ const T: Record<
     countryMissing: "Без страны",
     countryRequired: "Выберите страну локации.",
     countryInUse: "К локации привязан тур — страну можно сменить, но не стереть.",
+    inUseArchive: "К локации привязаны данные (подписки, заявки, туры или кастинги), удалить её нельзя. Перевести в архив? Она исчезнет с карты, история сохранится.",
+    archivedDone: "Локация переведена в архив.",
+    xyRequired: "У активной локации должны быть X и Y от 0 до 100.",
     subscribers: (n) => `Подписчиц: ${n}`,
   },
   ES: {
@@ -336,6 +345,9 @@ const T: Record<
     countryMissing: "Sin país",
     countryRequired: "Elige el país de la ubicación.",
     countryInUse: "La ubicación tiene un tour: el país se puede cambiar, no borrar.",
+    inUseArchive: "La ubicación tiene datos vinculados (suscripciones, solicitudes, tours o castings) y no se puede eliminar. ¿Archivarla? Desaparece del mapa y se conserva el historial.",
+    archivedDone: "Ubicación archivada.",
+    xyRequired: "Una ubicación activa necesita X e Y entre 0 y 100.",
     subscribers: (n) => `Suscriptoras: ${n}`,
   },
   PT: {
@@ -398,6 +410,9 @@ const T: Record<
     countryMissing: "Sem país",
     countryRequired: "Escolha o país da localização.",
     countryInUse: "O local tem um tour — o país pode mudar, mas não ser apagado.",
+    inUseArchive: "O local tem dados vinculados (inscrições, candidaturas, tours ou castings) e não pode ser excluído. Arquivar? Ele sai do mapa e o histórico é mantido.",
+    archivedDone: "Local arquivado.",
+    xyRequired: "Um local ativo precisa de X e Y entre 0 e 100.",
     subscribers: (n) => `Assinantes: ${n}`,
   },
 };
@@ -677,6 +692,14 @@ export default function MapLocationsPage() {
       return;
     }
 
+    // Точка на карте региона: X/Y в процентах, у активной локации обязательны
+    // (CHECK map_hubs_active_xy_check, миграция 20261124090000)
+    const inRange = (v: unknown) => Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 100;
+    if (form.is_active && (!inRange(form.x) || !inRange(form.y))) {
+      showToast("error", t.xyRequired);
+      return;
+    }
+
     const payload = {
       id,
       region: form.region,
@@ -716,7 +739,11 @@ export default function MapLocationsPage() {
 
       if (error) {
         console.error("map_hubs update error:", error);
-        showToast("error", (error.message ?? "").includes("map_hub_country_in_use") ? t.countryInUse : t.saveError);
+        const msg = error.message ?? "";
+        showToast(
+          "error",
+          msg.includes("map_hub_country_in_use") ? t.countryInUse : msg.includes("map_hubs_active_xy_check") ? t.xyRequired : t.saveError,
+        );
         setSaving(false);
         return;
       }
@@ -780,7 +807,27 @@ export default function MapLocationsPage() {
 
     if (error) {
       console.error("map_hubs delete error:", error);
-      showToast("error", t.deleteError);
+      // Локацию с данными база не удаляет (миграция 20261124090000) — только архив
+      if ((error.message ?? "").includes("map_hub_in_use")) {
+        if (window.confirm(`${hub.name[lang] || hub.id}\n\n${t.inUseArchive}`)) {
+          const { data, error: archiveError } = await supabase
+            .from("map_hubs")
+            .update({ is_active: false })
+            .eq("id", hub.id)
+            .select("*")
+            .single();
+          if (archiveError || !data) {
+            console.error("map_hubs archive error:", archiveError);
+            showToast("error", t.saveError);
+          } else {
+            const normalized = normalizeHub(data);
+            setHubs((current) => current.map((item) => (item.id === hub.id ? normalized : item)));
+            showToast("success", t.archivedDone);
+          }
+        }
+      } else {
+        showToast("error", t.deleteError);
+      }
       setDeletingId(null);
       return;
     }

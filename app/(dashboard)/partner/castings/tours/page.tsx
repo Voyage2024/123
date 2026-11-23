@@ -9,8 +9,10 @@
  * Динамичные кастинги создаются под тур (/partner/castings/new).
  *
  * Направление тура — только локация из /admin/map-locations (map_hubs):
- * город и регион берутся из неё, одна локация — один тур, вручную
- * направление не заводится (миграция 20261103100000_tour_catalog_map_hubs.sql).
+ * город и регион берутся из неё, вручную направление не заводится
+ * (миграция 20261103100000_tour_catalog_map_hubs.sql). В одной локации
+ * может быть несколько туров, у тура — несколько кастингов на разные
+ * даты (миграция 20261124090000_geo_multi_tour_archive.sql).
  *
  * Партнёры видят активные туры; owner/admin создают, правят, скрывают и
  * удаляют (server actions app/actions/tour-catalog.ts + RLS tour_catalog).
@@ -24,7 +26,7 @@ import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import { ROUTES } from "@/app/(dashboard)/partner/_lib/routes";
 import { I18nTextFields } from "@/app/(dashboard)/partner/_components/I18nTextFields";
 import { CURRENCIES, LANGUAGE_CODES } from "@/app/(dashboard)/partner/_components/CastingBriefFields";
-import { deleteCatalogTour, listCatalogTours, saveCatalogTour, type CatalogFailure } from "@/app/actions/tour-catalog";
+import { deleteCatalogTour, listCatalogTours, saveCatalogTour, type CatalogFailure, type CatalogTourCasting } from "@/app/actions/tour-catalog";
 import { PROJECTS, projectLabels } from "@/lib/project-types";
 import {
   TITLE_MAX,
@@ -58,7 +60,8 @@ type Dict = {
   locationPick: string;
   locationHint: string;
   locationOff: string;
-  locationBusy: string;
+  locationBusy: (n: number) => string;
+  castingDates: string;
   manageLocations: string;
   noHub: string;
   hubsWithout: string;
@@ -94,11 +97,12 @@ const LOC = {
     locationPick: "Выберите локацию",
     locationHint: "Направления заводятся только в «Админ → Локации карты». Город и регион тура берутся оттуда.",
     locationOff: "выключена на карте",
-    locationBusy: "уже есть тур",
+    locationBusy: (n: number) => `туров: ${n}`,
+    castingDates: "Кастинги по датам",
     manageLocations: "Локации карты",
     noHub: "Нет локации на карте — тур выключен. Выберите локацию.",
     hubsWithout: "Локации карты без тура",
-    hubsWithoutHint: "Для каждой локации можно оформить один статичный тур.",
+    hubsWithoutHint: "В локации может быть несколько туров. Здесь локации, где тура ещё нет; новый тур в любой локации — кнопка «Добавить».",
     makeTour: "Оформить тур",
   },
   EN: {
@@ -106,11 +110,12 @@ const LOC = {
     locationPick: "Choose a location",
     locationHint: "Destinations are created only in “Admin → Map locations”. The tour’s city and region come from there.",
     locationOff: "disabled on the map",
-    locationBusy: "already has a tour",
+    locationBusy: (n: number) => `tours: ${n}`,
+    castingDates: "Castings by date",
     manageLocations: "Map locations",
     noHub: "No map location — the tour is disabled. Choose a location.",
     hubsWithout: "Map locations without a tour",
-    hubsWithoutHint: "Each location can have one static tour.",
+    hubsWithoutHint: "A location can hold several tours. Listed here are locations with no tour yet; use “Add” for a new tour anywhere.",
     makeTour: "Create tour",
   },
   ES: {
@@ -118,11 +123,12 @@ const LOC = {
     locationPick: "Elige una ubicación",
     locationHint: "Los destinos se crean solo en «Admin → Ubicaciones del mapa». La ciudad y la región del tour salen de ahí.",
     locationOff: "desactivada en el mapa",
-    locationBusy: "ya tiene tour",
+    locationBusy: (n: number) => `tours: ${n}`,
+    castingDates: "Castings por fecha",
     manageLocations: "Ubicaciones del mapa",
     noHub: "Sin ubicación en el mapa: el tour está desactivado. Elige una ubicación.",
     hubsWithout: "Ubicaciones del mapa sin tour",
-    hubsWithoutHint: "Cada ubicación puede tener un tour fijo.",
+    hubsWithoutHint: "Una ubicación puede tener varios tours. Aquí, las que aún no tienen; para un tour nuevo en cualquiera, «Añadir».",
     makeTour: "Crear tour",
   },
   PT: {
@@ -130,11 +136,12 @@ const LOC = {
     locationPick: "Escolha um local",
     locationHint: "Os destinos são criados só em «Admin → Locais do mapa». Cidade e região do tour vêm de lá.",
     locationOff: "desativado no mapa",
-    locationBusy: "já tem tour",
+    locationBusy: (n: number) => `tours: ${n}`,
+    castingDates: "Castings por data",
     manageLocations: "Locais do mapa",
     noHub: "Sem local no mapa — o tour está desativado. Escolha um local.",
     hubsWithout: "Locais do mapa sem tour",
-    hubsWithoutHint: "Cada local pode ter um tour fixo.",
+    hubsWithoutHint: "Um local pode ter vários tours. Aqui, os que ainda não têm; para um tour novo em qualquer local, «Adicionar».",
     makeTour: "Criar tour",
   },
 } as const;
@@ -142,25 +149,25 @@ const LOC = {
 const HUB_ERRORS = {
   RU: {
     hub_required: "Выберите локацию из «Локаций карты».",
-    hub_taken: "У этой локации уже есть тур — правьте его.",
+    hub_taken: "База ещё не обновлена: в локации пока разрешён только один тур (нужна миграция 20261124090000).",
     hub_inactive: "Локация выключена на карте — тур можно сохранить только скрытым.",
     hub_no_country: "У локации не указана страна. Заполните её в «Локациях карты» — тур привязывается к стране и городу.",
   },
   EN: {
     hub_required: "Choose a location from “Map locations”.",
-    hub_taken: "This location already has a tour — edit that one.",
+    hub_taken: "The database is not updated yet: one tour per location (migration 20261124090000 needed).",
     hub_inactive: "The location is disabled on the map — the tour can only be saved hidden.",
     hub_no_country: "The location has no country. Set it in “Map locations” — a tour is bound to a country and a city.",
   },
   ES: {
     hub_required: "Elige una ubicación de «Ubicaciones del mapa».",
-    hub_taken: "Esta ubicación ya tiene un tour; edítalo.",
+    hub_taken: "La base aún no está actualizada: un tour por ubicación (falta la migración 20261124090000).",
     hub_inactive: "La ubicación está desactivada en el mapa: el tour solo puede guardarse oculto.",
     hub_no_country: "La ubicación no tiene país. Indícalo en «Ubicaciones del mapa»: el tour va ligado a país y ciudad.",
   },
   PT: {
     hub_required: "Escolha um local em «Locais do mapa».",
-    hub_taken: "Este local já tem um tour — edite-o.",
+    hub_taken: "A base ainda não foi atualizada: um tour por local (falta a migração 20261124090000).",
     hub_inactive: "O local está desativado no mapa — o tour só pode ser salvo oculto.",
     hub_no_country: "O local não tem país. Preencha em «Locais do mapa» — o tour fica ligado a país e cidade.",
   },
@@ -433,6 +440,7 @@ export default function TourCatalogPage() {
   const isAdmin = role === "owner" || role === "admin";
   const [tours, setTours] = useState<CatalogTour[]>([]);
   const [hubs, setHubs] = useState<MapHub[]>([]);
+  const [castings, setCastings] = useState<CatalogTourCasting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -448,6 +456,7 @@ export default function TourCatalogPage() {
     setError(null);
     setTours(res.tours);
     setHubs(res.hubs);
+    setCastings(res.castings);
   }, [isAdmin, t]);
 
   useEffect(() => {
@@ -456,8 +465,12 @@ export default function TourCatalogPage() {
 
   const projects = projectLabels(lang);
   const hubById = new Map(hubs.map((h) => [h.id, h]));
-  const usedHubs = new Set(tours.map((x) => x.mapHubId).filter((id): id is string => !!id));
-  const freeHubs = hubs.filter((h) => !usedHubs.has(h.id));
+  // Сколько туров в каждой локации (несколько туров в локации разрешены)
+  const toursPerHub = new Map<string, number>();
+  for (const x of tours) if (x.mapHubId) toursPerHub.set(x.mapHubId, (toursPerHub.get(x.mapHubId) ?? 0) + 1);
+  const freeHubs = hubs.filter((h) => h.isActive && !toursPerHub.has(h.id));
+  const castingsByTour = new Map<string, CatalogTourCasting[]>();
+  for (const c of castings) castingsByTour.set(c.tourId, [...(castingsByTour.get(c.tourId) ?? []), c]);
   const draftFromHub = (hub: MapHub): Draft => ({
     ...EMPTY,
     mapHubId: hub.id,
@@ -487,7 +500,7 @@ export default function TourCatalogPage() {
             </Link>
             <button
               type="button"
-              disabled={freeHubs.length === 0}
+              disabled={!hubs.some((h) => h.isActive)}
               onClick={() => setDraft({ ...EMPTY })}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200/40 bg-amber-200 px-5 text-sm font-semibold text-zinc-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -517,7 +530,6 @@ export default function TourCatalogPage() {
                 >
                   <Plus size={12} /> {countryFlag(hub.countryCode)} {mapHubName(hub, lang)}
                   <span className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">{MAP_HUB_REGIONS[hub.region ?? ""] ?? hub.region ?? ""}</span>
-                  {!hub.isActive && <span className="text-[10px] text-zinc-500">· {t.locationOff}</span>}
                 </button>
               </li>
             ))}
@@ -570,6 +582,23 @@ export default function TourCatalogPage() {
                     {conditions}
                   </p>
                 )}
+                {(castingsByTour.get(tour.id) ?? []).length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">{t.castingDates}</p>
+                    <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                      {(castingsByTour.get(tour.id) ?? []).slice(0, 8).map((c) => (
+                        <li key={c.id}>
+                          <Link
+                            href={ROUTES.casting(c.id)}
+                            className="inline-flex items-center rounded-full border border-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300 transition hover:border-amber-200/30 hover:text-amber-100"
+                          >
+                            {c.startsOn === c.endsOn ? c.startsOn : `${c.startsOn} → ${c.endsOn}`}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <p className="mt-3 text-xs text-zinc-500">
                   {t.fee}: {tour.feeAmount !== null && tour.feeCurrency ? `${tour.feeAmount} ${tour.feeCurrency}` : t.feeOpen}
                   {tour.heightMin ? ` · ${t.height(tour.heightMin)}` : ""}
@@ -606,7 +635,7 @@ export default function TourCatalogPage() {
           t={t}
           lang={lang}
           hubs={hubs}
-          usedHubs={usedHubs}
+          toursPerHub={toursPerHub}
           onClose={() => setDraft(null)}
           onSaved={() => {
             setDraft(null);
@@ -623,7 +652,7 @@ function TourEditor({
   t,
   lang,
   hubs,
-  usedHubs,
+  toursPerHub,
   onClose,
   onSaved,
 }: {
@@ -631,7 +660,7 @@ function TourEditor({
   t: Dict;
   lang: Lang;
   hubs: MapHub[];
-  usedHubs: Set<string>;
+  toursPerHub: Map<string, number>;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -725,15 +754,16 @@ function TourEditor({
               }}
             >
               <option value="">{t.locationPick}</option>
-              {hubs.map((hub) => {
-                const busy = usedHubs.has(hub.id) && hub.id !== initial.mapHubId;
+              {/* Архивные локации показываем только у тура, который уже на них стоит */}
+              {hubs.filter((hub) => hub.isActive || hub.id === initial.mapHubId).map((hub) => {
+                const count = toursPerHub.get(hub.id) ?? 0;
                 const region = MAP_HUB_REGIONS[hub.region ?? ""] ?? hub.region ?? "";
                 return (
-                  <option key={hub.id} value={hub.id} disabled={busy}>
+                  <option key={hub.id} value={hub.id}>
                     {countryFlag(hub.countryCode)} {mapHubName(hub, lang)}
                     {hub.countryCode ? `, ${countryName(hub.countryCode, lang)}` : ""} · {region}
                     {!hub.isActive ? ` · ${t.locationOff}` : ""}
-                    {busy ? ` · ${t.locationBusy}` : ""}
+                    {count > 0 ? ` · ${t.locationBusy(count)}` : ""}
                   </option>
                 );
               })}
