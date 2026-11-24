@@ -36,7 +36,7 @@ import {
   type ProjectKey,
   type Raw,
 } from "@/app/(dashboard)/partner/_lib/command";
-import { BRIEF_MAX, TITLE_MAX, toCastingLang, toI18n, type CastingLang, type I18nText } from "@/lib/casting-i18n";
+import { BRIEF_MAX, TITLE_MAX, TOUR_DESCRIPTION_MAX, toCastingLang, toI18n, type CastingLang, type I18nText } from "@/lib/casting-i18n";
 import { parseCatalogTourBrief, type CatalogTourBrief } from "@/lib/tour-catalog";
 
 /**
@@ -87,7 +87,15 @@ export type FeedCasting = {
   minKyc: number;
   /** KYC резидентки хватает именно для этого кастинга */
   kycOk: boolean;
+  /**
+   * partner_castings.status. Лента отдаёт его только после необязательной
+   * миграции 20261126090000; без неё — null, и статус выводится из closes_at.
+   */
+  status: CastingStatus | null;
 };
+
+export const CASTING_STATUSES = ["open", "shortlist", "closed", "cancelled", "archived"] as const;
+export type CastingStatus = (typeof CASTING_STATUSES)[number];
 
 /**
  * Что мешает резидентке (partner_resident_feed → me.blockers):
@@ -134,6 +142,50 @@ export async function fetchCastingFeed(): Promise<CastingFeedData> {
   const { data, error } = await supabase.rpc("partner_resident_feed");
   if (error) throw new Error(error.message);
   return parseFeed(data);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+ * ПОДРОБНОСТИ ОДНОГО КАСТИНГА — /dashboard/castings/[id]
+ *
+ * Тот же источник, что и у ленты: partner_resident_feed() (SECURITY
+ * DEFINER, поля менеджера — только репутация). Поэтому страница видит
+ * ровно те кастинги, что и лента, и ровно те же поля — новых путей к
+ * данным (и к персональным данным) нет. Условия берутся из самой строки
+ * partner_castings: если менеджер поменял гонорар или бриф, здесь новые.
+ *
+ * Из шаблона тура дочитываем только описание (description_i18n):
+ * tour_catalog читается по существующему RLS (активные туры — всем
+ * авторизованным). Ошибка или неактивный тур — описания просто нет.
+ * ══════════════════════════════════════════════════════════════════ */
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isCastingId = (v: unknown): v is string => typeof v === "string" && UUID_RE.test(v);
+
+export type CastingDetailData = {
+  feed: CastingFeedData;
+  /** null — кастинга нет в её ленте: удалён, закрыт, другой сегмент или неверная ссылка */
+  casting: FeedCasting | null;
+  /** Описание тура из каталога на 4 языках; null — нет тура или описания */
+  tourDescription: I18nText | null;
+};
+
+export async function fetchCastingDetail(id: string): Promise<CastingDetailData> {
+  const feed = await fetchCastingFeed();
+  const casting = isCastingId(id) ? feed.castings.find((c) => c.id === id.toLowerCase()) ?? null : null;
+
+  let tourDescription: I18nText | null = null;
+  if (casting?.catalogTour) {
+    const { data, error } = await supabase
+      .from("tour_catalog")
+      .select("description_i18n")
+      .eq("id", casting.catalogTour.id)
+      .maybeSingle();
+    if (!error && data) {
+      const d = toI18n((data as { description_i18n?: unknown }).description_i18n, TOUR_DESCRIPTION_MAX);
+      tourDescription = Object.keys(d).length > 0 ? d : null;
+    }
+  }
+  return { feed, casting, tourDescription };
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -220,6 +272,7 @@ function parseCasting(r: Raw): FeedCasting | null {
     canRespond: r.can_respond === false ? false : true,
     minKyc: num(r.min_kyc_level) ?? 3,
     kycOk: r.kyc_ok === false ? false : true,
+    status: oneOf(r.status, CASTING_STATUSES),
   };
 }
 

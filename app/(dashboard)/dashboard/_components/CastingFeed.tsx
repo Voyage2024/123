@@ -36,15 +36,23 @@
  * требование показывается как «подходит / не совпадает / не указано».
  * После переключения тумблера лента перезагружается (раньше оставалась
  * пустой до F5).
+ *
+ * С 24.11.2026: карточка открывает подробности /dashboard/castings/[id]
+ * (_components/CastingDetail.tsx) — вся верхняя часть карточки является
+ * ссылкой (OVERLAY_LINK, кнопки внутри поверх неё), плюс кнопка «Подробнее»
+ * на корешке. Словарь, ApplyStub, Requirement и OpenToToursSwitch
+ * экспортируются для страницы подробностей.
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   BadgeCheck,
   Banknote,
   BedDouble,
   Check,
+  ChevronRight,
   Clock,
   Handshake,
   Hourglass,
@@ -67,6 +75,7 @@ import { pl, ru, usePartnerFormat, type Common, type Fmt } from "@/app/(dashboar
 import {
   BTN_GOLD,
   FilterTabs,
+  OVERLAY_LINK,
   PILL,
   Pill,
   SectionHeader,
@@ -138,6 +147,9 @@ type Dict = {
   lockedHint: string;
   loading: string;
   loadError: string;
+  /** Кнопка и ссылка-подложка карточки → /dashboard/castings/[id] */
+  details: string;
+  openDetails: (title: string) => string;
 };
 
 const T: Record<Lang, Dict> = {
@@ -194,6 +206,8 @@ const T: Record<Lang, Dict> = {
     lockedHint: "How to unlock replies",
     loading: "Loading castings…",
     loadError: "Couldn’t load castings. Refresh the page to try again.",
+    details: "Details",
+    openDetails: (title) => `Open casting details · ${title}`,
   },
   RU: {
     eyebrow: "Кастинги",
@@ -248,6 +262,8 @@ const T: Record<Lang, Dict> = {
     lockedHint: "Как открыть отклик",
     loading: "Загружаем кастинги…",
     loadError: "Не удалось загрузить кастинги. Обновите страницу.",
+    details: "Подробнее",
+    openDetails: (title) => `Открыть условия кастинга · ${title}`,
   },
   ES: {
     eyebrow: "Castings",
@@ -302,6 +318,8 @@ const T: Record<Lang, Dict> = {
     lockedHint: "Cómo activar la respuesta",
     loading: "Cargando castings…",
     loadError: "No se pudieron cargar los castings. Actualiza la página.",
+    details: "Detalles",
+    openDetails: (title) => `Abrir los detalles del casting · ${title}`,
   },
   PT: {
     eyebrow: "Castings",
@@ -356,18 +374,30 @@ const T: Record<Lang, Dict> = {
     lockedHint: "Como liberar a resposta",
     loading: "Carregando castings…",
     loadError: "Não foi possível carregar os castings. Atualize a página.",
+    details: "Detalhes",
+    openDetails: (title) => `Abrir os detalhes do casting · ${title}`,
   },
 };
+
+/* Словарь, корешок отклика и плашки требований — общие с подробностями
+ * кастинга (_components/CastingDetail.tsx), чтобы кнопка «Готова в тур»
+ * выглядела и вела себя одинаково в ленте и на странице кастинга. */
+export type CastingFeedDict = Dict;
+export type CastingFailure = Failure;
+export const CASTING_FEED_COPY = T;
 
 /* ══════════════════════════════════════════════════════════════════
  * ЛОГИКА
  * ══════════════════════════════════════════════════════════════════ */
 
-type Response = FeedCasting["response"];
-type Pending = "apply" | "withdraw" | "decline";
+export type Response = FeedCasting["response"];
+export type Pending = "apply" | "withdraw" | "decline";
 
 const ACTIVE_REPLY: ResponseStatus[] = ["ready", "option", "selected"];
-const hasReply = (r: Response) => !!r && ACTIVE_REPLY.includes(r.status);
+export const hasReply = (r: Response) => !!r && ACTIVE_REPLY.includes(r.status);
+
+/** Адрес страницы подробностей кастинга */
+export const castingHref = (id: string) => `/dashboard/castings/${encodeURIComponent(id)}`;
 
 /** Опцион и рукопожатие — сверху, потом новые по сроку закрытия, отклики — внизу */
 function rank(c: FeedCasting) {
@@ -387,7 +417,7 @@ const PROJECT_GLOW: Record<ProjectKey, string> = {
  * «ОТКРЫТА К ТУРАМ»
  * ══════════════════════════════════════════════════════════════════ */
 
-function OpenToToursSwitch({ value, busy, onChange, t }: { value: boolean; busy: boolean; onChange: (v: boolean) => void; t: Dict }) {
+export function OpenToToursSwitch({ value, busy, onChange, t }: { value: boolean; busy: boolean; onChange: (v: boolean) => void; t: Dict }) {
   return (
     <div
       className={`flex min-w-0 max-w-md flex-[1_1_20rem] items-center gap-4 rounded-2xl border p-4 backdrop-blur-xl transition-colors ${
@@ -426,7 +456,7 @@ function OpenToToursSwitch({ value, busy, onChange, t }: { value: boolean; busy:
  * КОРЕШОК: кнопка и статус отклика
  * ══════════════════════════════════════════════════════════════════ */
 
-function ApplyStub({
+export function ApplyStub({
   response,
   pending,
   failure,
@@ -635,10 +665,12 @@ function TicketCard({
         response?.status === "option" ? "border-amber-200/40 shadow-[0_0_40px_-18px_rgba(253,230,138,0.45)]" : "border-zinc-800/80 hover:border-amber-200/25"
       }`}
     >
-      {/* ── бриф ── */}
-      <div className="flex-1 p-5 pb-6">
+      {/* ── бриф: вся верхняя часть — ссылка на подробности (подложка OVERLAY_LINK,
+           кнопки и ссылки внутри стоят поверх неё — relative z-[2]) ── */}
+      <div className="relative flex-1 p-5 pb-6">
+        <Link href={castingHref(c.id)} aria-label={t.openDetails(title ?? fmt.city(c.city))} className={OVERLAY_LINK} />
         {c.invite && !replied && (
-          <div className="mb-4 rounded-xl border border-amber-200/40 bg-amber-200/[0.08] px-3 py-2.5">
+          <div className="relative z-[2] mb-4 rounded-xl border border-amber-200/40 bg-amber-200/[0.08] px-3 py-2.5">
             <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-100">
               <Sparkles className="size-3.5" aria-hidden />
               {t.invited}
@@ -712,7 +744,7 @@ function TicketCard({
             ) : heightFit === "miss" || langFit === "miss" ? (
               <span className="text-[11px] text-zinc-500">{t.mismatch}</span>
             ) : (
-              <a href="#casting-access" className="text-[11px] text-amber-200/80 underline-offset-4 hover:underline">
+              <a href="#casting-access" className="relative z-[2] text-[11px] text-amber-200/80 underline-offset-4 hover:underline">
                 {t.unknown}
               </a>
             )}
@@ -782,6 +814,13 @@ function TicketCard({
             {fmt.ready ? t.closesIn(fmt.until(c.closesAt)) : "—"}
           </p>
         )}
+        <Link
+          href={castingHref(c.id)}
+          className="mb-3 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full border border-amber-200/25 bg-zinc-950/40 px-4 text-xs tracking-wide text-amber-100 transition hover:border-amber-200/50 hover:bg-amber-200/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/60 sm:min-h-10"
+        >
+          {t.details}
+          <ChevronRight className="size-3.5" aria-hidden />
+        </Link>
         <div aria-live="polite">
           <ApplyStub
             response={response}
@@ -799,9 +838,9 @@ function TicketCard({
   );
 }
 
-type Fit = "ok" | "miss" | "unknown";
+export type Fit = "ok" | "miss" | "unknown";
 
-function Requirement({ icon: Icon, text, fit }: { icon: LucideIcon; text: string; fit: Fit }) {
+export function Requirement({ icon: Icon, text, fit }: { icon: LucideIcon; text: string; fit: Fit }) {
   const tone = fit === "ok" ? PILL.emerald : fit === "unknown" ? PILL.gold : PILL.zinc;
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${tone}`}>
