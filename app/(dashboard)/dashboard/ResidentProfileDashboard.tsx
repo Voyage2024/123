@@ -33,6 +33,8 @@ import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import { updateResidentLifestylePreference } from "@/app/actions/map-locations";
 import { updateResidentSizes } from "@/app/actions/resident-sizes";
+import { updateResidentPhysical } from "@/app/actions/resident-physical";
+import { PHYSICAL_COPY } from "@/lib/resident-physical";
 import {
   CLOTHING_SIZES,
   SHOE_SIZE_OPTIONS,
@@ -77,7 +79,9 @@ import ProfileIdentityQuickEdit from "@/app/components/profile/ProfileIdentityQu
  *    и редактируются на странице настроек. Здесь они read-only.
  *    `photo_urls` — отдельный массив портфолио, к аватару отношения не имеет.
  *
- * 3. `height` / `weight` сохраняются как «сырые» значения из инпута.
+ * 3. Рост, вес и объёмы сохраняются через Server Action
+ *    app/actions/resident-physical.ts (как размеры одежды/обуви): прямой
+ *    upsert в profiles у резидентки отклоняется правами на колонки.
  *    Единицы (cm / kg) показываются отдельно и НЕ пишутся в БД.
  *
  * 4. Для записи нужны корректные RLS-политики на таблице `profiles`
@@ -1271,6 +1275,38 @@ export default function ResidentProfilePage() {
     [user, profile, lang]
   );
 
+  // ── Рост / вес / объёмы: server action, откат при ошибке ─────────────
+  const [physicalError, setPhysicalError] = useState<string | null>(null);
+  const updatePhysical = useCallback(
+    async (patch: { height?: string | null; weight?: string | null; measurements?: string | null }) => {
+      if (!user || !profile) return;
+      const before = {
+        height: profile.height ?? null,
+        weight: profile.weight ?? null,
+        measurements: profile.measurements ?? null,
+      };
+      setProfile((current) => (current ? { ...current, ...patch } : current));
+      setPhysicalError(null);
+      setSaving(true);
+      const result = await updateResidentPhysical(patch);
+      setSaving(false);
+      const copy = PHYSICAL_COPY[lang] ?? PHYSICAL_COPY.EN;
+      if (!result.ok) {
+        setProfile((current) => (current ? { ...current, ...before } : current));
+        setPhysicalError(result.reason === "invalid" ? copy.invalid : copy.saveError);
+        console.error("Could not save physical parameters:", result.reason);
+        return;
+      }
+      // Значения из БД — источник истины (в т.ч. для полей, которые не меняли).
+      setProfile((current) =>
+        current
+          ? { ...current, height: result.height, weight: result.weight, measurements: result.measurements }
+          : current
+      );
+    },
+    [user, profile, lang]
+  );
+
   // ── Универсальное сохранение (optimistic + upsert) ──────────────────
   const updateProfile = useCallback(
     async (patch: Partial<Profile>) => {
@@ -1737,7 +1773,7 @@ export default function ResidentProfilePage() {
                         type="number"
                         mono
                         placeholder="—"
-                        onSave={(v) => updateProfile({ height: v || null })}
+                        onSave={(v) => updatePhysical({ height: v || null })}
                       />
                       {isFilled(profile.height) && (
                         <span className="text-zinc-500 text-xs">{t.cm}</span>
@@ -1759,7 +1795,7 @@ export default function ResidentProfilePage() {
                         type="number"
                         mono
                         placeholder="—"
-                        onSave={(v) => updateProfile({ weight: v || null })}
+                        onSave={(v) => updatePhysical({ weight: v || null })}
                       />
                       {isFilled(profile.weight) && (
                         <span className="text-zinc-500 text-xs">{t.kg}</span>
@@ -1781,12 +1817,17 @@ export default function ResidentProfilePage() {
                         mono
                         placeholder="90 / 60 / 90"
                         onSave={(v) =>
-                          updateProfile({ measurements: v || null })
+                          updatePhysical({ measurements: v || null })
                         }
                       />
                     </p>
                   </div>
                 </div>
+                {physicalError && (
+                  <p role="alert" className="mt-3 text-[11px] text-rose-300">
+                    {physicalError}
+                  </p>
+                )}
 
                 {/* Размеры одежды и обуви — обязательные поля анкеты */}
                 <div className="mt-5 grid grid-cols-2 gap-3 border-t border-zinc-800/40 pt-4">
