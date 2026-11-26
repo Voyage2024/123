@@ -275,7 +275,7 @@ export async function requestResidentIdentityChange(input: {
     const message = [
       `Резидентка просит изменить данные, сверяемые с документами KYC: ${fields.map((f) => FIELD_LABEL[f]).join(", ")}.`,
       "Новые значения и комментарий — в переписке этой заявки (раздел «Консьерж»).",
-      `Правка — в карточке резидентки, блок «Идентификационные данные» (/admin/database/${profile.id}).`,
+      `Решение — в карточке резидентки, блок «Identity & KYC»: Approve & Apply или Reject (/admin/database/${profile.id}).`,
     ].join("\n");
 
     const created = await createConciergeRequest({

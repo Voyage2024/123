@@ -39,7 +39,7 @@ import { normalizeCircleKey } from "@/lib/gamification";
 import { resolveAvatarUrl } from "@/lib/memberCards";
 import { inviteErrorCode } from "@/lib/patronage";
 import { getAdminReviewQueue } from "@/app/actions/admin-review";
-import { staffUpdateResidentIdentity } from "@/app/actions/admin-resident-identity";
+import { saveResidentIdentityAndCloseRequests } from "@/app/actions/admin-identity-requests";
 import type { ReviewFlags } from "@/lib/admin-review";
 import DirectoryClient, {
   clampKyc,
@@ -119,7 +119,7 @@ async function resolvePhotos(rows: Row[]): Promise<Record<string, string>> {
 const isMissing = (e: { code?: string; message?: string } | null | undefined) =>
   !!e && (["42P01", "PGRST202", "PGRST205", "42883"].includes(e.code ?? "") || /does not exist|schema cache|Could not find/i.test(e.message ?? ""));
 
-/** Ответы аудируемой смены гражданства (staffUpdateResidentIdentity). */
+/** Ответы аудируемой смены гражданства (saveResidentIdentityAndCloseRequests → staffUpdateResidentIdentity). */
 const IDENTITY_ERRORS: Record<string, string> = {
   reason_required: "Укажите причину смены гражданства (от 5 символов) — она попадёт в журнал аудита.",
   invalid: "Гражданство: только буквы, до 100 символов.",
@@ -372,7 +372,9 @@ function DirectoryPage() {
         // (причина + запись в audit_logs в одной транзакции с правкой).
         const prevCitizenship = (rows ?? []).find((r) => r.id === d.id)?.citizenship ?? null;
         if ((citizenship ?? null) !== (prevCitizenship ?? null)) {
-          const res = await staffUpdateResidentIdentity({ profileId: d.id, citizenship, reason: d.citizenshipReason ?? "" });
+          // Тот же аудируемый путь; если гражданство теперь как в активном запросе резидентки,
+          // запрос закрывается как выполненный (уведомление резидентке), журнал не дублируется.
+          const res = await saveResidentIdentityAndCloseRequests({ profileId: d.id, citizenship, reason: d.citizenshipReason ?? "" });
           if (!res.ok) return IDENTITY_ERRORS[res.reason] ?? IDENTITY_ERRORS.server_error;
           setRows((list) => (list ?? []).map((r) => (r.id === d.id ? { ...r, citizenship: res.citizenship } : r)));
         }

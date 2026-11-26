@@ -12,6 +12,7 @@ import { ReviewChips } from "@/app/components/admin/ReviewChips";
 import { hasPendingReview, reviewCopy, type ReviewFlags } from "@/lib/admin-review";
 import { loadReviewQueue } from "@/lib/server/admin-review-queue";
 import { getTelegramServiceClient } from "@/lib/server/telegram/service-client";
+import { loadIdentityCard } from "@/lib/server/identity-requests";
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -101,6 +102,17 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
       console.error("[admin/database/id] identity lock", lockError instanceof Error ? lockError.name : "unknown");
     }
   }
+  // Блок «Identity & KYC»: запросы резидентки на изменение и заявки KYC (только чтение, service role после проверки owner/admin).
+  let identityCard: Awaited<ReturnType<typeof loadIdentityCard>> = { active: [], closed: [], submissions: [] };
+  let identityCardError = false;
+  if (profile.role === "resident") {
+    try {
+      identityCard = await loadIdentityCard(getTelegramServiceClient(), profile.id);
+    } catch (cardError) {
+      identityCardError = true;
+      console.error("[admin/database/id] identity card", cardError instanceof Error ? cardError.message : "unknown");
+    }
+  }
   const pendingReview = hasPendingReview(review);
   const rc = reviewCopy("RU");
   const bannedUntil = profile.ban_permanent || profile.banned_until === "infinity" ? "Навсегда" : fmt(profile.banned_until);
@@ -136,7 +148,17 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
 
     <section className="space-y-3"><h2 className="font-serif text-xl text-zinc-100">Идентификация и доступ</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Email / логин" value={profile.email} /><Field label="Telegram ID" value={profile.telegram_id} /><Field label="Telegram username" value={profile.telegram_username ? `@${profile.telegram_username.replace(/^@/, "")}` : null} /><Field label="Роль" value={profile.role} /><Field label="KYC" value={`${profile.kyc_level ?? 0}/3`} /><Field label="Дата создания" value={fmt(profile.created_at)} /><Field label="Источник регистрации" value={profile.registration_source} /><Field label="Блокировка до" value={profile.ban_permanent ? "Навсегда" : profile.banned_until ? bannedUntil : "Не заблокирован"} /><Field label="Причина блокировки" value={profile.ban_reason} /></div></section>
     <section className="space-y-3"><h2 className="font-serif text-xl text-zinc-100">Профиль резидента</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Локация" value={profile.location} /><Field label="Гражданство" value={profile.citizenship} /><Field label="Дата рождения" value={profile.birth_date} /><Field label="Рост" value={profile.height} /><Field label="Вес" value={profile.weight} /><Field label="Параметры" value={profile.measurements} /><Field label="Размер одежды" value={clothingSize ?? (profile.role === "resident" ? "Не указан" : null)} /><Field label="Размер обуви (EU)" value={shoeSize ?? (profile.role === "resident" ? "Не указан" : null)} /><Field label="Индекс влияния" value={profile.influence_index} /><Field label="Баллы" value={profile.tour_points} /><Field label="USDT кошелёк" value={profile.usdt_wallet} /></div></section>
-    {profile.role === "resident" && <ResidentIdentityEditor profileId={profile.id} citizenship={profile.citizenship ?? null} birthDate={typeof profile.birth_date === "string" ? profile.birth_date.slice(0, 10) : null} identityLocked={identityLocked} />}
+    {profile.role === "resident" && identityCardError && <p role="alert" className="rounded-xl border border-rose-500/20 bg-rose-950/10 px-4 py-3 text-xs text-rose-200">Не удалось загрузить запросы резидентки и заявки KYC. Обновите страницу; запросы также видны в «Консьерже».</p>}
+    {profile.role === "resident" && <ResidentIdentityEditor
+      profileId={profile.id}
+      citizenship={profile.citizenship ?? null}
+      birthDate={typeof profile.birth_date === "string" ? profile.birth_date.slice(0, 10) : null}
+      identityLocked={identityLocked}
+      kycLevel={profile.kyc_level ?? 0}
+      submissions={identityCard.submissions}
+      activeRequests={identityCard.active.map(({ id, status, created_at, resolved_at, admin_feedback, proposal, manualChangeAt }) => ({ id, status, created_at, resolved_at, admin_feedback, proposal, manualChangeAt: manualChangeAt ?? null }))}
+      closedRequests={identityCard.closed.map(({ id, status, created_at, resolved_at, admin_feedback, proposal }) => ({ id, status, created_at, resolved_at, admin_feedback, proposal }))}
+    />}
     {profile.role === "resident" && <div id="kyc-review" className="scroll-mt-24" />}
     {profile.role === "resident" && <ResidentProfileManagement
       profileId={profile.id}
