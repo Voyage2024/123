@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertCircle, Check, CheckCircle2, ConciergeBell, Loader2, RefreshCw, Send, X } from "lucide-react";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import { listConciergeRequestsForStaff, replyToConciergeRequest, updateConciergeRequest, type ConciergeStatus } from "@/app/actions/concierge";
+import { isIdentityRequestTitle } from "@/lib/resident-profile-fields";
 
 type ConciergeMessage = {
   id: string; request_id: string; sender_profile_id: string | null;
@@ -28,6 +29,13 @@ const T: Record<Lang, Record<string, string>> = {
 };
 
 const STATUSES: ConciergeStatus[] = ["open", "in_progress", "done", "impossible"];
+// Запросы «[Данные KYC]» закрываются только в карточке резидентки (блок Identity & KYC).
+const KYC_ONLY: Record<Lang, { note: string; open: string; blocked: string }> = {
+  EN: { note: "Identity (KYC) change request. Approve or reject it only in the resident's profile card, block Identity & KYC — the change is applied and logged there.", open: "Open profile card", blocked: "Identity (KYC) requests are closed only in the resident's profile card (Approve & Apply / Reject)." },
+  RU: { note: "Запрос на изменение данных KYC. Одобрить или отклонить его можно только в карточке резидентки, в блоке Identity & KYC — там изменение применяется и пишется в журнал.", open: "Открыть карточку", blocked: "Запросы «[Данные KYC]» закрываются только в карточке резидентки (Approve & Apply / Reject)." },
+  ES: { note: "Solicitud de cambio de datos KYC. Apruébala o recházala solo en la ficha de la residente, bloque Identity & KYC: allí se aplica y registra el cambio.", open: "Abrir ficha", blocked: "Las solicitudes de datos KYC solo se cierran en la ficha de la residente (Approve & Apply / Reject)." },
+  PT: { note: "Pedido de alteração de dados KYC. Aprove ou recuse apenas na ficha da residente, bloco Identity & KYC: lá a alteração é aplicada e registrada.", open: "Abrir ficha", blocked: "Pedidos de dados KYC só são encerrados na ficha da residente (Approve & Apply / Reject)." },
+};
 function fmt(value: string, lang: Lang) { const d = new Date(value); return Number.isNaN(d.getTime()) ? "" : new Intl.DateTimeFormat(lang === "RU" ? "ru-RU" : lang === "ES" ? "es-ES" : lang === "PT" ? "pt-BR" : "en-US", { dateStyle:"medium", timeStyle:"short" }).format(d); }
 
 export default function ConciergeAdminChecklist() {
@@ -74,7 +82,7 @@ export default function ConciergeAdminChecklist() {
     setBusy(row.id); setNotice(null);
     const result = await replyToConciergeRequest({ id: row.id, status, message: reply });
     setBusy(null);
-    if (!result.ok) { setNotice({ok:false,text:result.reason === "forbidden" ? t.forbidden : t.error}); return; }
+    if (!result.ok) { setNotice({ok:false,text:result.reason === "forbidden" ? t.forbidden : result.reason === "identity_request" ? (KYC_ONLY[lang] ?? KYC_ONLY.EN).blocked : t.error}); return; }
     setFeedback((old) => ({ ...old, [row.id]: "" }));
     setNotice({ok: true, text: result.telegramSent ? t.replySent : (result.warning ?? t.replySavedNoTelegram)});
     await refresh();
@@ -86,7 +94,7 @@ export default function ConciergeAdminChecklist() {
     setBusy(row.id); setNotice(null);
     const result = await replyToConciergeRequest({ id: row.id, status, message });
     setBusy(null);
-    if (!result.ok) { setNotice({ok:false,text:result.reason === "forbidden" ? t.forbidden : t.error}); return; }
+    if (!result.ok) { setNotice({ok:false,text:result.reason === "forbidden" ? t.forbidden : result.reason === "identity_request" ? (KYC_ONLY[lang] ?? KYC_ONLY.EN).blocked : t.error}); return; }
     setFeedback((old) => ({ ...old, [row.id]: "" }));
     setNotice({ok: true, text: result.telegramSent ? t.replySent : (result.warning ?? t.replySavedNoTelegram)});
     await refresh();
@@ -96,7 +104,7 @@ export default function ConciergeAdminChecklist() {
     setBusy(row.id);
     const result = await updateConciergeRequest({id:row.id,status});
     setBusy(null);
-    if (!result.ok) { setNotice({ok:false,text:result.reason === "forbidden" ? t.forbidden : t.error}); return; }
+    if (!result.ok) { setNotice({ok:false,text:result.reason === "forbidden" ? t.forbidden : result.reason === "identity_request" ? (KYC_ONLY[lang] ?? KYC_ONLY.EN).blocked : t.error}); return; }
     setNotice({ok:true,text:t.saved}); await refresh();
   };
   const filtered = rows;
@@ -113,7 +121,7 @@ export default function ConciergeAdminChecklist() {
               <img src={row.resident.avatar_url} alt="" className="h-full w-full object-cover" />
             </>
           ) : (row.resident?.full_name ?? "?").slice(0,1).toUpperCase()}</div><span className="min-w-0"><span className="block truncate text-sm font-medium text-zinc-200">{row.resident?.full_name || t.unknownResident}</span><span className="mt-0.5 block truncate text-xs text-zinc-500">{row.resident?.segment ?? "working"} · KYC{row.resident?.kyc_level ?? 0}</span></span></Link>{row.resident?.telegram_id&&<p className="mt-2 truncate text-xs text-zinc-600">{t.telegramLabel} {row.resident.telegram_id}</p>}</div></div>
-      <div className="mt-5 border-t border-zinc-800/60 pt-4"><label className="mb-1.5 block text-xs font-medium text-zinc-400">{t.feedback}</label><textarea value={feedback[row.id] ?? ""} onChange={(e)=>setFeedback((old)=>({...old,[row.id]:e.target.value}))} maxLength={4000} rows={2} placeholder={t.feedbackPlaceholder} className="w-full resize-y rounded-xl border border-zinc-800 bg-zinc-950/60 px-3.5 py-3 text-sm leading-6 text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-amber-200/35"/><div className="mt-3 flex flex-wrap items-center gap-2"><select value={row.status} disabled={busy===row.id} onChange={(e)=>void changeStatus(row,e.target.value as ConciergeStatus)} className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-xs text-zinc-300 outline-none focus:border-amber-200/30">{STATUSES.map((s)=><option key={s} value={s}>{t[s]}</option>)}</select><button type="button" onClick={()=>void sendReply(row)} disabled={busy===row.id} className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200/25 bg-amber-200/[0.08] px-3.5 py-2.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-200/[0.14] disabled:opacity-50">{busy===row.id?<Loader2 className="animate-spin" size={14}/>:<Send size={14}/>} {t.reply}</button><button type="button" onClick={()=>void closeRequest(row,"done")} disabled={busy===row.id} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3.5 py-2.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/[0.12] disabled:opacity-50">{busy===row.id?<Loader2 className="animate-spin" size={14}/>:<Check size={14}/>} {t.markDone}</button><button type="button" onClick={()=>void closeRequest(row,"impossible")} disabled={busy===row.id} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/20 bg-rose-500/[0.05] px-3.5 py-2.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/[0.1] disabled:opacity-50"><X size={14}/>{t.cannot}</button></div></div>
+      <div className="mt-5 border-t border-zinc-800/60 pt-4"><label className="mb-1.5 block text-xs font-medium text-zinc-400">{t.feedback}</label><textarea value={feedback[row.id] ?? ""} onChange={(e)=>setFeedback((old)=>({...old,[row.id]:e.target.value}))} maxLength={4000} rows={2} placeholder={t.feedbackPlaceholder} className="w-full resize-y rounded-xl border border-zinc-800 bg-zinc-950/60 px-3.5 py-3 text-sm leading-6 text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-amber-200/35"/>{isIdentityRequestTitle(row.title) ? <div data-testid="kyc-only" className="mt-3 flex flex-wrap items-center gap-2"><button type="button" onClick={()=>void sendReply(row)} disabled={busy===row.id} className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200/25 bg-amber-200/[0.08] px-3.5 py-2.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-200/[0.14] disabled:opacity-50">{busy===row.id?<Loader2 className="animate-spin" size={14}/>:<Send size={14}/>} {t.reply}</button><Link href={`/admin/database/${row.resident_id}#identity-title`} className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200/40 bg-amber-200 px-3.5 py-2.5 text-xs font-semibold text-zinc-950 transition hover:bg-amber-100">{(KYC_ONLY[lang] ?? KYC_ONLY.EN).open}</Link><p className="basis-full text-xs leading-5 text-amber-100/70">{(KYC_ONLY[lang] ?? KYC_ONLY.EN).note}</p></div> : <div className="mt-3 flex flex-wrap items-center gap-2"><select value={row.status} disabled={busy===row.id} onChange={(e)=>void changeStatus(row,e.target.value as ConciergeStatus)} className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-xs text-zinc-300 outline-none focus:border-amber-200/30">{STATUSES.map((s)=><option key={s} value={s}>{t[s]}</option>)}</select><button type="button" onClick={()=>void sendReply(row)} disabled={busy===row.id} className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200/25 bg-amber-200/[0.08] px-3.5 py-2.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-200/[0.14] disabled:opacity-50">{busy===row.id?<Loader2 className="animate-spin" size={14}/>:<Send size={14}/>} {t.reply}</button><button type="button" onClick={()=>void closeRequest(row,"done")} disabled={busy===row.id} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3.5 py-2.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/[0.12] disabled:opacity-50">{busy===row.id?<Loader2 className="animate-spin" size={14}/>:<Check size={14}/>} {t.markDone}</button><button type="button" onClick={()=>void closeRequest(row,"impossible")} disabled={busy===row.id} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/20 bg-rose-500/[0.05] px-3.5 py-2.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/[0.1] disabled:opacity-50"><X size={14}/>{t.cannot}</button></div>}</div>
     </article>)}</div>}
     {!loading && hasMore && <div className="mt-6 flex justify-center"><button type="button" onClick={() => void loadOlder()} disabled={loadingOlder} className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-2.5 text-sm text-zinc-300 transition hover:border-amber-200/25 hover:text-amber-100 disabled:opacity-50">{loadingOlder ? <Loader2 size={15} className="animate-spin"/> : <RefreshCw size={15}/>} {loadingOlder ? t.loadingOlder : t.loadOlder}</button></div>}
   </main>;
