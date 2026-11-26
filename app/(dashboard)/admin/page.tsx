@@ -39,6 +39,7 @@ import { normalizeCircleKey } from "@/lib/gamification";
 import { resolveAvatarUrl } from "@/lib/memberCards";
 import { inviteErrorCode } from "@/lib/patronage";
 import { getAdminReviewQueue } from "@/app/actions/admin-review";
+import { staffUpdateResidentIdentity } from "@/app/actions/admin-resident-identity";
 import type { ReviewFlags } from "@/lib/admin-review";
 import DirectoryClient, {
   clampKyc,
@@ -117,6 +118,17 @@ async function resolvePhotos(rows: Row[]): Promise<Record<string, string>> {
 
 const isMissing = (e: { code?: string; message?: string } | null | undefined) =>
   !!e && (["42P01", "PGRST202", "PGRST205", "42883"].includes(e.code ?? "") || /does not exist|schema cache|Could not find/i.test(e.message ?? ""));
+
+/** Ответы аудируемой смены гражданства (staffUpdateResidentIdentity). */
+const IDENTITY_ERRORS: Record<string, string> = {
+  reason_required: "Укажите причину смены гражданства (от 5 символов) — она попадёт в журнал аудита.",
+  invalid: "Гражданство: только буквы, до 100 символов.",
+  nothing_to_change: "Гражданство не изменилось.",
+  forbidden: "Менять гражданство могут только owner и admin.",
+  not_found: "Профиль не найден.",
+  unauthenticated: "Сессия истекла. Войдите снова.",
+  server_error: "Не удалось сохранить гражданство. Повторите попытку.",
+};
 
 const errorText = (err: { code?: string; message?: string }, t: DirectoryText) => {
   if (inviteErrorCode(err) === "forbidden") return t.forbiddenError;
@@ -355,7 +367,15 @@ function DirectoryPage() {
       if (d.id) {
         // анкета — как раньше, уровень KYC — отдельно и последним:
         // так 0 доходит до базы, даже если старый RPC анкеты его не принимает
-        const { kyc_level, ...profileFields } = fields;
+        const { kyc_level, citizenship, ...profileFields } = fields;
+        // Гражданство — идентификационные данные: только через аудируемый путь
+        // (причина + запись в audit_logs в одной транзакции с правкой).
+        const prevCitizenship = (rows ?? []).find((r) => r.id === d.id)?.citizenship ?? null;
+        if ((citizenship ?? null) !== (prevCitizenship ?? null)) {
+          const res = await staffUpdateResidentIdentity({ profileId: d.id, citizenship, reason: d.citizenshipReason ?? "" });
+          if (!res.ok) return IDENTITY_ERRORS[res.reason] ?? IDENTITY_ERRORS.server_error;
+          setRows((list) => (list ?? []).map((r) => (r.id === d.id ? { ...r, citizenship: res.citizenship } : r)));
+        }
         const err = await patchProfile(d.id, profileFields);
         if (err) return err;
         const kycErr = await setKycLevel(d.id, kyc_level);

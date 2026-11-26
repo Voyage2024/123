@@ -4,6 +4,7 @@ import { ArrowLeft, CalendarClock, CircleUserRound, ShieldCheck } from "lucide-r
 import ResidentProfileManagement from "@/app/(dashboard)/admin/database/[id]/ResidentProfileManagement";
 import DeleteResidentDangerZone from "@/app/(dashboard)/admin/database/[id]/DeleteResidentDangerZone";
 import ResidentPdfExports from "@/app/(dashboard)/admin/database/[id]/ResidentPdfExports";
+import ResidentIdentityEditor from "@/app/(dashboard)/admin/database/[id]/ResidentIdentityEditor";
 import { formatShoeSize, normalizeClothingSize } from "@/lib/resident-sizes";
 import { createClient } from "@/lib/supabase/server";
 import { VipAvatarMark, VipBadge, VipSeal, isKycElite } from "@/app/components/profile/VipBadge";
@@ -90,6 +91,16 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
       console.error("[admin/database/id] review queue", queueError instanceof Error ? queueError.name : "unknown");
     }
   }
+  // Гражданство и дата рождения «под KYC» (документы отправлены или подтверждены) — для блока «Идентификационные данные».
+  let identityLocked = Number(profile.kyc_level ?? 0) >= 1;
+  if (profile.role === "resident") {
+    try {
+      const lock = await getTelegramServiceClient().rpc("voyage_identity_locked", { p_profile: profile.id });
+      if (!lock.error) identityLocked = lock.data === true;
+    } catch (lockError) {
+      console.error("[admin/database/id] identity lock", lockError instanceof Error ? lockError.name : "unknown");
+    }
+  }
   const pendingReview = hasPendingReview(review);
   const rc = reviewCopy("RU");
   const bannedUntil = profile.ban_permanent || profile.banned_until === "infinity" ? "Навсегда" : fmt(profile.banned_until);
@@ -125,6 +136,7 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
 
     <section className="space-y-3"><h2 className="font-serif text-xl text-zinc-100">Идентификация и доступ</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Email / логин" value={profile.email} /><Field label="Telegram ID" value={profile.telegram_id} /><Field label="Telegram username" value={profile.telegram_username ? `@${profile.telegram_username.replace(/^@/, "")}` : null} /><Field label="Роль" value={profile.role} /><Field label="KYC" value={`${profile.kyc_level ?? 0}/3`} /><Field label="Дата создания" value={fmt(profile.created_at)} /><Field label="Источник регистрации" value={profile.registration_source} /><Field label="Блокировка до" value={profile.ban_permanent ? "Навсегда" : profile.banned_until ? bannedUntil : "Не заблокирован"} /><Field label="Причина блокировки" value={profile.ban_reason} /></div></section>
     <section className="space-y-3"><h2 className="font-serif text-xl text-zinc-100">Профиль резидента</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label="Локация" value={profile.location} /><Field label="Гражданство" value={profile.citizenship} /><Field label="Дата рождения" value={profile.birth_date} /><Field label="Рост" value={profile.height} /><Field label="Вес" value={profile.weight} /><Field label="Параметры" value={profile.measurements} /><Field label="Размер одежды" value={clothingSize ?? (profile.role === "resident" ? "Не указан" : null)} /><Field label="Размер обуви (EU)" value={shoeSize ?? (profile.role === "resident" ? "Не указан" : null)} /><Field label="Индекс влияния" value={profile.influence_index} /><Field label="Баллы" value={profile.tour_points} /><Field label="USDT кошелёк" value={profile.usdt_wallet} /></div></section>
+    {profile.role === "resident" && <ResidentIdentityEditor profileId={profile.id} citizenship={profile.citizenship ?? null} birthDate={typeof profile.birth_date === "string" ? profile.birth_date.slice(0, 10) : null} identityLocked={identityLocked} />}
     {profile.role === "resident" && <div id="kyc-review" className="scroll-mt-24" />}
     {profile.role === "resident" && <ResidentProfileManagement
       profileId={profile.id}

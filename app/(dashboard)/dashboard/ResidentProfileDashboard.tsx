@@ -36,6 +36,12 @@ import { updateResidentSizes } from "@/app/actions/resident-sizes";
 import { updateResidentPhysical } from "@/app/actions/resident-physical";
 import { PHYSICAL_COPY } from "@/lib/resident-physical";
 import {
+  getResidentIdentityLock,
+  requestResidentIdentityChange,
+  updateResidentProfileFields,
+} from "@/app/actions/resident-profile-fields";
+import { PROFILE_FIELDS_COPY, isIdentityLocked } from "@/lib/resident-profile-fields";
+import {
   CLOTHING_SIZES,
   SHOE_SIZE_OPTIONS,
   SIZE_COPY,
@@ -78,6 +84,11 @@ import ProfileIdentityQuickEdit from "@/app/components/profile/ProfileIdentityQu
  * 2. Имя и аватар берутся ТОЛЬКО из AuthContext (user.fullName / user.avatarUrl)
  *    и редактируются на странице настроек. Здесь они read-only.
  *    `photo_urls` — отдельный массив портфолио, к аватару отношения не имеет.
+ *
+ * 3a. Город, «о себе», гражданство и дата рождения — через Server Action
+ *    app/actions/resident-profile-fields.ts. Гражданство и дата рождения
+ *    с момента отправки документов KYC (и после подтверждения) — только
+ *    запросом команде клуба (IdentityChangeRequest ниже → заявка консьержу).
  *
  * 3. Рост, вес и объёмы сохраняются через Server Action
  *    app/actions/resident-physical.ts (как размеры одежды/обуви): прямой
@@ -933,6 +944,83 @@ function GlassCard({
  * Инлайн-редактируемое текстовое поле.
  * Клик → инпут → сохранение по blur / Enter (Esc отменяет).
  */
+// ─── Запрос на изменение данных, подтверждённых KYC ────────────────
+type IdentityValues = { citizenship: string | null; birth_date: string | null };
+
+function IdentityChangeRequest({
+  lang,
+  current,
+  onClose,
+}: {
+  lang: Lang;
+  current: IdentityValues;
+  onClose: () => void;
+}) {
+  const c = PROFILE_FIELDS_COPY[lang] ?? PROFILE_FIELDS_COPY.EN;
+  const [citizenship, setCitizenship] = useState(current.citizenship ?? "");
+  const [birthDate, setBirthDate] = useState(current.birth_date ?? "");
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const send = async () => {
+    const patch: { citizenship?: string; birth_date?: string } = {};
+    if (citizenship.trim() !== (current.citizenship ?? "")) patch.citizenship = citizenship;
+    if (birthDate !== (current.birth_date ?? "")) patch.birth_date = birthDate;
+    if (!Object.keys(patch).length) {
+      setResult({ ok: false, text: c.nothingToChange });
+      return;
+    }
+    setBusy(true);
+    setResult(null);
+    const r = await requestResidentIdentityChange({ ...patch, comment, language: lang });
+    setBusy(false);
+    if (r.ok) return setResult({ ok: true, text: c.sent });
+    const text =
+      r.reason === "already_requested" ? c.alreadyRequested
+      : r.reason === "invalid" ? c.invalid
+      : r.reason === "nothing_to_change" ? c.nothingToChange
+      : c.requestError;
+    setResult({ ok: r.reason === "already_requested", text });
+  };
+
+  const field = "w-full bg-zinc-950/60 border border-zinc-700/60 rounded-md px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-500/50";
+  return (
+    <div className="mt-4 rounded-lg border border-amber-200/20 bg-amber-200/[0.03] p-4" data-testid="identity-request">
+      <p className="text-[10px] tracking-[0.2em] uppercase text-amber-100/70 font-semibold">{c.requestTitle}</p>
+      {result?.ok ? (
+        <p role="status" className="mt-3 text-xs leading-5 text-emerald-300">{result.text}</p>
+      ) : (
+        <>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-[0.15em] text-zinc-500">{c.newValue} · {lang === "RU" ? "гражданство" : "citizenship"}</span>
+              <input value={citizenship} onChange={(e) => setCitizenship(e.target.value)} className={field} name="request-citizenship" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[10px] uppercase tracking-[0.15em] text-zinc-500">{c.newValue} · {lang === "RU" ? "дата рождения" : "date of birth"}</span>
+              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className={`${field} font-mono`} name="request-birth-date" />
+            </label>
+            <label className="space-y-1 sm:col-span-2">
+              <span className="text-[10px] uppercase tracking-[0.15em] text-zinc-500">{c.comment}</span>
+              <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} maxLength={1000} placeholder={c.commentPh} className={`${field} resize-none`} name="request-comment" />
+            </label>
+          </div>
+          {result && <p role="alert" className="mt-2 text-[11px] text-rose-300">{result.text}</p>}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={send} disabled={busy} className="inline-flex items-center gap-1.5 rounded-md border border-amber-200/50 bg-amber-200 px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-amber-100 disabled:opacity-50">
+              {busy && <Loader2 className="w-3 h-3 animate-spin" />} {c.send}
+            </button>
+            <button type="button" onClick={onClose} className="rounded-md border border-zinc-700/60 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200">
+              {c.cancel}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function EditableText({
   value,
   onSave,
@@ -1307,7 +1395,62 @@ export default function ResidentProfilePage() {
     [user, profile, lang]
   );
 
+  // ── Город / «о себе» / гражданство / дата рождения: server action ────
+  type TextField = "location" | "about" | "citizenship" | "birth_date";
+  const [fieldError, setFieldError] = useState<{ field: TextField; text: string } | null>(null);
+  const [identityLockedByServer, setIdentityLockedByServer] = useState(false);
+  const [identityRequestOpen, setIdentityRequestOpen] = useState(false);
+  const identityLocked = !!profile && (identityLockedByServer || isIdentityLocked(profile.kyc_level));
+  // Блокировка «под KYC» учитывает и документы на проверке — спрашиваем сервер.
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    getResidentIdentityLock()
+      .then((r) => {
+        if (active && r.ok && r.locked) setIdentityLockedByServer(true);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [user]);
+  const updateFields = useCallback(
+    async (field: TextField, value: string | null) => {
+      if (!user || !profile) return;
+      const before = profile[field] ?? null;
+      setProfile((current) => (current ? { ...current, [field]: value } : current));
+      setFieldError(null);
+      setSaving(true);
+      const result = await updateResidentProfileFields({ [field]: value });
+      setSaving(false);
+      const copy = PROFILE_FIELDS_COPY[lang] ?? PROFILE_FIELDS_COPY.EN;
+      if (!result.ok) {
+        setProfile((current) => (current ? { ...current, [field]: before } : current));
+        if (result.reason === "identity_locked") {
+          setIdentityLockedByServer(true);
+          setFieldError({ field, text: copy.lockedHint });
+        } else {
+          setFieldError({ field, text: result.reason === "invalid" ? copy.invalid : copy.saveError });
+        }
+        console.error("Could not save profile field:", result.reason);
+        return;
+      }
+      if (result.identity_locked) setIdentityLockedByServer(true);
+      setProfile((current) =>
+        current
+          ? { ...current, location: result.location, about: result.about, citizenship: result.citizenship, birth_date: result.birth_date }
+          : current
+      );
+    },
+    [user, profile, lang]
+  );
+  const fieldErrorFor = (fields: TextField[]) =>
+    fieldError && fields.includes(fieldError.field) ? (
+      <p role="alert" className="mt-3 text-[11px] text-rose-300">{fieldError.text}</p>
+    ) : null;
+
   // ── Универсальное сохранение (optimistic + upsert) ──────────────────
+  // Остаётся только для действий персонала в этом экране (ачивки, уровень KYC).
   const updateProfile = useCallback(
     async (patch: Partial<Profile>) => {
       if (!user) return;
@@ -1690,13 +1833,14 @@ export default function ResidentProfilePage() {
                           editHint={t.clickToEdit}
                           placeholder={t.locationPlaceholder}
                           onSave={(v) =>
-                            updateProfile({ location: v || null })
+                            updateFields("location", v || null)
                           }
                         />
                       </div>
                     </div>
                   </div>
                 </div>
+                {fieldErrorFor(["location"])}
               </div>
             </GlassCard>
 
@@ -1716,11 +1860,11 @@ export default function ResidentProfilePage() {
                     </p>
                     <EditableText
                       value={profile.citizenship}
-                      editable={canEditOwn}
+                      editable={canEditOwn && !identityLocked}
                       editHint={t.clickToEdit}
                       placeholder={t.nationalityPlaceholder}
                       onSave={(v) =>
-                        updateProfile({ citizenship: v || null })
+                        updateFields("citizenship", v || null)
                       }
                     />
                   </div>
@@ -1732,19 +1876,44 @@ export default function ResidentProfilePage() {
                       <Calendar className="w-3 h-3 text-zinc-500 flex-shrink-0" />
                       <EditableText
                         value={profile.birth_date}
-                        editable={canEditOwn}
+                        editable={canEditOwn && !identityLocked}
                         editHint={t.clickToEdit}
                         type="date"
                         mono
                         placeholder={t.dobPlaceholder}
                         format={formatDate}
                         onSave={(v) =>
-                          updateProfile({ birth_date: v || null })
+                          updateFields("birth_date", v || null)
                         }
                       />
                     </div>
                   </div>
                 </div>
+                {identityLocked && canEditOwn && (
+                  <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-800/40 pt-3" data-testid="identity-locked">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-200/80">
+                      <LockKeyhole className="w-3 h-3" /> {(PROFILE_FIELDS_COPY[lang] ?? PROFILE_FIELDS_COPY.EN).locked}
+                    </span>
+                    {!identityRequestOpen && (
+                      <button
+                        type="button"
+                        onClick={() => setIdentityRequestOpen(true)}
+                        className="text-[11px] text-amber-200/80 underline decoration-dashed underline-offset-4 hover:text-amber-100"
+                      >
+                        {(PROFILE_FIELDS_COPY[lang] ?? PROFILE_FIELDS_COPY.EN).requestChange}
+                      </button>
+                    )}
+                    <p className="w-full text-[11px] leading-5 text-zinc-500">{(PROFILE_FIELDS_COPY[lang] ?? PROFILE_FIELDS_COPY.EN).lockedHint}</p>
+                  </div>
+                )}
+                {identityLocked && identityRequestOpen && (
+                  <IdentityChangeRequest
+                    lang={lang}
+                    current={{ citizenship: profile.citizenship, birth_date: profile.birth_date ? profile.birth_date.slice(0, 10) : null }}
+                    onClose={() => setIdentityRequestOpen(false)}
+                  />
+                )}
+                {fieldErrorFor(["citizenship", "birth_date"])}
               </div>
             </GlassCard>
 
@@ -1911,9 +2080,10 @@ export default function ResidentProfilePage() {
                     editHint={t.clickToEdit}
                     multiline
                     placeholder={t.aboutPlaceholder}
-                    onSave={(v) => updateProfile({ about: v || null })}
+                    onSave={(v) => updateFields("about", v || null)}
                   />
                 </div>
+                {fieldErrorFor(["about"])}
               </div>
             </GlassCard>
           </div>
