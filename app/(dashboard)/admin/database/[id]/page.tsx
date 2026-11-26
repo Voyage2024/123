@@ -5,6 +5,7 @@ import ResidentProfileManagement from "@/app/(dashboard)/admin/database/[id]/Res
 import DeleteResidentDangerZone from "@/app/(dashboard)/admin/database/[id]/DeleteResidentDangerZone";
 import ResidentPdfExports from "@/app/(dashboard)/admin/database/[id]/ResidentPdfExports";
 import ResidentIdentityEditor from "@/app/(dashboard)/admin/database/[id]/ResidentIdentityEditor";
+import ResidentVideoModeration from "@/app/(dashboard)/admin/database/[id]/ResidentVideoModeration";
 import { formatShoeSize, normalizeClothingSize } from "@/lib/resident-sizes";
 import { createClient } from "@/lib/supabase/server";
 import { VipAvatarMark, VipBadge, VipSeal, isKycElite } from "@/app/components/profile/VipBadge";
@@ -172,6 +173,8 @@ export default async function ResidentProfilePreview({ params }: { params: Promi
       viewerId={user.id}
       viewerEmail={user.email ?? null}
     />}
+
+    {profile.role === "resident" && <ResidentVideoModeration profileId={profile.id} />}
 
     <section className="rounded-2xl border border-zinc-800/80 bg-zinc-900/25 p-5"><h2 className="font-serif text-xl text-zinc-100">О себе</h2><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-400">{profile.about?.trim() || "Описание не заполнено."}</p></section>
 

@@ -10,6 +10,8 @@
  * контактов, документов и платёжных данных в ответе нет, поэтому их нет
  * и в интерфейсе. Действия отбора — те же, что на карточке доски
  * (опцион, отказ, рукопожатие), их проверяют штатные RPC.
+ * Video Identity (этап 1): блок видео под фотографиями — отдельный
+ * запрос getResidentMediaForViewer, право решает voyage_media_access.
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -39,6 +41,7 @@ import KycLevelBadge from "@/app/components/profile/KycLevelBadge";
 import { VipBadge, isKycElite } from "@/app/components/profile/VipBadge";
 import { kycCopy } from "@/lib/kyc-levels";
 import { projectLabel } from "@/lib/project-types";
+import ResidentVideoViewer from "@/app/components/media/ResidentVideoViewer";
 
 export type CandidateRowRef = {
   resident_id: string;
@@ -244,6 +247,7 @@ export function CandidateProfileDialog({
                     ))}
                   </div>
                 )}
+                <ResidentVideoViewer residentId={row.resident_id} context="casting" contextId={castingId} lang={lang} title={name} />
                 {profile.snaps.length > 0 && (
                   <div>
                     <p className="mb-2 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-500"><Camera size={11} /> Актуальные снепы</p>

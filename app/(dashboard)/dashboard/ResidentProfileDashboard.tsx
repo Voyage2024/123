@@ -72,6 +72,7 @@ import { AchievementShelf, type AchievementKey } from "@/app/components/profile/
 import { KycSection } from "@/app/components/profile/KycSection";
 import { VipAvatarMark, VipBadge, VipSeal, isKycElite } from "@/app/components/profile/VipBadge";
 import ProfileIdentityQuickEdit from "@/app/components/profile/ProfileIdentityQuickEdit";
+import VideoIdentitySection from "@/app/components/media/VideoIdentitySection";
 
 /* ──────────────────────────────────────────────────────────────────────
  * ПРИМЕЧАНИЯ ПО АРХИТЕКТУРЕ
@@ -2088,6 +2089,9 @@ export default function ResidentProfilePage() {
             </GlassCard>
           </div>
         </section>
+
+        {/* ── Video Identity (Визитка + Moments, этап 1) ─────────── */}
+        <VideoIdentitySection lang={lang} />
 
         {/* ── Visual Portfolio ───────────────────────────────────── */}
         <section className="mb-10">

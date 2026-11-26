@@ -123,8 +123,15 @@ async function deleteResidentStorage(
     await listStorageFilesRecursively(admin, "kyc-vault", prefix, kycFilePaths);
   }
 
+  // Video Identity (migration 20261130090000): everything under <profile id>/ in resident-media.
+  // Skipped when the bucket does not exist yet (migration not applied).
+  const mediaPaths = new Set<string>();
+  const { data: mediaBucket } = await admin.storage.getBucket("resident-media");
+  if (mediaBucket) await listStorageFilesRecursively(admin, "resident-media", profile.id, mediaPaths);
+
   await removeStorageFiles(admin, "kyc-vault", kycFilePaths);
   await removeStorageFiles(admin, "user-uploads", photoPaths);
+  await removeStorageFiles(admin, "resident-media", mediaPaths);
 }
 
 async function deleteProfileBlockingRelations(
