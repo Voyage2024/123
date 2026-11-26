@@ -21,6 +21,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
+  BookUser,
+  LibraryBig,
   Activity,
   Sparkles,
   FileText,
@@ -111,7 +113,9 @@ type NavKey =
   | "scoutCastings"
   | "scoutEarnings"
   | "scoutProfile"
-  | "tourControl";
+  | "tourControl"
+  | "residentCatalog"
+  | "catalogControl";
 
 type SectionKey = "club" | "market" | "operations" | "tourOps" | "dispatch" | "scout" | "intelligence" | "authority" | "console" | "management" | "administration" | "owner" | "account";
 
@@ -160,6 +164,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { key: "command", href: "/partner", icon: LayoutDashboard },
       { key: "castings", href: "/partner/castings", icon: ClipboardList },
+      { key: "residentCatalog", href: "/partner/catalog", icon: BookUser },
     ],
   },
   {
@@ -245,6 +250,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { key: "roleManagement", href: "/admin/roles", icon: KeyRound },
       { key: "tourControl", href: "/admin/tour-control", icon: Gauge },
+      { key: "catalogControl", href: "/admin/tour-control/catalog", icon: LibraryBig },
     ],
   },
   // Personal settings are the one /admin route that remains available to staff.
@@ -310,6 +316,8 @@ const translations = {
       scoutEarnings: "Earnings & Payouts",
       scoutProfile: "My Profile",
       tourControl: "Tours & Bookings Control",
+      residentCatalog: "Resident Catalog",
+      catalogControl: "Catalog Control",
       myVoyage: "My Voyage",
       myApplications: "My Applications",
       parties: "Themes / Parties",
@@ -392,6 +400,8 @@ const translations = {
       scoutEarnings: "Начисления и выплаты",
       scoutProfile: "Профиль",
       tourControl: "Контроль туров и букингов",
+      residentCatalog: "Каталог резиденток",
+      catalogControl: "Контроль каталога",
       myVoyage: "Мой Voyage",
       myApplications: "Мои заявки",
       parties: "Темы / Тусовки",
@@ -474,6 +484,8 @@ const translations = {
       scoutEarnings: "Bonos y pagos",
       scoutProfile: "Mi perfil",
       tourControl: "Control de tours y reservas",
+      residentCatalog: "Catálogo de residentes",
+      catalogControl: "Control del catálogo",
       myVoyage: "Mi Voyage",
       myApplications: "Mis solicitudes",
       parties: "Temas / Fiestas",
@@ -556,6 +568,8 @@ const translations = {
       scoutEarnings: "Bônus e pagamentos",
       scoutProfile: "Meu perfil",
       tourControl: "Controle de tours e reservas",
+      residentCatalog: "Catálogo de residentes",
+      catalogControl: "Controle do catálogo",
       myVoyage: "Meu Voyage",
       myApplications: "Minhas solicitações",
       parties: "Temas / Festas",

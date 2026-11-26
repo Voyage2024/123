@@ -12,6 +12,8 @@
 import { useEffect, useState } from "react";
 import { Clapperboard, Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import { getResidentMediaForViewer, staffSetMediaHidden } from "@/app/actions/resident-media-view";
+import { staffCatalogStatus, type StaffCatalogStatus } from "@/app/actions/owner-catalog";
+import { CATALOG_COPY, fmtDay } from "@/lib/resident-catalog";
 import { MEDIA_COPY, formatDuration, type MediaBundle, type MediaItem } from "@/lib/resident-media";
 import { VoyageVideoPlayer } from "@/app/components/media/VoyageVideoPlayer";
 import { MomentStoryViewer } from "@/app/components/media/MomentStoryViewer";
@@ -21,7 +23,7 @@ const c = MEDIA_COPY.RU;
 const SCOPE_LABEL: Record<string, string> = {
   engaged: "Менеджерам, с которыми работает",
   hidden: "Только она (скрыто от менеджеров)",
-  catalog: "Каталог (этап 2)",
+  catalog: "Всем менеджерам каталога",
 };
 
 export default function ResidentVideoModeration({ profileId }: { profileId: string }) {
@@ -32,6 +34,12 @@ export default function ResidentVideoModeration({ profileId }: { profileId: stri
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [story, setStory] = useState<number | null>(null);
+  const [catalog, setCatalog] = useState<StaffCatalogStatus | null>(null);
+
+  // Этап 2: строка каталога. Нет миграции 20261201090000 — строки просто нет.
+  useEffect(() => {
+    void staffCatalogStatus(profileId).then((res) => setCatalog(res.ok ? res.status : null));
+  }, [profileId]);
 
   useEffect(() => {
     void getResidentMediaForViewer(profileId, "admin", null).then((res) => {
@@ -84,6 +92,15 @@ export default function ResidentVideoModeration({ profileId }: { profileId: stri
         <h2 className="font-serif text-xl text-zinc-100">Video Identity</h2>
         {bundle && <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-zinc-800 px-2.5 py-1 text-[10px] text-zinc-400"><Lock size={11} /> {bundle.consent ? SCOPE_LABEL[bundle.scope] ?? bundle.scope : "Согласие не дано: менеджеры не видят"}</span>}
       </div>
+      {catalog && (
+        <p className="text-[11px] text-zinc-400">
+          <span className="text-zinc-500">{CATALOG_COPY.RU.modCatalog}:</span>{" "}
+          {catalog.catalogVisible && catalog.listed ? CATALOG_COPY.RU.modCatalogOn(catalog.views30d, catalog.invites30d) : CATALOG_COPY.RU.modCatalogOff}
+          {catalog.pausedUntil ? ` · ${CATALOG_COPY.RU.modPaused(fmtDay(catalog.pausedUntil, "RU"))}` : ""}
+          {catalog.catalogVisible && !catalog.listed && !catalog.pausedUntil ? " · включила, но не проходит условия (одобрение, KYC 1, 3 фото)" : ""}
+          {!catalog.enabled ? " · каталог выключен для менеджеров" : ""}
+        </p>
+      )}
       {state === "loading" && <p className="flex items-center gap-2 text-xs text-zinc-500"><Loader2 size={13} className="animate-spin" /> Загружаем видео…</p>}
       {state === "missing" && <p className="text-xs text-zinc-500">Миграция 20261130090000_resident_video_identity.sql ещё не применена.</p>}
       {state === "error" && <p className="text-xs text-rose-200">Не удалось загрузить видео.</p>}

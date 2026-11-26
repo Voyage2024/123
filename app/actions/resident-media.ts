@@ -108,7 +108,7 @@ export async function getMyProfileViews(): Promise<MyViewsResult> {
 }
 
 export async function setMyVideoVisibility(scope: VideoScope | null, consent: boolean | null): Promise<VisibilityResult> {
-  if (scope !== null && scope !== "engaged" && scope !== "hidden") return { ok: false, reason: "invalid" };
+  if (scope !== null && scope !== "engaged" && scope !== "hidden" && scope !== "catalog") return { ok: false, reason: "invalid" };
   if (consent !== null && typeof consent !== "boolean") return { ok: false, reason: "invalid" };
   const session = await createClient();
   const { data, error } = await session.rpc("voyage_set_media_visibility", { p_scope: scope, p_consent: consent });

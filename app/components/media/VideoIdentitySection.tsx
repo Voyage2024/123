@@ -44,7 +44,10 @@ import { ProfileViewsPanel } from "@/app/components/media/ProfileViewsPanel";
 
 const MB = 1024 * 1024;
 
-export function VideoIdentitySection({ lang }: { lang: string }) {
+/** Этап 2: сводка для заполненности анкеты и кольца Video Identity */
+export type VideoSummary = { hasIntro: boolean; hasMoment: boolean; latestAt: string | null };
+
+export function VideoIdentitySection({ lang, onSummary }: { lang: string; onSummary?: (s: VideoSummary) => void }) {
   const c = mediaCopy(lang);
   const [bundle, setBundle] = useState<MediaBundle | null>(null);
   const [views, setViews] = useState<ProfileViews | null>(null);
@@ -85,6 +88,17 @@ export function VideoIdentitySection({ lang }: { lang: string }) {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Заполненность считает только активные видео (скрытое администрацией не засчитывается).
+  useEffect(() => {
+    if (!bundle || !onSummary) return;
+    const active = bundle.items.filter((i) => i.status === "active");
+    onSummary({
+      hasIntro: active.some((i) => i.kind === "intro"),
+      hasMoment: active.some((i) => i.kind === "moment"),
+      latestAt: bundle.latestAt,
+    });
+  }, [bundle, onSummary]);
+
   // Ссылки живут 10 минут: обновляем список, пока вкладка открыта.
   useEffect(() => {
     const id = setInterval(() => { if (document.visibilityState === "visible") void load(); }, 8 * 60 * 1000);
@@ -105,7 +119,7 @@ export function VideoIdentitySection({ lang }: { lang: string }) {
   const scope = bundle?.scope ?? "engaged";
   const playerLabels = { play: c.play, pause: c.pause, mute: c.mute, unmute: c.unmute, fullscreen: c.fullscreen, watermark: c.watermark };
 
-  const setVisibility = async (nextScope: "engaged" | "hidden" | null, nextConsent: boolean | null) => {
+  const setVisibility = async (nextScope: "catalog" | "engaged" | "hidden" | null, nextConsent: boolean | null) => {
     setBusy("visibility");
     const res = await setMyVideoVisibility(nextScope, nextConsent);
     setBusy(null);
@@ -149,7 +163,7 @@ export function VideoIdentitySection({ lang }: { lang: string }) {
   const latest = bundle?.latestAt ? new Date(bundle.latestAt).toLocaleDateString(lang === "RU" ? "ru-RU" : lang === "ES" ? "es-ES" : lang === "PT" ? "pt-PT" : "en-GB", { day: "numeric", month: "long" }) : null;
 
   return (
-    <section className="mb-10" aria-labelledby="video-identity-title">
+    <section id="video-identity" className="mb-10 scroll-mt-24" aria-labelledby="video-identity-title">
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <Clapperboard className="h-4 w-4 text-[#c9a961]" />
         <h2 id="video-identity-title" className="text-[11px] font-semibold uppercase tracking-[0.25em] text-zinc-300">{c.title}</h2>
@@ -255,10 +269,10 @@ export function VideoIdentitySection({ lang }: { lang: string }) {
               {consent && (
                 <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/30 p-4">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{c.scopeTitle}</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={c.scopeTitle}>
-                    {([["engaged", c.scopeEngaged, c.scopeEngagedHint], ["hidden", c.scopeHidden, c.scopeHiddenHint]] as const).map(([value, title, hint]) => (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label={c.scopeTitle}>
+                    {([["catalog", c.scopeCatalog, c.scopeCatalogHint], ["engaged", c.scopeEngaged, c.scopeEngagedHint], ["hidden", c.scopeHidden, c.scopeHiddenHint]] as const).map(([value, title, hint]) => (
                       <button key={value} type="button" role="radio" aria-checked={scope === value} disabled={busy === "visibility"} onClick={() => void setVisibility(value, null)} className={`rounded-xl border px-3 py-2.5 text-left transition ${scope === value ? "border-[#c9a961]/50 bg-[#c9a961]/10" : "border-zinc-800 hover:border-zinc-600"}`}>
-                        <span className="flex items-center gap-1.5 text-xs text-zinc-100">{value === "hidden" ? <Lock size={12} /> : <ShieldCheck size={12} />} {title}</span>
+                        <span className="flex items-center gap-1.5 text-xs text-zinc-100">{value === "hidden" ? <Lock size={12} /> : value === "catalog" ? <Sparkles size={12} /> : <ShieldCheck size={12} />} {title}</span>
                         <span className="mt-0.5 block text-[10.5px] text-zinc-500">{hint}</span>
                       </button>
                     ))}

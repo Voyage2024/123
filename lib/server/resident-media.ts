@@ -84,7 +84,7 @@ export async function bundleFromRpc(residentId: string, data: unknown): Promise<
       src: typeof it.storage_path === "string" ? signed.get(it.storage_path) ?? null : null,
       poster: typeof it.poster_path === "string" ? signed.get(it.poster_path) ?? null : null,
     }));
-  const access = d.access === "self" || d.access === "staff" || d.access === "casting" || d.access === "tour" ? d.access : null;
+  const access = d.access === "self" || d.access === "staff" || d.access === "casting" || d.access === "tour" || d.access === "catalog" ? d.access : null;
   if (!access) return null;
   const scope: VideoScope = d.scope === "hidden" || d.scope === "catalog" ? d.scope : "engaged";
   return {

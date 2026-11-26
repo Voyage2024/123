@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Volume2, VolumeX, X } from "lucide-react";
 import { mediaCopy, type MediaItem, type MomentTopic } from "@/lib/resident-media";
+import { WatermarkLayer } from "@/app/components/media/WatermarkLayer";
 
 export function MomentStoryViewer({
   items,
@@ -19,12 +20,15 @@ export function MomentStoryViewer({
   lang,
   title,
   onClose,
+  watermark = null,
 }: {
   items: MediaItem[];
   start: number;
   lang: string;
   title?: string | null;
   onClose: () => void;
+  /** Каталог (этап 2): именной водяной знак менеджера. */
+  watermark?: string | null;
 }) {
   const c = mediaCopy(lang);
   const [index, setIndex] = useState(Math.max(0, Math.min(start, items.length - 1)));
@@ -121,6 +125,7 @@ export function MomentStoryViewer({
             <div className="flex h-full items-center justify-center text-xs text-zinc-500">{c.failed}</div>
           )}
           <span aria-hidden className="pointer-events-none absolute bottom-[12%] left-1/2 -translate-x-1/2 select-none text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">{c.watermark}</span>
+          <WatermarkLayer text={watermark} />
         </div>
       </div>
       <p className="pb-5 text-center text-[10px] text-zinc-600">{index + 1} / {items.length}</p>

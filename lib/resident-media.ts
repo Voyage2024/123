@@ -38,7 +38,7 @@ export const EXT_BY_MIME: Record<VideoMime, "mp4" | "mov" | "webm"> = {
 export type MediaKind = "intro" | "moment";
 export type MediaSource = "in_app_camera" | "upload";
 export type VideoScope = "engaged" | "hidden" | "catalog";
-export type MediaContext = "casting" | "tour" | "admin";
+export type MediaContext = "casting" | "tour" | "admin" | "catalog";
 
 export const MOMENT_TOPICS = ["hello", "language", "travel", "style", "talent", "today"] as const;
 export type MomentTopic = (typeof MOMENT_TOPICS)[number];
@@ -71,7 +71,7 @@ export type MediaItem = {
 };
 
 export type MediaBundle = {
-  access: "self" | "staff" | "casting" | "tour";
+  access: "self" | "staff" | "casting" | "tour" | "catalog";
   scope: VideoScope;
   consent: boolean;
   latestAt: string | null;
@@ -172,6 +172,8 @@ type Copy = {
   scopeEngagedHint: string;
   scopeHidden: string;
   scopeHiddenHint: string;
+  scopeCatalog: string;
+  scopeCatalogHint: string;
   hiddenByStaff: string;
   hiddenReason: string;
   freshness: (d: string) => string;
@@ -184,6 +186,7 @@ type Copy = {
   viewsContextCasting: string;
   viewsContextTour: string;
   viewsContextAdmin: string;
+  viewsContextCatalog: string;
   value: [string, string][];
   privacy: string;
   topic: string;
@@ -250,6 +253,8 @@ export const MEDIA_COPY: Record<MediaLang, Copy> = {
     scopeEngagedHint: "Кастинги с моим откликом и мои туры",
     scopeHidden: "Только я",
     scopeHiddenHint: "Видео скрыто от менеджеров",
+    scopeCatalog: "Всем менеджерам каталога",
+    scopeCatalogHint: "Проверенные менеджеры с доступом к каталогу, когда ваша анкета в каталоге",
     hiddenByStaff: "Скрыто администрацией",
     hiddenReason: "Причина",
     freshness: (d) => `Обновлено ${d}`,
@@ -262,6 +267,7 @@ export const MEDIA_COPY: Record<MediaLang, Copy> = {
     viewsContextCasting: "кастинг",
     viewsContextTour: "тур",
     viewsContextAdmin: "проверка",
+    viewsContextCatalog: "каталог",
     value: [
       ["Вас выбирают быстрее", "Менеджер слышит голос и языки, не дожидаясь звонка."],
       ["Всегда актуально", "Моменты показывают вас сегодняшнюю."],
@@ -337,6 +343,8 @@ export const MEDIA_COPY: Record<MediaLang, Copy> = {
     scopeEngagedHint: "Castings I applied to and my tours",
     scopeHidden: "Only me",
     scopeHiddenHint: "Video is hidden from managers",
+    scopeCatalog: "All catalog managers",
+    scopeCatalogHint: "Verified managers with catalog access, while your profile is in the catalog",
     hiddenByStaff: "Hidden by VOYAGE team",
     hiddenReason: "Reason",
     freshness: (d) => `Updated ${d}`,
@@ -349,6 +357,7 @@ export const MEDIA_COPY: Record<MediaLang, Copy> = {
     viewsContextCasting: "casting",
     viewsContextTour: "tour",
     viewsContextAdmin: "review",
+    viewsContextCatalog: "catalog",
     value: [
       ["Get picked faster", "Managers hear your voice and languages before any call."],
       ["Always current", "Moments show you as you are today."],
@@ -424,6 +433,8 @@ export const MEDIA_COPY: Record<MediaLang, Copy> = {
     scopeEngagedHint: "Castings con mi postulación y mis tours",
     scopeHidden: "Solo yo",
     scopeHiddenHint: "El vídeo está oculto a los managers",
+    scopeCatalog: "Todos los managers del catálogo",
+    scopeCatalogHint: "Managers verificados con acceso al catálogo, mientras tu perfil esté en el catálogo",
     hiddenByStaff: "Ocultado por el equipo VOYAGE",
     hiddenReason: "Motivo",
     freshness: (d) => `Actualizado ${d}`,
@@ -436,6 +447,7 @@ export const MEDIA_COPY: Record<MediaLang, Copy> = {
     viewsContextCasting: "casting",
     viewsContextTour: "tour",
     viewsContextAdmin: "revisión",
+    viewsContextCatalog: "catálogo",
     value: [
       ["Te eligen antes", "El manager oye tu voz e idiomas antes de cualquier llamada."],
       ["Siempre al día", "Los momentos te muestran como eres hoy."],
@@ -511,6 +523,8 @@ export const MEDIA_COPY: Record<MediaLang, Copy> = {
     scopeEngagedHint: "Castings em que me candidatei e meus tours",
     scopeHidden: "Só eu",
     scopeHiddenHint: "O vídeo está oculto para managers",
+    scopeCatalog: "Todos os managers do catálogo",
+    scopeCatalogHint: "Managers verificados com acesso ao catálogo, enquanto o seu perfil estiver no catálogo",
     hiddenByStaff: "Ocultado pela equipe VOYAGE",
     hiddenReason: "Motivo",
     freshness: (d) => `Atualizado ${d}`,
@@ -523,6 +537,7 @@ export const MEDIA_COPY: Record<MediaLang, Copy> = {
     viewsContextCasting: "casting",
     viewsContextTour: "tour",
     viewsContextAdmin: "revisão",
+    viewsContextCatalog: "catálogo",
     value: [
       ["Escolhida mais rápido", "O manager ouve sua voz e idiomas antes de qualquer ligação."],
       ["Sempre atual", "Os momentos mostram você como é hoje."],

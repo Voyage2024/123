@@ -5,7 +5,7 @@
  * администрацией, модерация.
  * app/actions/resident-media-view.ts
  *
- *   getResidentMediaForViewer  видео для менеджера кастинга/тура или
+ *   getResidentMediaForViewer  видео для менеджера кастинга/тура/каталога или
  *                              owner/admin; право решает RPC
  *                              voyage_resident_media_for_viewer (сессия
  *                              пользователя), она же пишет журнал
@@ -28,7 +28,8 @@ type Fail = { ok: false; reason: MediaFailure };
 export type ViewerMediaResult = { ok: true; bundle: MediaBundle } | Fail;
 
 function validContext(context: unknown, contextId: unknown): context is MediaContext {
-  if (context !== "casting" && context !== "tour" && context !== "admin") return false;
+  if (context !== "casting" && context !== "tour" && context !== "admin" && context !== "catalog") return false;
+  if (context === "catalog") return contextId === null;
   if (context === "casting") return typeof contextId === "string" && UUID_RE.test(contextId);
   return contextId === null || (typeof contextId === "string" && UUID_RE.test(contextId));
 }

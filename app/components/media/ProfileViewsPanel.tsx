@@ -15,7 +15,7 @@ function when(at: string, lang: string) {
 export function ProfileViewsPanel({ views, lang }: { views: ProfileViews | null; lang: string }) {
   const c = mediaCopy(lang);
   const items = views?.items ?? [];
-  const ctx = (k: string) => (k === "tour" ? c.viewsContextTour : k === "admin" ? c.viewsContextAdmin : c.viewsContextCasting);
+  const ctx = (k: string) => (k === "tour" ? c.viewsContextTour : k === "admin" ? c.viewsContextAdmin : k === "catalog" ? c.viewsContextCatalog : c.viewsContextCasting);
   return (
     <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/30 p-4">
       <div className="flex items-center justify-between gap-2">

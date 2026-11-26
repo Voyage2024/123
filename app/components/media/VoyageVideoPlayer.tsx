@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, Pause, Play, Volume2, VolumeX } from "lucide-react";
+import { WatermarkLayer } from "@/app/components/media/WatermarkLayer";
 import { formatDuration } from "@/lib/resident-media";
 
 type Labels = { play: string; pause: string; mute: string; unmute: string; fullscreen: string; watermark: string };
@@ -27,6 +28,7 @@ export function VoyageVideoPlayer({
   loop = false,
   onEnded,
   aspect = "aspect-[9/16]",
+  watermark = null,
 }: {
   src: string;
   poster?: string | null;
@@ -37,6 +39,8 @@ export function VoyageVideoPlayer({
   loop?: boolean;
   onEnded?: () => void;
   aspect?: string;
+  /** Каталог (этап 2): именной водяной знак поверх видео. Без него — как в этапе 1. */
+  watermark?: string | null;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -71,10 +75,17 @@ export function VoyageVideoPlayer({
     poke();
   };
 
+  const [canWrapFullscreen, setCanWrapFullscreen] = useState(false);
+  useEffect(() => { setCanWrapFullscreen(typeof document !== "undefined" && !!document.fullscreenEnabled); }, []);
+
   const fullscreen = () => {
     const v = ref.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
     const el = wrap.current;
     if (!v || !el) return;
+    if (watermark) {
+      if (el.requestFullscreen) void el.requestFullscreen().catch(() => undefined);
+      return;
+    }
     if (el.requestFullscreen) void el.requestFullscreen().catch(() => v.webkitEnterFullscreen?.());
     else v.webkitEnterFullscreen?.(); // iPhone Safari
   };
@@ -117,6 +128,8 @@ export function VoyageVideoPlayer({
         onEnded={() => { setPlaying(false); setChrome(true); onEnded?.(); }}
       />
 
+      <WatermarkLayer text={watermark} />
+
       <span aria-hidden className="pointer-events-none absolute left-3 top-3 select-none text-[9px] font-semibold uppercase tracking-[0.3em] text-white/35 mix-blend-overlay">
         {labels.watermark}
       </span>
@@ -144,9 +157,13 @@ export function VoyageVideoPlayer({
           <button type="button" onClick={toggleMute} aria-label={muted ? labels.unmute : labels.mute} className="rounded-full p-1.5 hover:bg-white/10">
             {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
           </button>
-          <button type="button" onClick={fullscreen} aria-label={labels.fullscreen} className="rounded-full p-1.5 hover:bg-white/10">
-            <Maximize2 size={14} />
-          </button>
+          {/* С водяным знаком — только полноэкранный режим всего плеера: системный
+              плеер iPhone показал бы видео без знака. */}
+          {(!watermark || canWrapFullscreen) && (
+            <button type="button" onClick={fullscreen} aria-label={labels.fullscreen} className="rounded-full p-1.5 hover:bg-white/10">
+              <Maximize2 size={14} />
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -8,6 +8,8 @@
  * (voyage_media_access). Нет права, нет согласия, видео скрыто или его
  * нет — показывается одна спокойная строка, без подробностей.
  * Открытие анкеты отмечается в «Кто смотрел» (recordResidentProfileView).
+ * Этап 2: контекст catalog — анкету отмечает сама RPC карточки каталога,
+ * поэтому recordView там выключен; watermark — именной знак менеджера.
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useEffect, useState } from "react";
@@ -25,13 +27,15 @@ export function ResidentVideoViewer({
   lang,
   title,
   recordView = true,
+  watermark = null,
 }: {
   residentId: string;
-  context: "casting" | "tour";
+  context: "casting" | "tour" | "catalog";
   contextId: string | null;
   lang: string;
   title?: string | null;
   recordView?: boolean;
+  watermark?: string | null;
 }) {
   const c = mediaCopy(lang);
   const [state, setState] = useState<{ key: string; bundle: MediaBundle | null } | null>(null);
@@ -41,7 +45,7 @@ export function ResidentVideoViewer({
   useEffect(() => {
     let alive = true;
     setStory(null);
-    if (recordView) void recordResidentProfileView(residentId, context, contextId);
+    if (recordView && context !== "catalog") void recordResidentProfileView(residentId, context, contextId);
     void getResidentMediaForViewer(residentId, context, contextId).then((res) => {
       if (alive) setState({ key, bundle: res.ok ? res.bundle : null });
     });
@@ -50,8 +54,8 @@ export function ResidentVideoViewer({
 
   const loading = !state || state.key !== key;
   const bundle = loading ? null : state.bundle;
-  const intro = bundle?.items.find((i) => i.kind === "intro" && i.src) ?? null;
-  const moments = bundle?.items.filter((i) => i.kind === "moment" && i.src) ?? [];
+  const intro = bundle?.items.find((i) => i.kind === "intro" && i.src && i.status === "active") ?? null;
+  const moments = bundle?.items.filter((i) => i.kind === "moment" && i.src && i.status === "active") ?? [];
   const labels = { play: c.play, pause: c.pause, mute: c.mute, unmute: c.unmute, fullscreen: c.fullscreen, watermark: c.watermark };
 
   return (
@@ -69,7 +73,7 @@ export function ResidentVideoViewer({
           {intro?.src && (
             <div>
               <p className="mb-1.5 text-[10px] text-zinc-500">{c.intro} · {formatDuration(intro.durationMs)}</p>
-              <VoyageVideoPlayer src={intro.src} poster={intro.poster} durationMs={intro.durationMs} labels={labels} className="mx-auto max-w-[280px]" />
+              <VoyageVideoPlayer src={intro.src} poster={intro.poster} durationMs={intro.durationMs} labels={labels} watermark={watermark} className="mx-auto max-w-[280px]" />
             </div>
           )}
           {moments.length > 0 && (
@@ -82,7 +86,7 @@ export function ResidentVideoViewer({
           )}
         </div>
       )}
-      {story !== null && moments.length > 0 && <MomentStoryViewer items={moments} start={story} lang={lang} title={title} onClose={() => setStory(null)} />}
+      {story !== null && moments.length > 0 && <MomentStoryViewer items={moments} start={story} lang={lang} title={title} watermark={watermark} onClose={() => setStory(null)} />}
     </div>
   );
 }

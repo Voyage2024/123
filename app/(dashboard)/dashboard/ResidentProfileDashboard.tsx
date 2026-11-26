@@ -72,7 +72,9 @@ import { AchievementShelf, type AchievementKey } from "@/app/components/profile/
 import { KycSection } from "@/app/components/profile/KycSection";
 import { VipAvatarMark, VipBadge, VipSeal, isKycElite } from "@/app/components/profile/VipBadge";
 import ProfileIdentityQuickEdit from "@/app/components/profile/ProfileIdentityQuickEdit";
-import VideoIdentitySection from "@/app/components/media/VideoIdentitySection";
+import VideoIdentitySection, { type VideoSummary } from "@/app/components/media/VideoIdentitySection";
+import VideoIdentityRing from "@/app/components/catalog/VideoIdentityRing";
+import MyVisibilityPanel from "@/app/components/catalog/MyVisibilityPanel";
 
 /* ──────────────────────────────────────────────────────────────────────
  * ПРИМЕЧАНИЯ ПО АРХИТЕКТУРЕ
@@ -679,6 +681,7 @@ function CircleStatusPanel({
   completion,
   kycLevel,
   loading,
+  videoRing,
 }: {
   t: Dict;
   circle: CircleConfig;
@@ -688,6 +691,7 @@ function CircleStatusPanel({
   completion: number;
   kycLevel: number;
   loading: boolean;
+  videoRing?: React.ReactNode;
 }) {
   const skin = skinFor(circle.key);
   const rank = CIRCLE_ORDER.indexOf(circle.key as CircleKey);
@@ -745,6 +749,7 @@ function CircleStatusPanel({
 
       <div className="flex flex-col gap-4 border-t border-white/[0.06] pt-4">
         <ProfileCompletionBar percentage={completion} label={t.completion} />
+        {videoRing}
 
         <div>
           <div className="flex items-baseline justify-between">
@@ -1213,6 +1218,8 @@ export default function ResidentProfilePage() {
   // блок свёрнут и у самой резидентки, цифры открываются по нажатию.
   const [pointsHidden, setPointsHidden] = useState(false);
   const [pointsRevealed, setPointsRevealed] = useState(false);
+  // этап 2: два пункта видео в заполненности (визитка + хотя бы один Moment)
+  const [videoSummary, setVideoSummary] = useState<VideoSummary | null>(null);
   useEffect(() => {
     if (!user?.id) return;
     let alive = true;
@@ -1586,7 +1593,8 @@ export default function ResidentProfilePage() {
   };
 
   // ── Прогресс заполнения ─────────────────────────────────────────────
-  // 100% только если: все поля заполнены, ≥3 фото портфолио и kyc_level === 3
+  // 100% только если: все поля заполнены, ≥3 фото портфолио, kyc_level === 3,
+  // есть визитка и хотя бы один Moment (этап 2, решение D5: 16 пунктов вместо 14)
   const completion = useMemo(() => {
     if (!profile) return 0;
     const textFields = [
@@ -1603,8 +1611,10 @@ export default function ResidentProfilePage() {
     done += 2 - missingSizes(profile).length; // размеры одежды и обуви — до 2
     done += Math.min((profile.photo_urls ?? []).length, 3); // до 3
     done += profile.kyc_level >= 3 ? 1 : 0; // до 1
-    return Math.round((done / 14) * 100);
-  }, [profile, displayName]);
+    done += videoSummary?.hasIntro ? 1 : 0; // визитка — до 1
+    done += videoSummary?.hasMoment ? 1 : 0; // хотя бы один Moment — до 1
+    return Math.round((done / 16) * 100);
+  }, [profile, displayName, videoSummary]);
 
   // ── Состояния загрузки / отсутствия пользователя ────────────────────
   if (!user && !loading) {
@@ -1751,6 +1761,7 @@ export default function ResidentProfilePage() {
                 completion={completion}
                 kycLevel={profile.kyc_level}
                 loading={standing.loading}
+                videoRing={<VideoIdentityRing summary={videoSummary} lang={lang} />}
               />
             )}
           </div>
@@ -2091,7 +2102,10 @@ export default function ResidentProfilePage() {
         </section>
 
         {/* ── Video Identity (Визитка + Moments, этап 1) ─────────── */}
-        <VideoIdentitySection lang={lang} />
+        <VideoIdentitySection lang={lang} onSummary={setVideoSummary} />
+
+        {/* ── Моя видимость (каталог, этап 2) ────────────────────── */}
+        <MyVisibilityPanel lang={lang} />
 
         {/* ── Visual Portfolio ───────────────────────────────────── */}
         <section className="mb-10">
