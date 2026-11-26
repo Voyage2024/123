@@ -1,0 +1,5 @@
+== tsc --noEmit
+tsc exit: 0
+== next build
+build exit: 0
+success markers: 3

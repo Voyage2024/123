@@ -1,0 +1,39 @@
+── 1. KYC-запрос нельзя закрыть из общего списка «Консьержа» ──
+PASS  резидентка отправила запрос (настоящий createConciergeRequest)
+PASS  admin: «Выполнено» (updateConciergeRequest done) → отказ
+PASS  admin: «Невозможно» (updateConciergeRequest impossible) → отказ
+PASS  admin: ответ со статусом done → отказ
+PASS  admin: ответ со статусом impossible → отказ
+PASS  owner: «Выполнено» (updateConciergeRequest done) → отказ
+PASS  owner: «Невозможно» (updateConciergeRequest impossible) → отказ
+PASS  owner: ответ со статусом done → отказ
+PASS  owner: ответ со статусом impossible → отказ
+PASS  менеджер: «Выполнено» (updateConciergeRequest done) → отказ
+PASS  менеджер: «Невозможно» (updateConciergeRequest impossible) → отказ
+PASS  менеджер: ответ со статусом done → отказ
+PASS  менеджер: ответ со статусом impossible → отказ
+PASS  …запрос открыт, профиль и журнал не тронуты, сообщений от персонала нет
+PASS  переписка разрешена: ответ без смены статуса → ok, open → in_progress
+PASS  ответ ушёл резидентке в Telegram
+PASS  in_progress → open через общий список → отказ
+PASS  in_progress → in_progress (тот же статус) → ok
+── 2. Карточка резидентки: Approve & Apply закрывает запрос через тот же «Консьерж» ──
+PASS  Approve & Apply → ok, уведомление доставлено
+PASS  данные применены, одна запись журнала, запрос done
+PASS  резидентке: сообщение в переписке и Telegram
+PASS  после закрытия: переоткрыть из общего списка нельзя
+PASS  …и перевести в «Невозможно» тоже нельзя
+PASS  …написать резидентке можно (статус остаётся done)
+── 3. Reject из карточки ──
+PASS  Reject → ok, запрос impossible, уведомление доставлено
+PASS  профиль не изменён, журнал не вырос
+PASS  переоткрыть отклонённый из общего списка нельзя
+── 4. Обычные заявки консьержу работают как раньше ──
+PASS  обычная заявка: ответ → in_progress
+PASS  обычная заявка: менеджер закрывает «Выполнено»
+PASS  обычная заявка: переоткрыть через статус → ok
+PASS  обычная заявка: «Невозможно» с обратной связью → ok
+PASS  заявка KYC 3 (не «[Данные KYC]») закрывается как раньше
+PASS  без прав (резидентка) → forbidden, как раньше
+PASS  статусы и CHECK не менялись
+ИТОГО: PASS 34 · FAIL 0
