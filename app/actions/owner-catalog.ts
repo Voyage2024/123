@@ -30,7 +30,8 @@ export type OwnerCatalogManager = {
 
 export type OwnerCatalogOverview = {
   canManage: boolean;
-  settings: { enabled: boolean; defaultOpenLimit: number; defaultInviteLimit: number; updatedAt: string };
+  /** present=false: в базе нет строки общего выключателя (каталог для всех выключен) */
+  settings: { present: boolean; enabled: boolean; defaultOpenLimit: number; defaultInviteLimit: number; updatedAt: string };
   residents: { optedIn: number; listed: number; paused: number; videoCatalog: number };
   invites7d: number;
   managers: OwnerCatalogManager[];
@@ -44,7 +45,7 @@ function parseOverview(data: unknown): OwnerCatalogOverview {
   const rs = rec(d.residents);
   return {
     canManage: d.can_manage === true,
-    settings: { enabled: st.enabled === true, defaultOpenLimit: Number(st.default_open_limit) || 200, defaultInviteLimit: Number(st.default_invite_limit) || 30, updatedAt: s(st.updated_at) },
+    settings: { present: st.present === true || (st.present === undefined && typeof st.enabled === "boolean"), enabled: st.enabled === true, defaultOpenLimit: Number(st.default_open_limit) || 200, defaultInviteLimit: Number(st.default_invite_limit) || 30, updatedAt: s(st.updated_at) },
     residents: { optedIn: Number(rs.opted_in) || 0, listed: Number(rs.listed) || 0, paused: Number(rs.paused) || 0, videoCatalog: Number(rs.video_catalog) || 0 },
     invites7d: Number(d.invites_7d) || 0,
     managers: (Array.isArray(d.managers) ? d.managers : []).map(rec).map((m) => {
@@ -88,7 +89,12 @@ export async function ownerSetCatalogAccess(input: {
     p_expires_at: exp ? exp.toISOString() : null, p_reason: input.reason.trim(),
   });
   if (error) return fail(catalogFailureOf(error));
-  return { ok: true, overview: parseOverview(data) };
+  const overview = parseOverview(data);
+  // успех — только если база вернула именно то состояние доступа, которое просили
+  const row = overview.managers.find((m) => m.id === input.managerId);
+  const got = row?.access?.status ?? "none";
+  if (row && got !== input.status) return fail("not_saved");
+  return { ok: true, overview };
 }
 
 export async function ownerSetCatalogSettings(input: {
@@ -102,7 +108,13 @@ export async function ownerSetCatalogSettings(input: {
     p_enabled: typeof input.enabled === "boolean" ? input.enabled : null, p_open_limit: o, p_invite_limit: i, p_reason: input.reason.trim(),
   });
   if (error) return fail(catalogFailureOf(error));
-  return { ok: true, overview: parseOverview(data) };
+  const overview = parseOverview(data);
+  // успех — только если база вернула включённое/выключенное состояние, о котором просили
+  if (!overview.settings.present
+      || (typeof input.enabled === "boolean" && overview.settings.enabled !== input.enabled)
+      || (o !== null && overview.settings.defaultOpenLimit !== o)
+      || (i !== null && overview.settings.defaultInviteLimit !== i)) return fail("not_saved");
+  return { ok: true, overview };
 }
 
 export type StaffCatalogStatus = {

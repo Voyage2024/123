@@ -140,7 +140,7 @@ export type CatalogFailure =
   | CatalogReason | "unavailable" | "limit_opens" | "limit_invites" | "invalid" | "message_contacts"
   | "not_your_casting" | "casting_closed" | "invites_blocked" | "invite_pending" | "invite_cooldown"
   | "already_in_casting" | "casting_requirements" | "busy" | "shortlist_limit" | "shortlist_full"
-  | "not_found" | "preview_required" | "invite_closed" | "forbidden" | "manager_not_eligible" | "schema" | "failed";
+  | "not_found" | "preview_required" | "invite_closed" | "forbidden" | "manager_not_eligible" | "not_saved" | "schema" | "failed";
 
 /* ── разбор ────────────────────────────────────────────────────────── */
 
@@ -295,7 +295,7 @@ export function catalogFailureOf(error: { code?: string | null; message?: string
     "not_authenticated", "not_manager", "not_approved", "catalog_disabled", "no_access", "suspended", "expired",
     "unavailable", "message_contacts", "not_your_casting", "casting_closed", "invites_blocked", "invite_pending",
     "invite_cooldown", "already_in_casting", "casting_requirements", "busy", "shortlist_limit", "shortlist_full",
-    "not_found", "preview_required", "invite_closed", "forbidden", "manager_not_eligible",
+    "not_found", "preview_required", "invite_closed", "forbidden", "manager_not_eligible", "not_saved",
   ];
   if (m && known.includes(m[1] as CatalogFailure)) return m[1] as CatalogFailure;
   if (m && m[1] === "invalid_arguments") return "invalid";
@@ -495,6 +495,8 @@ type Copy = {
   ownEnable: string;
   ownDisable: string;
   ownLawyer: string;
+  ownSettingsMissing: string;
+  ownReasonRequired: string; ownSaveLimits: string; ownLimitsSaved: string; ownSwitchHint: string; ownLimitsHint: string;
   ownDefaults: string;
   ownOpens: string;
   ownInvites: string;
@@ -542,6 +544,7 @@ const RU: Copy = {
     not_found: "Не найдено.", preview_required: "Сначала посмотрите, как вас видит менеджер.", invite_closed: "Приглашение уже закрыто.",
     forbidden: "Недостаточно прав.", manager_not_eligible: "Этот менеджер не одобрен или заблокирован.",
     schema: "Каталог ещё не установлен в базе.", failed: "Не получилось. Попробуйте ещё раз.",
+    not_saved: "База не подтвердила изменение — ничего не изменилось. Запустите диагностику CATALOG_ENABLE_DIAG.sql.",
   },
   years: (n) => `${n} ${n % 10 === 1 && n % 100 !== 11 ? "год" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "года" : "лет"}`,
   cm: "см", kg: "кг", busy: "Занята", free: "Свободна", loading: "Загрузка…", retry: "Повторить", close: "Закрыть",
@@ -609,6 +612,9 @@ const RU: Copy = {
   ownSubtitle: "Кто из менеджеров видит каталог, их лимиты и события. Доступ выдаётся явно и только одобренным менеджерам.",
   ownEnabled: "Каталог включён для менеджеров", ownDisabled: "Каталог выключен для менеджеров",
   ownEnable: "Включить каталог", ownDisable: "Выключить каталог",
+  ownSettingsMissing: "В базе нет строки общего выключателя каталога, включение не сработает. Запустите CATALOG_ENABLE_DIAG.sql.",
+  ownReasonRequired: "Сначала напишите причину (от 3 символов) — она попадёт в журнал.", ownSaveLimits: "Сохранить лимиты", ownLimitsSaved: "Лимиты по умолчанию сохранены",
+  ownSwitchHint: "Причина обязательна для включения и выключения.", ownLimitsHint: "Эта кнопка меняет только лимиты и не включает каталог.",
   ownLawyer: "Решение D5: включать после проверки юристом. Резидентки могут готовить анкеты заранее.",
   ownDefaults: "Лимиты по умолчанию в сутки", ownOpens: "Открытий анкет", ownInvites: "Приглашений",
   ownReason: "Причина", ownReasonHint: "Пишется в журнал (от 3 символов).", ownSave: "Сохранить", ownEdit: "Настроить доступ",
@@ -640,6 +646,7 @@ const EN: Copy = {
     not_found: "Not found.", preview_required: "First see how managers will see you.", invite_closed: "This invite is already closed.",
     forbidden: "Not allowed.", manager_not_eligible: "This manager isn't approved or is blocked.",
     schema: "The catalog isn't installed in the database yet.", failed: "Something went wrong. Please try again.",
+    not_saved: "The database did not confirm the change — nothing was changed. Run CATALOG_ENABLE_DIAG.sql.",
   },
   years: (n) => `${n} y.o.`,
   cm: "cm", kg: "kg", busy: "Busy", free: "Available", loading: "Loading…", retry: "Retry", close: "Close",
@@ -707,6 +714,9 @@ const EN: Copy = {
   ownSubtitle: "Which managers see the catalog, their limits and events. Access is granted explicitly and only to approved managers.",
   ownEnabled: "Catalog is on for managers", ownDisabled: "Catalog is off for managers",
   ownEnable: "Switch catalog on", ownDisable: "Switch catalog off",
+  ownSettingsMissing: "The catalog master switch row is missing in the database, so enabling will not work. Run CATALOG_ENABLE_DIAG.sql.",
+  ownReasonRequired: "Write a reason first (3+ characters) — it goes to the log.", ownSaveLimits: "Save limits", ownLimitsSaved: "Default limits saved",
+  ownSwitchHint: "A reason is required to switch the catalog on or off.", ownLimitsHint: "This button only changes limits and does not switch the catalog on.",
   ownLawyer: "Decision D5: switch on after the legal review. Residents can prepare their profiles in advance.",
   ownDefaults: "Default daily limits", ownOpens: "Profile opens", ownInvites: "Invites",
   ownReason: "Reason", ownReasonHint: "Saved to the log (3+ characters).", ownSave: "Save", ownEdit: "Manage access",
@@ -740,6 +750,7 @@ const ES: Copy = {
     not_found: "No encontrado.", preview_required: "Primero mira cómo te ven los managers.", invite_closed: "La invitación ya está cerrada.",
     forbidden: "No permitido.", manager_not_eligible: "Este manager no está aprobado o está bloqueado.",
     schema: "El catálogo aún no está instalado en la base de datos.", failed: "Algo salió mal. Inténtalo de nuevo.",
+    not_saved: "La base de datos no confirmó el cambio: no se cambió nada. Ejecuta CATALOG_ENABLE_DIAG.sql.",
   },
   years: (n) => `${n} años`,
   busy: "Ocupada", free: "Disponible", loading: "Cargando…", retry: "Reintentar", close: "Cerrar",
@@ -807,6 +818,9 @@ const ES: Copy = {
   ownSubtitle: "Qué managers ven el catálogo, sus límites y eventos. El acceso se concede de forma explícita y solo a managers aprobados.",
   ownEnabled: "Catálogo activado para managers", ownDisabled: "Catálogo desactivado para managers",
   ownEnable: "Activar catálogo", ownDisable: "Desactivar catálogo",
+  ownSettingsMissing: "Falta en la base la fila del interruptor general del catálogo; activarlo no funcionará. Ejecuta CATALOG_ENABLE_DIAG.sql.",
+  ownReasonRequired: "Primero escribe un motivo (3+ caracteres): se guarda en el registro.", ownSaveLimits: "Guardar límites", ownLimitsSaved: "Límites por defecto guardados",
+  ownSwitchHint: "El motivo es obligatorio para activar o desactivar el catálogo.", ownLimitsHint: "Este botón solo cambia los límites y no activa el catálogo.",
   ownLawyer: "Decisión D5: activar tras la revisión legal. Las residentes pueden preparar sus perfiles antes.",
   ownDefaults: "Límites diarios por defecto", ownOpens: "Perfiles abiertos", ownInvites: "Invitaciones",
   ownReason: "Motivo", ownReasonHint: "Se guarda en el registro (3+ caracteres).", ownSave: "Guardar", ownEdit: "Gestionar acceso",
@@ -840,6 +854,7 @@ const PT: Copy = {
     not_found: "Não encontrado.", preview_required: "Veja primeiro como os managers a veem.", invite_closed: "O convite já está fechado.",
     forbidden: "Não permitido.", manager_not_eligible: "Este manager não está aprovado ou está bloqueado.",
     schema: "O catálogo ainda não está instalado na base de dados.", failed: "Algo correu mal. Tente de novo.",
+    not_saved: "A base de dados não confirmou a alteração: nada mudou. Execute CATALOG_ENABLE_DIAG.sql.",
   },
   years: (n) => `${n} anos`,
   busy: "Ocupada", free: "Disponível", loading: "A carregar…", retry: "Tentar de novo", close: "Fechar",
@@ -907,6 +922,9 @@ const PT: Copy = {
   ownSubtitle: "Que managers veem o catálogo, os seus limites e eventos. O acesso é dado de forma explícita e só a managers aprovados.",
   ownEnabled: "Catálogo ligado para managers", ownDisabled: "Catálogo desligado para managers",
   ownEnable: "Ligar catálogo", ownDisable: "Desligar catálogo",
+  ownSettingsMissing: "Falta na base a linha do interruptor geral do catálogo; ligar não vai funcionar. Execute CATALOG_ENABLE_DIAG.sql.",
+  ownReasonRequired: "Escreva primeiro um motivo (3+ caracteres): fica no registo.", ownSaveLimits: "Guardar limites", ownLimitsSaved: "Limites por defeito guardados",
+  ownSwitchHint: "O motivo é obrigatório para ligar ou desligar o catálogo.", ownLimitsHint: "Este botão só altera os limites e não liga o catálogo.",
   ownLawyer: "Decisão D5: ligar após a revisão jurídica. As residentes podem preparar os perfis antes.",
   ownDefaults: "Limites diários por defeito", ownOpens: "Perfis abertos", ownInvites: "Convites",
   ownReason: "Motivo", ownReasonHint: "Fica no registo (3+ caracteres).", ownSave: "Guardar", ownEdit: "Gerir acesso",

@@ -10,7 +10,7 @@
  * Все изменения проверяет база: voyage_owner_catalog_* только для owner.
  * ──────────────────────────────────────────────────────────────────── */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Power, ShieldCheck } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { PageHeader, PageShell, Panel } from "@/app/(dashboard)/partner/_components/PartnerUI";
@@ -78,7 +78,7 @@ export default function OwnerCatalogControl() {
                   <ul className="mt-3 space-y-1 text-xs text-zinc-400">
                     {ov.accessEvents.map((e, i) => (
                       <li key={i}>
-                        {fmtAt(e.at, lang)} · {e.manager || "—"} · {e.enabled !== null ? (e.enabled ? c.ownEnabled : c.ownDisabled) : e.status ? (c.ownAccess as Record<string, string>)[e.status] ?? e.status : e.action}
+                        {fmtAt(e.at, lang)} · {e.manager || "—"} · {e.enabled !== null ? (e.enabled ? c.ownEnabled : c.ownDisabled) : e.status ? (c.ownAccess as Record<string, string>)[e.status] ?? e.status : e.action === "catalog.settings" ? c.ownLimitsSaved : e.action}
                         {e.reason ? <span className="text-zinc-600"> — {e.reason}</span> : null}
                       </li>
                     ))}
@@ -97,41 +97,68 @@ function SettingsPanel({ c, ov, onSaved }: { c: CatalogCopy; ov: OwnerCatalogOve
   const [opens, setOpens] = useState(String(ov.settings.defaultOpenLimit));
   const [invites, setInvites] = useState(String(ov.settings.defaultInviteLimit));
   const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"switch" | "limits" | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const save = async (enabled: boolean | null) => {
-    setBusy(true); setError(null);
-    const r = await ownerSetCatalogSettings({ enabled, openLimit: toInt(opens), inviteLimit: toInt(invites), reason });
-    setBusy(false);
-    if (!r.ok) { setError(c.errors[r.reason] ?? c.errors.failed); return; }
-    setReason(""); onSaved(r.overview);
-  };
+  const [done, setDone] = useState<string | null>(null);
+  const reasonRef = useRef<HTMLInputElement>(null);
   const on = ov.settings.enabled;
+  const limitsChanged = toInt(opens) !== ov.settings.defaultOpenLimit || toInt(invites) !== ov.settings.defaultInviteLimit;
+
+  // Включение/выключение — отдельная кнопка с явным enabled; «Сохранить лимиты» enabled не передаёт
+  // (раньше причина стояла рядом с «Сохранить», и это сохраняло лимиты, а каталог не включало).
+  const run = async (kind: "switch" | "limits") => {
+    setError(null); setDone(null);
+    if (reason.trim().length < 3) { setError(c.ownReasonRequired); reasonRef.current?.focus(); return; }
+    setBusy(kind);
+    const r = kind === "switch"
+      ? await ownerSetCatalogSettings({ enabled: !on, openLimit: null, inviteLimit: null, reason })
+      : await ownerSetCatalogSettings({ enabled: null, openLimit: toInt(opens), inviteLimit: toInt(invites), reason });
+    setBusy(null);
+    if (!r.ok) { setError(c.errors[r.reason] ?? c.errors.failed); return; }
+    setReason("");
+    setDone(kind === "switch" ? (r.overview.settings.enabled ? c.ownEnabled : c.ownDisabled) : c.ownLimitsSaved);
+    onSaved(r.overview);
+  };
 
   return (
     <Panel className="p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className={`inline-flex items-center gap-2 text-sm ${on ? "text-emerald-200" : "text-zinc-300"}`}>
-          <Power size={16} aria-hidden /> {on ? c.ownEnabled : c.ownDisabled}
-        </p>
-        {ov.canManage && (
-          <button type="button" className={on ? GHOST_BTN : GOLD_BTN} disabled={busy || reason.trim().length < 3} onClick={() => save(!on)}>
-            {busy && <Loader2 size={14} className="animate-spin" />} {on ? c.ownDisable : c.ownEnable}
-          </button>
-        )}
-      </div>
-      <p className="mt-2 text-xs text-amber-100/80">{c.ownLawyer}</p>
-      {ov.canManage && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_2fr_auto] sm:items-end">
-          <label className="text-xs text-zinc-400">{c.ownOpens}<input className={`${FIELD} mt-1`} inputMode="numeric" value={opens} onChange={(e) => setOpens(e.target.value)} /></label>
-          <label className="text-xs text-zinc-400">{c.ownInvites}<input className={`${FIELD} mt-1`} inputMode="numeric" value={invites} onChange={(e) => setInvites(e.target.value)} /></label>
-          <label className="text-xs text-zinc-400">{c.ownReason}<input className={`${FIELD} mt-1`} maxLength={500} value={reason} placeholder={c.ownReasonHint} onChange={(e) => setReason(e.target.value)} /></label>
-          <button type="button" className={GHOST_BTN} disabled={busy || reason.trim().length < 3} onClick={() => save(null)}>{c.ownSave}</button>
-        </div>
+      <p className={`inline-flex items-center gap-2 text-sm ${on ? "text-emerald-200" : "text-zinc-300"}`}>
+        <Power size={16} aria-hidden /> {on ? c.ownEnabled : c.ownDisabled}
+      </p>
+      {!ov.settings.present && (
+        <p role="alert" className="mt-3 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">{c.ownSettingsMissing}</p>
       )}
-      <p className="mt-2 text-[11px] text-zinc-600">{c.ownDefaults}</p>
-      {error && <p role="alert" className="mt-2 text-xs text-rose-300">{error}</p>}
+      <p className="mt-2 text-xs text-amber-100/80">{c.ownLawyer}</p>
+
+      {ov.canManage && (
+        <>
+          <label className="mt-4 block text-xs text-zinc-400">
+            {c.ownReason}
+            <input ref={reasonRef} className={`${FIELD} mt-1`} maxLength={500} value={reason} placeholder={c.ownReasonHint}
+              onChange={(e) => { setReason(e.target.value); setError(null); }} />
+          </label>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button type="button" className={on ? GHOST_BTN : GOLD_BTN} disabled={busy !== null} onClick={() => run("switch")}>
+              {busy === "switch" && <Loader2 size={14} className="animate-spin" />} {on ? c.ownDisable : c.ownEnable}
+            </button>
+            <span className="text-[11px] text-zinc-500">{c.ownSwitchHint}</span>
+          </div>
+
+          <div className="mt-5 border-t border-zinc-800/80 pt-4">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">{c.ownDefaults}</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+              <label className="text-xs text-zinc-400">{c.ownOpens}<input className={`${FIELD} mt-1`} inputMode="numeric" value={opens} onChange={(e) => setOpens(e.target.value)} /></label>
+              <label className="text-xs text-zinc-400">{c.ownInvites}<input className={`${FIELD} mt-1`} inputMode="numeric" value={invites} onChange={(e) => setInvites(e.target.value)} /></label>
+              <button type="button" className={GHOST_BTN} disabled={busy !== null || !limitsChanged} onClick={() => run("limits")}>
+                {busy === "limits" && <Loader2 size={14} className="animate-spin" />} {c.ownSaveLimits}
+              </button>
+            </div>
+            <p className="mt-2 text-[11px] text-zinc-600">{c.ownLimitsHint}</p>
+          </div>
+        </>
+      )}
+      {error && <p role="alert" className="mt-3 text-xs text-rose-300">{error}</p>}
+      {done && !error && <p role="status" className="mt-3 text-xs text-emerald-200">✓ {done}</p>}
     </Panel>
   );
 }
