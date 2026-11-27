@@ -6,13 +6,14 @@
  *
  * Все вызовы идут через RPC от имени пользователя (его сессия): доступ,
  * видимость, пауза, «скрыться от менеджера» и лимиты проверяет база на
- * каждое обращение (миграция 20261201090000). Сервисный ключ — только для
+ * каждое обращение (миграции 20261201090000, 20261203090000). Сервисный ключ — только для
  * подписи ссылок на фото и обложки, которые RPC уже вернула (lib/server/resident-catalog).
  * ──────────────────────────────────────────────────────────────────── */
 
 import { createClient } from "@/lib/supabase/server";
 import { signCard, signItems } from "@/lib/server/resident-catalog";
 import {
+  CATALOG_MATERIALS,
   CLOTHING_SIZES,
   INVITE_MESSAGE_MAX,
   catalogFailureOf,
@@ -61,7 +62,10 @@ function cleanFilters(f: CatalogFilters): Record<string, unknown> {
   if (h(f.height_max) !== null) out.height_max = h(f.height_max);
   if (typeof f.kyc_min === "number" && f.kyc_min >= 1 && f.kyc_min <= 3) out.kyc_min = Math.round(f.kyc_min);
   if (typeof f.size === "string" && (CLOTHING_SIZES as readonly string[]).includes(f.size)) out.size = f.size;
-  if (f.video === "has" || f.video === "fresh") out.video = f.video;
+  // этап A: «Материалы» и порядок; старый ключ video по-прежнему понимается базой
+  if (f.materials && f.materials !== "any" && (CATALOG_MATERIALS as readonly string[]).includes(f.materials)) out.materials = f.materials;
+  else if (f.video === "has" || f.video === "fresh") out.video = f.video;
+  if (f.sort === "new") out.sort = "new";
   if (typeof f.free_from === "string" && DATE_RE.test(f.free_from)) out.free_from = f.free_from;
   if (typeof f.free_to === "string" && DATE_RE.test(f.free_to)) out.free_to = f.free_to;
   return out;

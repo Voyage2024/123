@@ -19,7 +19,7 @@ import {
   type OwnerCatalogManager, type OwnerCatalogOverview,
 } from "@/app/actions/owner-catalog";
 import { FIELD, GHOST_BTN, GOLD_BTN } from "@/app/components/catalog/catalog-ui";
-import { catalogCopy, localeOf, type CatalogCopy } from "@/lib/resident-catalog";
+import { catalogCopy, localeOf, photoFirstCopy, type CatalogCopy } from "@/lib/resident-catalog";
 
 const fmtAt = (v: string, lang: string) => {
   const d = new Date(v);
@@ -54,6 +54,10 @@ export default function OwnerCatalogControl() {
             <Panel className="p-5">
               <p className="text-sm text-zinc-300">{c.ownResidents(ov.residents.optedIn, ov.residents.listed, ov.residents.paused, ov.residents.videoCatalog)}</p>
               <p className="mt-1 text-xs text-zinc-500">{c.ownInvites7(ov.invites7d)}</p>
+              {/* каталог 2.0, этап A (D6): включили, но не видны из-за города, роста или языка */}
+              {ov.residents.missingBasics > 0 && (
+                <p className="mt-2 text-xs text-amber-100/90">{photoFirstCopy(lang).ownMissingBasics(ov.residents.missingBasics)}</p>
+              )}
             </Panel>
             <Panel className="p-5">
               <h2 className="text-[11px] uppercase tracking-[0.25em] text-zinc-400">{c.ownManagers}</h2>

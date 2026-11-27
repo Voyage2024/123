@@ -1,8 +1,12 @@
 "use client";
 
 /* ──────────────────────────────────────────────────────────────────────
- * VOYAGE · каталог резиденток — экран менеджера (этап 2)
+ * VOYAGE · каталог резиденток — экран менеджера (этап 2 → каталог 2.0, этап A)
  * app/components/catalog/ResidentCatalog.tsx
+ *
+ * Этап A: обложка плитки — всегда главное фото портфолио (видео-постер
+ * больше не обложка), значки только положительные, порядок по
+ * актуальности анкеты, фильтр «Материалы» вместо «Видео».
  *
  * Всё, что тут видно, отдаёт база через voyage_rcat_*: доступ, пауза,
  * «скрыться от менеджера» и лимиты проверяются на каждый вызов.
@@ -23,14 +27,14 @@ import {
 } from "@/app/actions/resident-catalog";
 import { WatermarkLayer } from "@/app/components/media/WatermarkLayer";
 import { CatalogCardView } from "@/app/components/catalog/CatalogCardView";
-import { BusyLine, FIELD, FreshnessChip, GHOST_BTN, GOLD_BTN, KycChip, LanguagesLine } from "@/app/components/catalog/catalog-ui";
+import { BusyLine, FIELD, FreshnessChip, GHOST_BTN, GOLD_BTN, KycChip, LanguagesLine, VideoChip } from "@/app/components/catalog/catalog-ui";
 import {
-  CLOTHING_SIZES, INVITE_MESSAGE_MAX, catalogCopy, fmtDay, fmtRange, inviteMessageOk, pickI18n,
+  CATALOG_MATERIALS, CATALOG_SORTS, CLOTHING_SIZES, INVITE_MESSAGE_MAX, catalogCopy, fmtDay, fmtRange, inviteMessageOk, photoFirstCopy, pickI18n,
   type CatalogCard, type CatalogCopy, type CatalogFailure, type CatalogFilters, type CatalogItem, type CatalogLimits,
   type CatalogViewer, type ManagerCasting, type SentInvite, type Shortlist, type ShortlistEntry,
 } from "@/lib/resident-catalog";
 
-const EMPTY_FILTERS: CatalogFilters = { video: "any" };
+const EMPTY_FILTERS: CatalogFilters = { materials: "any", sort: "updated" };
 const errText = (c: CatalogCopy, r: CatalogFailure) => c.errors[r] ?? c.errors.failed;
 
 export default function ResidentCatalog() {
@@ -284,7 +288,8 @@ function CatalogWorkspace({ lang, c, watermark, onLimits }: {
 /* ── плитка ────────────────────────────────────────────────────────── */
 
 function Tile({ item, c, lang, watermark, onOpen }: { item: CatalogItem; c: CatalogCopy; lang: string; watermark: string; onOpen: () => void }) {
-  const cover = item.poster ?? item.photo;
+  const pf = photoFirstCopy(lang);
+  const cover = item.photo; // фото — основа анкеты: обложка одна для всех, с видео и без
   return (
     <button type="button" onClick={onOpen} aria-label={`${c.cardOpen}: ${item.name}`}
       className="group block w-full overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50 text-left transition hover:border-[#c9a961]/50">
@@ -296,7 +301,10 @@ function Tile({ item, c, lang, watermark, onOpen }: { item: CatalogItem; c: Cata
           <span className="flex h-full items-center justify-center text-zinc-700"><UserRound size={32} /></span>
         )}
         <WatermarkLayer text={watermark} />
-        <span className="absolute left-2 top-2 flex flex-wrap gap-1"><FreshnessChip value={item.freshness} c={c} /></span>
+        <span className="absolute left-2 top-2 flex flex-wrap gap-1">
+          <FreshnessChip value={item.freshness} c={c} />
+          <VideoChip show={item.videoAllowed && item.hasVideo} label={pf.badgeVideo} />
+        </span>
         {item.inShortlist && <BookmarkCheck size={16} className="absolute right-2 top-2 text-[#c9a961]" aria-label={c.shortIn} />}
         {item.invite && (
           <span className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] text-amber-100">{c.inviteStatus[item.invite.status]}</span>
@@ -307,6 +315,7 @@ function Tile({ item, c, lang, watermark, onOpen }: { item: CatalogItem; c: Cata
         <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-400">
           {item.city && <span className="truncate">{item.city}</span>}
           {item.height !== null && <span>· {item.height} {c.cm}</span>}
+          {item.photoCount > 0 && <span className="text-zinc-500">· {pf.photos(item.photoCount)}</span>}
         </p>
         <div className="flex flex-wrap items-center gap-1.5"><KycChip level={item.kycLevel} /><LanguagesLine languages={item.languages} /></div>
         <BusyLine busy={item.busy.slice(0, 2)} lang={lang} c={c} />
@@ -318,6 +327,8 @@ function Tile({ item, c, lang, watermark, onOpen }: { item: CatalogItem; c: Cata
 /* ── фильтры ───────────────────────────────────────────────────────── */
 
 function FiltersForm({ c, value, onApply, onReset }: { c: CatalogCopy; value: CatalogFilters; onApply: (f: CatalogFilters) => void; onReset: () => void }) {
+  const { lang } = useLanguage();
+  const pf = photoFirstCopy(lang);
   const [f, setF] = useState<CatalogFilters>(value);
   useEffect(() => setF(value), [value]);
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
@@ -348,9 +359,14 @@ function FiltersForm({ c, value, onApply, onReset }: { c: CatalogCopy; value: Ca
           {CLOTHING_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </label>
-      <label className="text-xs text-zinc-400">{c.fVideo}
-        <select className={`${FIELD} mt-1`} value={f.video ?? "any"} onChange={(e) => setF({ ...f, video: e.target.value as CatalogFilters["video"] })}>
-          <option value="any">{c.fVideoAny}</option><option value="has">{c.fVideoHas}</option><option value="fresh">{c.fVideoFresh}</option>
+      <label className="text-xs text-zinc-400">{pf.fMaterials}
+        <select className={`${FIELD} mt-1`} value={f.materials ?? "any"} onChange={(e) => setF({ ...f, video: undefined, materials: e.target.value as CatalogFilters["materials"] })}>
+          {CATALOG_MATERIALS.map((m) => <option key={m} value={m}>{m === "video" ? pf.fMatVideo : m === "fresh" ? pf.fMatFresh : pf.fMatAny}</option>)}
+        </select>
+      </label>
+      <label className="text-xs text-zinc-400">{pf.fSort}
+        <select className={`${FIELD} mt-1`} value={f.sort ?? "updated"} onChange={(e) => setF({ ...f, sort: e.target.value as CatalogFilters["sort"] })}>
+          {CATALOG_SORTS.map((o) => <option key={o} value={o}>{o === "new" ? pf.sortNew : pf.sortUpdated}</option>)}
         </select>
       </label>
       <div className="text-xs text-zinc-400 sm:col-span-2">{c.fDates}

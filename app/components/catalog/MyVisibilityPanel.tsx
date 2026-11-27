@@ -9,14 +9,66 @@
  * скрыться от менеджера / не приглашать, пульс за 7 дней.
  * Каждое правило проверяет база (миграция 20261201090000); здесь — вид.
  * Нет миграции или не резидентка — блок не показывается.
+ *
+ * Каталог 2.0, этап A: видео не требуется и не поднимает анкету; в
+ * условиях каталога теперь город, рост и хотя бы один язык (D6). Если
+ * анкета из-за этого не видна менеджерам, сверху понятное уведомление
+ * и кнопки: город и рост — к полям анкеты, языки — прямо здесь.
  * ──────────────────────────────────────────────────────────────────── */
 
 import { useCallback, useEffect, useState } from "react";
-import { Activity, Check, Eye, EyeOff, Loader2, MailX, PauseCircle, ShieldCheck, Sparkles, UserX, X } from "lucide-react";
+import { Activity, AlertTriangle, Check, Eye, EyeOff, Languages, Loader2, MailX, PauseCircle, ShieldCheck, Sparkles, UserX, X } from "lucide-react";
 import { getMyCatalogPreview, getMyCatalogState, setManagerHidden, setMyCatalogVisibility, type VisibilityPatch } from "@/app/actions/catalog-visibility";
 import { CatalogCardView } from "@/app/components/catalog/CatalogCardView";
 import { GHOST_BTN, GOLD_BTN } from "@/app/components/catalog/catalog-ui";
-import { PAUSE_DAYS, catalogCopy, fmtDay, type CatalogCard, type CatalogState } from "@/lib/resident-catalog";
+import { setCastingProfile } from "@/app/(dashboard)/dashboard/_lib/actions";
+import { PAUSE_DAYS, catalogCopy, fmtDay, missingBasics, photoFirstCopy, type CatalogCard, type CatalogState } from "@/lib/resident-catalog";
+
+/** Те же коды, что в кастингах (CastingAccessBanner / CastingBriefFields) */
+const LANGUAGE_CODES = ["EN", "RU", "ES", "PT", "FR", "IT", "DE", "AR"] as const;
+const MAX_LANGS = 5;
+
+/** Языки — единственное из трёх условий, которое в анкете больше нигде не редактируется */
+function LanguagesQuickEdit({ lang, onSaved }: { lang: string; onSaved: () => void }) {
+  const pf = photoFirstCopy(lang);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const toggle = (code: string) =>
+    setPicked((cur) => (cur.includes(code) ? cur.filter((x) => x !== code) : cur.length >= MAX_LANGS ? cur : [...cur, code]));
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    const r = await setCastingProfile({ languages: picked });
+    setBusy(false);
+    if (!r.ok || !r.languages.length) { setMsg({ ok: false, text: pf.langsError }); return; }
+    setMsg({ ok: true, text: pf.langsSaved });
+    onSaved();
+  };
+  return (
+    <div className="mt-3 rounded-xl border border-zinc-800/80 bg-zinc-950/50 p-3">
+      <p className="flex items-center gap-1.5 text-xs text-zinc-200"><Languages size={13} className="text-[#c9a961]" aria-hidden /> {pf.langsLabel}</p>
+      <p className="mt-0.5 text-[10.5px] text-zinc-500">{pf.langsHint}</p>
+      <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label={pf.langsLabel}>
+        {LANGUAGE_CODES.map((code) => {
+          const on = picked.includes(code);
+          return (
+            <button key={code} type="button" aria-pressed={on} onClick={() => toggle(code)}
+              className={`min-h-9 min-w-11 rounded-full border px-3 font-mono text-[11px] transition ${on ? "border-[#c9a961] bg-[#c9a961]/20 text-amber-100" : "border-zinc-700 text-zinc-400 hover:border-[#c9a961]/50"}`}>
+              {code}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" className={GOLD_BTN} disabled={busy || picked.length === 0} onClick={() => void save()}>
+          {busy && <Loader2 size={13} className="animate-spin" aria-hidden />} {pf.langsSave}
+        </button>
+        {msg && <span role="status" className={`text-[11px] ${msg.ok ? "text-emerald-200" : "text-rose-200"}`}>{msg.text}</span>}
+      </div>
+    </div>
+  );
+}
 import { mediaCopy } from "@/lib/resident-media";
 
 function Toggle({ on, disabled, onClick, label }: { on: boolean; disabled?: boolean; onClick: () => void; label: string }) {
@@ -37,6 +89,7 @@ function Toggle({ on, disabled, onClick, label }: { on: boolean; disabled?: bool
 
 export function MyVisibilityPanel({ lang }: { lang: string }) {
   const c = catalogCopy(lang);
+  const pf = photoFirstCopy(lang);
   const m = mediaCopy(lang);
   const [state, setState] = useState<CatalogState | null>(null);
   const [hidden, setHidden] = useState(false);
@@ -96,12 +149,17 @@ export function MyVisibilityPanel({ lang }: { lang: string }) {
   }
 
   const ck = state.checklist;
+  const basics = missingBasics(ck);
+  const basicLabel = { city: pf.needCity, height: pf.needHeight, languages: pf.needLanguages } as const;
   const missing = [
     !ck.approved && c.visNeedApproved,
     !ck.kyc && c.visNeedKyc,
     ck.photos < 3 && c.visNeedPhotos(ck.photos),
     !ck.notRestricted && c.visNeedRestricted,
+    ...basics.map((k) => basicLabel[k]),
   ].filter(Boolean) as string[];
+  // включила каталог, но из-за города, роста или языка менеджеры её не видят
+  const basicsNotice = state.catalogVisible && !state.listed && !state.pausedUntil && basics.length > 0;
   const p = state.pulse;
   const scopeLabel = !state.videoConsent ? m.consentTitle : state.videoScope === "catalog" ? m.scopeCatalog : state.videoScope === "hidden" ? m.scopeHidden : m.scopeEngaged;
 
@@ -112,6 +170,19 @@ export function MyVisibilityPanel({ lang }: { lang: string }) {
         <p className="relative text-[10px] font-semibold uppercase tracking-[0.3em] text-[#c9a961]/80">{c.visKicker}</p>
         <h2 id="my-visibility-title" className="relative mt-1 font-serif text-2xl text-zinc-50">{c.visTitle}</h2>
         <p className="relative mt-1 max-w-2xl text-xs leading-5 text-zinc-400">{c.visLead}</p>
+
+        {basicsNotice && (
+          <div role="alert" className="relative mt-4 rounded-2xl border border-amber-200/40 bg-amber-200/[0.08] p-4">
+            <p className="flex items-center gap-2 text-sm text-amber-100"><AlertTriangle size={15} aria-hidden /> {pf.basicsTitle}</p>
+            <p className="mt-1 text-xs leading-5 text-zinc-300">{pf.basicsText}</p>
+            <p className="mt-2 text-xs text-zinc-200">{c.visNeed} <span className="text-amber-100">{basics.map((k) => basicLabel[k]).join(", ")}</span></p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {basics.includes("city") && <a href="#profile-location" className={GHOST_BTN}>{pf.basicsCity}</a>}
+              {basics.includes("height") && <a href="#profile-physical" className={GHOST_BTN}>{pf.basicsHeight}</a>}
+            </div>
+            {basics.includes("languages") && <LanguagesQuickEdit lang={lang} onSaved={() => void load()} />}
+          </div>
+        )}
 
         {/* одноразовая карточка-приглашение для тех, кто ещё не включал каталог (C4) */}
         {!state.catalogVisible && !state.promptDismissed && !state.catalogSince && (

@@ -1,26 +1,42 @@
 /* ──────────────────────────────────────────────────────────────────────
- * VOYAGE · каталог — мелкие общие элементы (этап 2)
+ * VOYAGE · каталог — мелкие общие элементы (этап 2, каталог 2.0 этап A)
  * app/components/catalog/catalog-ui.tsx
  * Без хуков: подходят и для резидентки, и для менеджера.
  * ──────────────────────────────────────────────────────────────────── */
 
-import { CalendarX2, Clapperboard, Languages } from "lucide-react";
+import { CalendarX2, Languages, PlayCircle, Sparkles } from "lucide-react";
 import { VipSeal } from "@/app/components/profile/VipBadge";
-import { fmtRange, type BusyRange, type CatalogCopy, type Freshness } from "@/lib/resident-catalog";
+import { fmtDay, fmtRange, photoFirstCopy, type BusyRange, type CatalogCopy, type Freshness, type UpdatedKind } from "@/lib/resident-catalog";
 
-const FRESH_TONE: Record<Freshness, string> = {
-  fresh: "border-emerald-300/30 bg-emerald-400/10 text-emerald-100",
-  aging: "border-amber-200/30 bg-amber-200/10 text-amber-100",
-  stale: "border-zinc-600/60 bg-zinc-800/60 text-zinc-300",
-  none: "border-zinc-700/60 bg-zinc-900/60 text-zinc-500",
-};
-
+/**
+ * Этап A (D1): только положительные сигналы. «Актуально» — если анкету
+ * значимо обновляли за 30 дней; в остальных случаях значка нет (не серый
+ * «давно» и не «без видео»). Видео — отдельный значок, только если оно есть
+ * и открыто каталогу.
+ */
 export function FreshnessChip({ value, c }: { value: Freshness; c: CatalogCopy }) {
+  if (value !== "fresh") return null;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${FRESH_TONE[value]}`}>
-      <Clapperboard size={10} aria-hidden /> {c.freshness[value]}
+    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] text-emerald-100">
+      <Sparkles size={10} aria-hidden /> {c.freshness.fresh}
     </span>
   );
+}
+
+export function VideoChip({ show, label }: { show: boolean; label: string }) {
+  if (!show) return null;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-[#c9a961]/40 bg-black/50 px-2 py-0.5 text-[10px] text-amber-100">
+      <PlayCircle size={10} aria-hidden /> {label}
+    </span>
+  );
+}
+
+/** «Новые фото · 12 нояб.» — что и когда обновили; без даты строки нет */
+export function UpdatedLine({ at, kind, lang }: { at: string | null; kind: UpdatedKind | null; lang: string }) {
+  if (!at || !kind) return null;
+  const pf = photoFirstCopy(lang);
+  return <span className="text-[11px] text-zinc-400">{pf.updated[kind](fmtDay(at, lang))}</span>;
 }
 
 export function KycChip({ level }: { level: number }) {

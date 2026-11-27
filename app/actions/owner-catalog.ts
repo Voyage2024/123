@@ -32,7 +32,7 @@ export type OwnerCatalogOverview = {
   canManage: boolean;
   /** present=false: в базе нет строки общего выключателя (каталог для всех выключен) */
   settings: { present: boolean; enabled: boolean; defaultOpenLimit: number; defaultInviteLimit: number; updatedAt: string };
-  residents: { optedIn: number; listed: number; paused: number; videoCatalog: number };
+  residents: { optedIn: number; listed: number; paused: number; videoCatalog: number; missingBasics: number };
   invites7d: number;
   managers: OwnerCatalogManager[];
   limitEvents: { at: string; kind: string; manager: string }[];
@@ -46,7 +46,7 @@ function parseOverview(data: unknown): OwnerCatalogOverview {
   return {
     canManage: d.can_manage === true,
     settings: { present: st.present === true || (st.present === undefined && typeof st.enabled === "boolean"), enabled: st.enabled === true, defaultOpenLimit: Number(st.default_open_limit) || 200, defaultInviteLimit: Number(st.default_invite_limit) || 30, updatedAt: s(st.updated_at) },
-    residents: { optedIn: Number(rs.opted_in) || 0, listed: Number(rs.listed) || 0, paused: Number(rs.paused) || 0, videoCatalog: Number(rs.video_catalog) || 0 },
+    residents: { optedIn: Number(rs.opted_in) || 0, listed: Number(rs.listed) || 0, paused: Number(rs.paused) || 0, videoCatalog: Number(rs.video_catalog) || 0, missingBasics: Number(rs.missing_basics) || 0 },
     invites7d: Number(d.invites_7d) || 0,
     managers: (Array.isArray(d.managers) ? d.managers : []).map(rec).map((m) => {
       const a = m.access ? rec(m.access) : null;

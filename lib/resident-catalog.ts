@@ -2,7 +2,8 @@
  * VOYAGE · каталог резиденток (Video Identity, этап 2)
  * lib/resident-catalog.ts
  *
- * Типы, разбор ответов RPC (миграция 20261201090000) и тексты RU/EN/ES/PT.
+ * Типы, разбор ответов RPC (миграции 20261201090000 и 20261203090000 —
+ * каталог 2.0, этап A: фото — основа) и тексты RU/EN/ES/PT.
  * Кто что видит, решает только база; здесь — отображение.
  * ──────────────────────────────────────────────────────────────────── */
 
@@ -12,7 +13,8 @@ export const catalogLang = (lang: string | null | undefined): CatalogLang =>
 export const localeOf = (lang: string | null | undefined) =>
   ({ RU: "ru-RU", EN: "en-GB", ES: "es-ES", PT: "pt-PT" })[catalogLang(lang)];
 
-/** D2: до 30 дней / 30–90 / старше 90 / видео нет */
+/** Актуальность анкеты (этап A, D4): до 30 дней / 30–90 / старше 90 / даты нет.
+ *  Считается по самому новому из «новое фото», «изменились параметры», «видео, открытое каталогу». */
 export type Freshness = "fresh" | "aging" | "stale" | "none";
 export const CATALOG_PAGE_SIZE = 24;
 export const INVITE_MESSAGE_MAX = 300;
@@ -41,17 +43,25 @@ export type CatalogItem = {
   languages: string[];
   kycLevel: number;
   segment: string | null;
+  /** обложка — первое фото портфолио, его выбирает резидентка */
   photo: string | null;
+  photoCount: number;
   poster: string | null;
   videoAllowed: boolean;
+  /** только видео, открытое каталогу; о скрытом видео база не сообщает */
+  hasVideo: boolean;
   hasIntro: boolean;
   moments: number;
   videoAt: string | null;
+  updatedAt: string | null;
+  updatedKind: UpdatedKind | null;
   freshness: Freshness;
   busy: BusyRange[];
   inShortlist: boolean;
   invite: InviteMark;
 };
+
+export type UpdatedKind = "photos" | "profile" | "video";
 
 export type CatalogCard = CatalogItem & {
   photos: string[];
@@ -73,10 +83,19 @@ export type CatalogFilters = {
   height_max?: number | null;
   kyc_min?: number | null;
   size?: string | null;
+  /** этап A: «Материалы» — все / с видео / обновлены за 30 дней */
+  materials?: CatalogMaterials;
+  sort?: CatalogSort;
+  /** старый ключ этапа 2; база понимает его, интерфейс больше не шлёт */
   video?: "any" | "has" | "fresh";
   free_from?: string | null;
   free_to?: string | null;
 };
+
+export type CatalogMaterials = "any" | "video" | "fresh";
+export type CatalogSort = "updated" | "new";
+export const CATALOG_MATERIALS: readonly CatalogMaterials[] = ["any", "video", "fresh"];
+export const CATALOG_SORTS: readonly CatalogSort[] = ["updated", "new"];
 
 export type Shortlist = { id: string; title: string; count: number; updatedAt: string };
 export type ShortlistEntry = (CatalogItem & { unavailable?: false; addedAt: string }) | { unavailable: true; addedAt: string };
@@ -100,7 +119,11 @@ export type SentInvite = {
   castingId: string; city: string; startsOn: string; residentId: string | null; name: string | null;
 };
 
-export type ChecklistState = { approved: boolean; kyc: boolean; photos: number; notRestricted: boolean };
+export type ChecklistState = {
+  approved: boolean; kyc: boolean; photos: number; notRestricted: boolean;
+  /** D6: город, рост и хотя бы один язык (если база этапа A; иначе считаем выполненным) */
+  basicsRequired: boolean; city: boolean; height: boolean; languages: boolean;
+};
 
 export type CatalogState = {
   enabled: boolean;
@@ -154,6 +177,7 @@ const strs = (v: unknown): string[] => arr(v).filter((x): x is string => typeof 
 const i18n = (v: unknown): Record<string, string> =>
   Object.fromEntries(Object.entries(rec(v)).filter(([, x]) => typeof x === "string")) as Record<string, string>;
 const FRESH: Freshness[] = ["fresh", "aging", "stale", "none"];
+const UPDATED: UpdatedKind[] = ["photos", "profile", "video"];
 const INVITE: InviteStatus[] = ["pending", "interested", "not_now", "blocked", "withdrawn", "expired"];
 
 export function parseLimits(v: unknown): CatalogLimits | null {
@@ -185,11 +209,16 @@ export function parseItem(v: unknown): CatalogItem | null {
     kycLevel: Number(d.kyc_level) || 0,
     segment: strOrNull(d.segment),
     photo: strOrNull(d.photo),
+    photoCount: Number(d.photo_count) || 0,
     poster: strOrNull(d.poster),
     videoAllowed: d.video_allowed === true,
+    // база этапа 2 не присылает has_video — тогда видео есть, только если оно открыто каталогу
+    hasVideo: d.has_video === true || (d.has_video === undefined && d.video_allowed === true && (d.has_intro === true || Number(d.moments) > 0)),
     hasIntro: d.has_intro === true,
     moments: Number(d.moments) || 0,
     videoAt: strOrNull(d.video_at),
+    updatedAt: strOrNull(d.updated_at),
+    updatedKind: UPDATED.includes(d.updated_kind as UpdatedKind) ? (d.updated_kind as UpdatedKind) : null,
     freshness: FRESH.includes(d.freshness as Freshness) ? (d.freshness as Freshness) : "none",
     busy: arr(d.busy).map(rec).map((b) => ({ from: str(b.from), to: str(b.to) })).filter((b) => b.from),
     inShortlist: d.in_shortlist === true,
@@ -253,7 +282,10 @@ export function parseState(v: unknown): CatalogState | null {
     videoConsent: d.video_consent === true,
     promptDismissed: d.prompt_dismissed === true,
     previewSeen: d.preview_seen === true,
-    checklist: { approved: c.approved === true, kyc: c.kyc === true, photos: Number(c.photos) || 0, notRestricted: c.not_restricted !== false },
+    checklist: {
+      approved: c.approved === true, kyc: c.kyc === true, photos: Number(c.photos) || 0, notRestricted: c.not_restricted !== false,
+      basicsRequired: c.basics_required === true, city: c.city !== false, height: c.height !== false, languages: c.languages !== false,
+    },
     listed: d.listed === true,
     hidden: arr(d.hidden).map(rec).map((h) => ({
       managerId: str(h.manager_id), mode: h.mode === "no_invites" ? "no_invites" as const : "hidden" as const,
@@ -528,7 +560,7 @@ type Copy = {
 };
 
 const RU: Copy = {
-  freshness: { fresh: "Актуально", aging: "Пора освежить", stale: "Давно не обновлялась", none: "Без видео" },
+  freshness: { fresh: "Актуально", aging: "Пора освежить", stale: "Давно не обновлялась", none: "" },
   inviteStatus: { pending: "Ждёт ответа", interested: "Интересно", not_now: "Не сейчас", blocked: "Не приглашать", withdrawn: "Отозвано", expired: "Истекло" },
   errors: {
     not_authenticated: "Войдите в аккаунт.", not_manager: "Каталог доступен только менеджерам VOYAGE.",
@@ -556,7 +588,7 @@ const RU: Copy = {
   visCatalogDisabled: "Каталог ещё не открыт для менеджеров. Настройки сохранятся и заработают, когда VOYAGE его включит.",
   visListed: "Анкета в каталоге", visNotListed: "Пока не в каталоге", visNeed: "Чтобы попасть в каталог:",
   visNeedApproved: "анкета одобрена VOYAGE", visNeedKyc: "пройден KYC 1 (паспорт)", visNeedPhotos: (n) => `не меньше 3 фото в портфолио (сейчас ${n})`,
-  visNeedRestricted: "нет ограничений аккаунта", visVideoNote: "Видео не обязательно: без него анкета тоже в каталоге, просто ниже свежих.",
+  visNeedRestricted: "нет ограничений аккаунта", visVideoNote: "Видео не обязательно и не влияет на место в каталоге. Основа анкеты — фото.",
   visBody: "Показывать вес и параметры", visBodyHint: "Рост и размеры видны всегда, вес и параметры — только если включите.",
   visPause: "Пауза", visPauseHint: "Анкета временно пропадёт из каталога и вернётся сама.", visPauseDays: (n) => `${n} дн.`,
   visPausedUntil: (d) => `На паузе до ${d}`, visResume: "Снять паузу",
@@ -569,7 +601,7 @@ const RU: Copy = {
   visHideNote: "Если вы сами откликнетесь на кастинг этого менеджера, он увидит анкету по обычным правилам кастинга.",
   visNeverShown: "Никогда не показываются: ФИО, дата рождения, гражданство, контакты и Telegram, документы KYC, кошелёк.",
   pulseTitle: "Пульс за 7 дней", pulseViews: "менеджеров смотрели", pulseCatalogViews: "из каталога", pulseShortlisted: "добавили в подборку",
-  pulseInvites: "приглашений", pulseEmpty: "Пока тихо. Свежее видео поднимает анкету выше.",
+  pulseInvites: "приглашений", pulseEmpty: "Пока тихо. Новые фото, обновлённые параметры или видео делают анкету актуальной.",
   promptTitle: "Откройтесь проверенным менеджерам", promptText: "Каталог VOYAGE — закрытый: анкету видят только одобренные менеджеры, каждый просмотр виден вам, контактов они не получают. Включить можно в «Моей видимости».",
   promptCta: "Посмотреть, как это выглядит", promptLater: "Не сейчас",
   inboxTitle: "Приглашения из каталога", inboxKicker: "Вас нашли в каталоге", inboxFrom: "Менеджер",
@@ -630,7 +662,7 @@ const RU: Copy = {
 };
 
 const EN: Copy = {
-  freshness: { fresh: "Up to date", aging: "Time to refresh", stale: "Not updated for a while", none: "No video" },
+  freshness: { fresh: "Up to date", aging: "Time to refresh", stale: "Not updated for a while", none: "" },
   inviteStatus: { pending: "Awaiting reply", interested: "Interested", not_now: "Not now", blocked: "No invites", withdrawn: "Withdrawn", expired: "Expired" },
   errors: {
     not_authenticated: "Please sign in.", not_manager: "The catalog is for VOYAGE managers only.",
@@ -658,7 +690,7 @@ const EN: Copy = {
   visCatalogDisabled: "The catalog isn't open to managers yet. Your settings are saved and will apply once VOYAGE switches it on.",
   visListed: "Profile is in the catalog", visNotListed: "Not in the catalog yet", visNeed: "To appear in the catalog:",
   visNeedApproved: "profile approved by VOYAGE", visNeedKyc: "KYC level 1 (passport) done", visNeedPhotos: (n) => `at least 3 portfolio photos (now ${n})`,
-  visNeedRestricted: "no account restrictions", visVideoNote: "Video is optional: without it your profile is still listed, just below fresh ones.",
+  visNeedRestricted: "no account restrictions", visVideoNote: "Video is optional and does not affect your place in the catalog. Photos are the core of your profile.",
   visBody: "Show weight and measurements", visBodyHint: "Height and sizes are always shown; weight and measurements only if you switch this on.",
   visPause: "Pause", visPauseHint: "Your profile leaves the catalog for a while and comes back by itself.", visPauseDays: (n) => `${n} days`,
   visPausedUntil: (d) => `Paused until ${d}`, visResume: "End pause",
@@ -671,7 +703,7 @@ const EN: Copy = {
   visHideNote: "If you apply to this manager's casting yourself, they'll see your profile under the usual casting rules.",
   visNeverShown: "Never shown: full name, date of birth, citizenship, contacts and Telegram, KYC documents, wallet.",
   pulseTitle: "Pulse, last 7 days", pulseViews: "managers viewed", pulseCatalogViews: "from the catalog", pulseShortlisted: "added to a shortlist",
-  pulseInvites: "invites", pulseEmpty: "Quiet for now. A fresh video lifts your profile higher.",
+  pulseInvites: "invites", pulseEmpty: "Quiet for now. New photos, updated details or a video keep your profile up to date.",
   promptTitle: "Open up to verified managers", promptText: "The VOYAGE catalog is private: only approved managers see profiles, you see every view, and they never get your contacts. Switch it on in “My visibility”.",
   promptCta: "See how it looks", promptLater: "Not now",
   inboxTitle: "Catalog invites", inboxKicker: "Found you in the catalog", inboxFrom: "Manager",
@@ -733,7 +765,7 @@ const EN: Copy = {
 
 const ES: Copy = {
   ...EN,
-  freshness: { fresh: "Al día", aging: "Hora de actualizar", stale: "Sin actualizar hace tiempo", none: "Sin vídeo" },
+  freshness: { fresh: "Al día", aging: "Hora de actualizar", stale: "Sin actualizar hace tiempo", none: "" },
   inviteStatus: { pending: "Esperando respuesta", interested: "Me interesa", not_now: "Ahora no", blocked: "Sin invitaciones", withdrawn: "Retirada", expired: "Caducada" },
   errors: {
     ...EN.errors,
@@ -762,7 +794,7 @@ const ES: Copy = {
   visCatalogDisabled: "El catálogo aún no está abierto a managers. Tus ajustes se guardan y se aplicarán cuando VOYAGE lo active.",
   visListed: "Perfil en el catálogo", visNotListed: "Aún no está en el catálogo", visNeed: "Para aparecer en el catálogo:",
   visNeedApproved: "perfil aprobado por VOYAGE", visNeedKyc: "KYC nivel 1 (pasaporte)", visNeedPhotos: (n) => `al menos 3 fotos de portafolio (ahora ${n})`,
-  visNeedRestricted: "sin restricciones de cuenta", visVideoNote: "El vídeo es opcional: sin él tu perfil también aparece, solo por debajo de los recientes.",
+  visNeedRestricted: "sin restricciones de cuenta", visVideoNote: "El vídeo es opcional y no influye en tu lugar en el catálogo. La base del perfil son las fotos.",
   visBody: "Mostrar peso y medidas", visBodyHint: "Altura y tallas se ven siempre; peso y medidas solo si lo activas.",
   visPause: "Pausa", visPauseHint: "Tu perfil sale del catálogo un tiempo y vuelve solo.", visPauseDays: (n) => `${n} días`,
   visPausedUntil: (d) => `En pausa hasta el ${d}`, visResume: "Quitar pausa",
@@ -775,7 +807,7 @@ const ES: Copy = {
   visHideNote: "Si te postulas tú al casting de este manager, verá tu perfil según las reglas habituales del casting.",
   visNeverShown: "Nunca se muestran: nombre completo, fecha de nacimiento, nacionalidad, contactos y Telegram, documentos KYC, monedero.",
   pulseTitle: "Pulso, últimos 7 días", pulseViews: "managers vieron", pulseCatalogViews: "desde el catálogo", pulseShortlisted: "te añadieron a una selección",
-  pulseInvites: "invitaciones", pulseEmpty: "Todo tranquilo. Un vídeo reciente sube tu perfil.",
+  pulseInvites: "invitaciones", pulseEmpty: "Todo tranquilo. Fotos nuevas, datos actualizados o un vídeo mantienen tu perfil al día.",
   promptTitle: "Ábrete a managers verificados", promptText: "El catálogo VOYAGE es privado: solo managers aprobados ven perfiles, tú ves cada vista y nunca reciben tus contactos. Actívalo en «Mi visibilidad».",
   promptCta: "Ver cómo se ve", promptLater: "Ahora no",
   inboxTitle: "Invitaciones del catálogo", inboxKicker: "Te encontraron en el catálogo",
@@ -837,7 +869,7 @@ const ES: Copy = {
 
 const PT: Copy = {
   ...EN,
-  freshness: { fresh: "Atualizado", aging: "Hora de atualizar", stale: "Sem atualização há muito", none: "Sem vídeo" },
+  freshness: { fresh: "Atualizado", aging: "Hora de atualizar", stale: "Sem atualização há muito", none: "" },
   inviteStatus: { pending: "Aguarda resposta", interested: "Interessa-me", not_now: "Agora não", blocked: "Sem convites", withdrawn: "Retirado", expired: "Expirado" },
   errors: {
     ...EN.errors,
@@ -866,7 +898,7 @@ const PT: Copy = {
   visCatalogDisabled: "O catálogo ainda não está aberto a managers. As definições ficam guardadas e aplicam-se quando a VOYAGE o ligar.",
   visListed: "Perfil no catálogo", visNotListed: "Ainda não está no catálogo", visNeed: "Para aparecer no catálogo:",
   visNeedApproved: "perfil aprovado pela VOYAGE", visNeedKyc: "KYC nível 1 (passaporte)", visNeedPhotos: (n) => `pelo menos 3 fotos no portefólio (agora ${n})`,
-  visNeedRestricted: "sem restrições na conta", visVideoNote: "O vídeo é opcional: sem ele o perfil também aparece, só abaixo dos recentes.",
+  visNeedRestricted: "sem restrições na conta", visVideoNote: "O vídeo é opcional e não influencia o seu lugar no catálogo. A base do perfil são as fotos.",
   visBody: "Mostrar peso e medidas", visBodyHint: "Altura e tamanhos aparecem sempre; peso e medidas só se ligar isto.",
   visPause: "Pausa", visPauseHint: "O perfil sai do catálogo por algum tempo e volta sozinho.", visPauseDays: (n) => `${n} dias`,
   visPausedUntil: (d) => `Em pausa até ${d}`, visResume: "Terminar pausa",
@@ -879,7 +911,7 @@ const PT: Copy = {
   visHideNote: "Se se candidatar ao casting deste manager, ele verá o perfil pelas regras normais do casting.",
   visNeverShown: "Nunca aparecem: nome completo, data de nascimento, nacionalidade, contactos e Telegram, documentos KYC, carteira.",
   pulseTitle: "Pulso, últimos 7 dias", pulseViews: "managers viram", pulseCatalogViews: "pelo catálogo", pulseShortlisted: "adicionaram a uma seleção",
-  pulseInvites: "convites", pulseEmpty: "Tudo calmo. Um vídeo recente sobe o seu perfil.",
+  pulseInvites: "convites", pulseEmpty: "Tudo calmo. Fotos novas, dados atualizados ou um vídeo mantêm o perfil atualizado.",
   promptTitle: "Abra-se a managers verificados", promptText: "O catálogo VOYAGE é privado: só managers aprovados veem perfis, você vê cada visualização e eles nunca recebem os seus contactos. Ligue-o em «A minha visibilidade».",
   promptCta: "Ver como fica", promptLater: "Agora não",
   inboxTitle: "Convites do catálogo", inboxKicker: "Encontraram-na no catálogo",
@@ -942,3 +974,143 @@ const PT: Copy = {
 export const CATALOG_COPY: Record<CatalogLang, Copy> = { RU, EN, ES, PT };
 export const catalogCopy = (lang: string | null | undefined): Copy => CATALOG_COPY[catalogLang(lang)];
 export type CatalogCopy = Copy;
+
+/* ── каталог 2.0, этап A: фото — основа, видео — бонус ─────────────── */
+
+type PhotoFirstCopy = {
+  badgeFresh: string;
+  badgeVideo: string;
+  photos: (n: number) => string;
+  actuality: string;
+  updated: Record<UpdatedKind, (d: string) => string>;
+  tabPhotos: string;
+  tabVideo: string;
+  galleryOpen: string;
+  galleryPos: (a: number, b: number) => string;
+  galleryPrev: string;
+  galleryNext: string;
+  galleryClose: string;
+  galleryThumb: (n: number) => string;
+  fMaterials: string;
+  fMatAny: string;
+  fMatVideo: string;
+  fMatFresh: string;
+  fSort: string;
+  sortUpdated: string;
+  sortNew: string;
+  ringTitle: string;
+  ringNote: string;
+  ringIntro: string;
+  ringMoment: string;
+  ringAdd: string;
+  needCity: string;
+  needHeight: string;
+  needLanguages: string;
+  basicsTitle: string;
+  basicsText: string;
+  basicsCity: string;
+  basicsHeight: string;
+  langsLabel: string;
+  langsHint: string;
+  langsSave: string;
+  langsSaved: string;
+  langsError: string;
+  ownMissingBasics: (n: number) => string;
+  watermarkPhotos: string;
+};
+
+const PF: Record<CatalogLang, PhotoFirstCopy> = {
+  RU: {
+    badgeFresh: "Актуально", badgeVideo: "Видео",
+    photos: (n) => `${n} фото`,
+    actuality: "Актуальность",
+    updated: { photos: (d) => `Новые фото · ${d}`, profile: (d) => `Анкета обновлена · ${d}`, video: (d) => `Новое видео · ${d}` },
+    tabPhotos: "Фото", tabVideo: "Видео",
+    galleryOpen: "Открыть фото на весь экран", galleryPos: (a, b) => `${a} / ${b}`,
+    galleryPrev: "Предыдущее фото", galleryNext: "Следующее фото", galleryClose: "Закрыть фото", galleryThumb: (n) => `Фото ${n}`,
+    fMaterials: "Материалы", fMatAny: "Все анкеты", fMatVideo: "С видео", fMatFresh: "Обновлены за 30 дней",
+    fSort: "Порядок", sortUpdated: "Сначала актуальные", sortNew: "Новые в каталоге",
+    ringTitle: "Живость анкеты", ringNote: "По желанию. На заполненность и место в каталоге не влияет.",
+    ringIntro: "Визитка", ringMoment: "Moment", ringAdd: "Добавить видео",
+    needCity: "город", needHeight: "рост", needLanguages: "хотя бы один язык",
+    basicsTitle: "Анкета сейчас не видна менеджерам",
+    basicsText: "В каталоге менеджеры ищут по городу, росту и языкам, поэтому эти поля теперь обязательны. Добавьте недостающее, и анкета вернётся в каталог сама, включать её заново не нужно.",
+    basicsCity: "Указать город", basicsHeight: "Указать рост",
+    langsLabel: "Языки", langsHint: "До 5. Видят менеджеры каталога и кастингов.", langsSave: "Сохранить языки",
+    langsSaved: "Языки сохранены", langsError: "Не удалось сохранить языки. Попробуйте ещё раз.",
+    ownMissingBasics: (n) => `Включили каталог, но не видны менеджерам: ${n}. Не хватает города, роста или языка, им показано уведомление.`,
+    watermarkPhotos: "Фото помечены вашим кодом и датой.",
+  },
+  EN: {
+    badgeFresh: "Up to date", badgeVideo: "Video",
+    photos: (n) => `${n} photo${n === 1 ? "" : "s"}`,
+    actuality: "Up to date",
+    updated: { photos: (d) => `New photos · ${d}`, profile: (d) => `Profile updated · ${d}`, video: (d) => `New video · ${d}` },
+    tabPhotos: "Photos", tabVideo: "Video",
+    galleryOpen: "Open photo full screen", galleryPos: (a, b) => `${a} / ${b}`,
+    galleryPrev: "Previous photo", galleryNext: "Next photo", galleryClose: "Close photo", galleryThumb: (n) => `Photo ${n}`,
+    fMaterials: "Materials", fMatAny: "All profiles", fMatVideo: "With video", fMatFresh: "Updated in 30 days",
+    fSort: "Order", sortUpdated: "Most up to date first", sortNew: "New in catalog",
+    ringTitle: "Profile liveliness", ringNote: "Optional. Does not affect completeness or your place in the catalog.",
+    ringIntro: "Intro", ringMoment: "Moment", ringAdd: "Add video",
+    needCity: "city", needHeight: "height", needLanguages: "at least one language",
+    basicsTitle: "Managers can’t see your profile right now",
+    basicsText: "Managers search the catalog by city, height and languages, so these fields are now required. Add what is missing and your profile returns to the catalog automatically, no need to switch it on again.",
+    basicsCity: "Add city", basicsHeight: "Add height",
+    langsLabel: "Languages", langsHint: "Up to 5. Visible to catalog and casting managers.", langsSave: "Save languages",
+    langsSaved: "Languages saved", langsError: "Could not save languages. Please try again.",
+    ownMissingBasics: (n) => `Opted in but not visible to managers: ${n}. City, height or language is missing; they see a notice.`,
+    watermarkPhotos: "Photos carry your code and the date.",
+  },
+  ES: {
+    badgeFresh: "Al día", badgeVideo: "Vídeo",
+    photos: (n) => `${n} foto${n === 1 ? "" : "s"}`,
+    actuality: "Actualidad",
+    updated: { photos: (d) => `Fotos nuevas · ${d}`, profile: (d) => `Perfil actualizado · ${d}`, video: (d) => `Vídeo nuevo · ${d}` },
+    tabPhotos: "Fotos", tabVideo: "Vídeo",
+    galleryOpen: "Abrir foto a pantalla completa", galleryPos: (a, b) => `${a} / ${b}`,
+    galleryPrev: "Foto anterior", galleryNext: "Foto siguiente", galleryClose: "Cerrar foto", galleryThumb: (n) => `Foto ${n}`,
+    fMaterials: "Materiales", fMatAny: "Todos los perfiles", fMatVideo: "Con vídeo", fMatFresh: "Actualizados en 30 días",
+    fSort: "Orden", sortUpdated: "Primero los más al día", sortNew: "Nuevos en el catálogo",
+    ringTitle: "Vida del perfil", ringNote: "Opcional. No influye en el porcentaje ni en tu lugar en el catálogo.",
+    ringIntro: "Presentación", ringMoment: "Moment", ringAdd: "Añadir vídeo",
+    needCity: "ciudad", needHeight: "altura", needLanguages: "al menos un idioma",
+    basicsTitle: "Ahora los managers no ven tu perfil",
+    basicsText: "En el catálogo los managers buscan por ciudad, altura e idiomas, por eso estos campos ahora son obligatorios. Añade lo que falta y tu perfil volverá al catálogo solo, sin activarlo de nuevo.",
+    basicsCity: "Indicar ciudad", basicsHeight: "Indicar altura",
+    langsLabel: "Idiomas", langsHint: "Hasta 5. Los ven los managers del catálogo y de los castings.", langsSave: "Guardar idiomas",
+    langsSaved: "Idiomas guardados", langsError: "No se pudieron guardar los idiomas. Inténtalo de nuevo.",
+    ownMissingBasics: (n) => `Activaron el catálogo pero no son visibles: ${n}. Falta ciudad, altura o idioma; ven un aviso.`,
+    watermarkPhotos: "Las fotos llevan tu código y la fecha.",
+  },
+  PT: {
+    badgeFresh: "Atualizado", badgeVideo: "Vídeo",
+    photos: (n) => `${n} foto${n === 1 ? "" : "s"}`,
+    actuality: "Atualidade",
+    updated: { photos: (d) => `Fotos novas · ${d}`, profile: (d) => `Perfil atualizado · ${d}`, video: (d) => `Vídeo novo · ${d}` },
+    tabPhotos: "Fotos", tabVideo: "Vídeo",
+    galleryOpen: "Abrir foto em ecrã inteiro", galleryPos: (a, b) => `${a} / ${b}`,
+    galleryPrev: "Foto anterior", galleryNext: "Foto seguinte", galleryClose: "Fechar foto", galleryThumb: (n) => `Foto ${n}`,
+    fMaterials: "Materiais", fMatAny: "Todos os perfis", fMatVideo: "Com vídeo", fMatFresh: "Atualizados em 30 dias",
+    fSort: "Ordem", sortUpdated: "Mais atualizados primeiro", sortNew: "Novos no catálogo",
+    ringTitle: "Vida do perfil", ringNote: "Opcional. Não influencia a percentagem nem o seu lugar no catálogo.",
+    ringIntro: "Apresentação", ringMoment: "Moment", ringAdd: "Adicionar vídeo",
+    needCity: "cidade", needHeight: "altura", needLanguages: "pelo menos um idioma",
+    basicsTitle: "Neste momento os managers não veem o seu perfil",
+    basicsText: "No catálogo os managers pesquisam por cidade, altura e idiomas, por isso estes campos passaram a ser obrigatórios. Adicione o que falta e o perfil volta ao catálogo sozinho, sem o ligar outra vez.",
+    basicsCity: "Indicar cidade", basicsHeight: "Indicar altura",
+    langsLabel: "Idiomas", langsHint: "Até 5. Visíveis para os managers do catálogo e dos castings.", langsSave: "Guardar idiomas",
+    langsSaved: "Idiomas guardados", langsError: "Não foi possível guardar os idiomas. Tente novamente.",
+    ownMissingBasics: (n) => `Ligaram o catálogo mas não estão visíveis: ${n}. Falta cidade, altura ou idioma; veem um aviso.`,
+    watermarkPhotos: "As fotos levam o seu código e a data.",
+  },
+};
+
+export const photoFirstCopy = (lang: string | null | undefined): PhotoFirstCopy => PF[catalogLang(lang)];
+export type PhotoFirstCopyT = PhotoFirstCopy;
+
+/** Что не хватает до D6 (пусто — всё есть или база ещё этапа 2) */
+export function missingBasics(ck: ChecklistState): ("city" | "height" | "languages")[] {
+  if (!ck.basicsRequired) return [];
+  return (["city", "height", "languages"] as const).filter((k) => !ck[k]);
+}
