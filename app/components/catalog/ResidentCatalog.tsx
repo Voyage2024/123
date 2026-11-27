@@ -10,9 +10,10 @@
  * Приглашение — только в свой кастинг (D1), дальше обычный путь кастинга.
  * ──────────────────────────────────────────────────────────────────── */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
-  BookmarkCheck, BookmarkPlus, ChevronLeft, ChevronRight, Filter, FolderHeart, Loader2, Lock, Send, Trash2, UserRound, X,
+  ArrowLeft, BookmarkCheck, BookmarkPlus, ChevronLeft, ChevronRight, Filter, FolderHeart, Loader2, Lock, Send, Trash2, UserRound, X,
 } from "lucide-react";
 import { useLanguage } from "@/app/context/LanguageContext";
 import { PageHeader, PageShell, Panel } from "@/app/(dashboard)/partner/_components/PartnerUI";
@@ -110,9 +111,10 @@ function CatalogWorkspace({ lang, c, watermark, onLimits }: {
     setLoading(true); setError(null);
     const r = await searchCatalog(f, p);
     setLoading(false);
-    if (!r.ok) { setError(errText(c, r.reason)); return; }
+    if (!r.ok) { setError(errText(c, r.reason)); return [] as CatalogItem[]; }
     setItems((prev) => (p === 0 ? r.items : [...prev, ...r.items]));
     setTotal(r.total); setHasMore(r.hasMore); setPage(r.page);
+    return r.items;
   }, [c]);
 
   const loadLists = useCallback(async () => {
@@ -150,7 +152,28 @@ function CatalogWorkspace({ lang, c, watermark, onLimits }: {
   const unavailableCount = activeList ? entries.filter((e) => e.unavailable).length : 0;
   const idx = openId ? visible.findIndex((x) => x.id === openId) : -1;
 
+  // Навигация в карточке — только по текущей выдаче (те же фильтры и сортировка базы,
+  // уже отданные этому менеджеру voyage_rcat_search) или по открытой подборке.
+  const navTotal = activeList ? visible.length : Math.max(total, visible.length);
+  const canPrev = idx > 0;
+  const canNext = idx >= 0 && (idx < visible.length - 1 || (!activeList && hasMore));
+  const goPrev = useCallback(() => { if (idx > 0) setOpenId(visible[idx - 1].id); }, [idx, visible]);
+  const goNext = useCallback(async () => {
+    if (idx < 0) return;
+    if (idx < visible.length - 1) { setOpenId(visible[idx + 1].id); return; }
+    if (activeList || !hasMore || loading) return;
+    const more = await run(filters, page + 1); // следующая страница той же выдачи
+    if (more.length) setOpenId(more[0].id);
+  }, [idx, visible, activeList, hasMore, loading, run, filters, page]);
+
   const refreshAfterCard = () => { void loadLists(); if (activeList) void loadEntries(activeList); };
+  // после приглашения отмечаем плитки на месте — без перезагрузки выдачи и сброса прокрутки
+  const markInvited = (ids: string[]) => {
+    const at = new Date().toISOString();
+    const mark = (x: CatalogItem): CatalogItem => (ids.includes(x.id) ? { ...x, invite: { status: "pending", at } } : x);
+    setItems((prev) => prev.map(mark));
+    if (activeList) void loadEntries(activeList);
+  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -225,7 +248,6 @@ function CatalogWorkspace({ lang, c, watermark, onLimits }: {
 
       {openId && (
         <CardDialog
-          key={openId}
           residentId={openId}
           c={c}
           lang={lang}
@@ -233,8 +255,12 @@ function CatalogWorkspace({ lang, c, watermark, onLimits }: {
           lists={lists}
           onLimits={onLimits}
           onClose={() => { setOpenId(null); refreshAfterCard(); }}
-          onPrev={idx > 0 ? () => setOpenId(visible[idx - 1].id) : undefined}
-          onNext={idx >= 0 && idx < visible.length - 1 ? () => setOpenId(visible[idx + 1].id) : undefined}
+          position={idx >= 0 ? idx + 1 : 0}
+          total={navTotal}
+          onPrev={canPrev ? goPrev : undefined}
+          onNext={canNext ? goNext : undefined}
+          nextLoading={loading && idx === visible.length - 1}
+          paused={invite !== null}
           onInvite={(id) => setInvite([id])}
           onListsChanged={refreshAfterCard}
         />
@@ -248,7 +274,7 @@ function CatalogWorkspace({ lang, c, watermark, onLimits }: {
           castings={castings}
           initialCasting={forCasting}
           onLimits={onLimits}
-          onClose={() => { setInvite(null); if (!activeList) void run(filters, 0); else void loadEntries(activeList); }}
+          onClose={(sent) => { setInvite(null); if (sent.length) markInvited(sent); }}
         />
       )}
     </div>
@@ -341,12 +367,56 @@ function FiltersForm({ c, value, onApply, onReset }: { c: CatalogCopy; value: Ca
   );
 }
 
+/* ── оверлей ───────────────────────────────────────────────────────── */
+
+/**
+ * Модальный слой поверх ВСЕГО экрана. Рендерится порталом в <body>: внутри
+ * страницы он был в контексте наложения PageShell (`isolate`), поэтому шапка
+ * сайта (z-50) и боковое меню (z-40) лежали поверх затемнения и закрывали
+ * верх карточки, а у затемнения не было обработчика клика.
+ * Закрытие по фону — только если и нажатие, и отпускание были на самом фоне
+ * (выделение текста в карточке с отпусканием на фоне карточку не закрывает).
+ */
+function Overlay({ z, label, onBackdrop, children }: { z: number; label: string; onBackdrop: () => void; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  const downOnBackdrop = useRef(false);
+  useEffect(() => {
+    setMounted(true);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden"; // фон не прокручивается; позиция каталога сохраняется
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+  if (!mounted) return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-6"
+      style={{ zIndex: z }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+      data-catalog-backdrop=""
+      onPointerDown={(e) => { downOnBackdrop.current = e.target === e.currentTarget; }}
+      onClick={(e) => { if (e.target === e.currentTarget && downOnBackdrop.current) onBackdrop(); downOnBackdrop.current = false; }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
+const isTyping = (t: EventTarget | null) =>
+  t instanceof HTMLElement && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName));
+
+const NAV_BTN =
+  "inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 text-xs text-zinc-300 transition hover:border-[#c9a961]/50 hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a961]/50 disabled:pointer-events-none disabled:opacity-30";
+
 /* ── анкета ────────────────────────────────────────────────────────── */
 
-function CardDialog({ residentId, c, lang, watermark, lists, onLimits, onClose, onPrev, onNext, onInvite, onListsChanged }: {
+function CardDialog({ residentId, c, lang, watermark, lists, onLimits, onClose, onPrev, onNext, onInvite, onListsChanged, position, total, nextLoading, paused }: {
   residentId: string; c: CatalogCopy; lang: string; watermark: string; lists: Shortlist[];
-  onLimits: (l: CatalogLimits | null) => void; onClose: () => void; onPrev?: () => void; onNext?: () => void;
+  onLimits: (l: CatalogLimits | null) => void; onClose: () => void; onPrev?: () => void; onNext?: () => void | Promise<void>;
   onInvite: (id: string) => void; onListsChanged: () => void;
+  position: number; total: number; nextLoading: boolean; paused: boolean;
 }) {
   const [card, setCard] = useState<CatalogCard | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -354,8 +424,20 @@ function CardDialog({ residentId, c, lang, watermark, lists, onLimits, onClose, 
   const [newTitle, setNewTitle] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+
+  // фокус: при открытии запоминаем плитку, при закрытии возвращаем (без прокрутки страницы)
+  useEffect(() => {
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => { returnFocus.current?.focus({ preventScroll: true }); };
+  }, []);
+
+  // смена анкеты: карточка остаётся открытой, грузится следующая, прокрутка — наверх
   useEffect(() => {
     let alive = true;
+    setCard(null); setError(null); setNewTitle("");
+    scrollRef.current?.scrollTo({ top: 0 });
     void openCatalogCard(residentId).then((r) => {
       if (!alive) return;
       if ("limits" in r && r.limits !== undefined) onLimits(r.limits);
@@ -368,13 +450,15 @@ function CardDialog({ residentId, c, lang, watermark, lists, onLimits, onClose, 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft" && onPrev) onPrev();
-      if (e.key === "ArrowRight" && onNext) onNext();
+      if (paused || e.defaultPrevented) return; // открыто окно приглашения — клавиши его
+      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      if (isTyping(e.target) || e.altKey || e.ctrlKey || e.metaKey) return; // стрелки в поле ввода — для текста
+      if (e.key === "ArrowLeft" && onPrev) { e.preventDefault(); onPrev(); }
+      if (e.key === "ArrowRight" && onNext) { e.preventDefault(); void onNext(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, onPrev, onNext]);
+  }, [onClose, onPrev, onNext, paused]);
 
   const toggle = async (listId: string) => {
     const add = !inLists.has(listId);
@@ -397,56 +481,74 @@ function CardDialog({ residentId, c, lang, watermark, lists, onLimits, onClose, 
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label={card?.name ?? c.cardOpen}>
-      <div className="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-t-3xl border border-zinc-800 bg-zinc-950 p-5 sm:rounded-3xl sm:p-6">
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <div className="flex gap-1">
-            <button type="button" className="rounded-full p-2 text-zinc-400 hover:bg-white/5 disabled:opacity-30" disabled={!onPrev} onClick={onPrev} aria-label={c.cardPrev}><ChevronLeft size={18} /></button>
-            <button type="button" className="rounded-full p-2 text-zinc-400 hover:bg-white/5 disabled:opacity-30" disabled={!onNext} onClick={onNext} aria-label={c.cardNext}><ChevronRight size={18} /></button>
+    <Overlay z={100} label={card?.name ?? c.cardOpen} onBackdrop={onClose}>
+      <div className="flex max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-zinc-800 bg-zinc-950 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] sm:max-h-[92vh] sm:rounded-3xl">
+        {/* навигация: вне прокручиваемой части — всегда на виду */}
+        <nav aria-label={c.cardOpen} className="flex shrink-0 items-center gap-2 border-b border-zinc-800/80 bg-zinc-950/95 px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sm:px-4 sm:pt-2.5">
+          <button type="button" className={NAV_BTN} onClick={onClose} title={c.cardBack}>
+            <ArrowLeft size={15} aria-hidden /> <span className="hidden sm:inline">{c.cardBack}</span>
+          </button>
+          <div className="mx-auto flex items-center gap-1.5 sm:gap-2">
+            <button type="button" className={NAV_BTN} disabled={!onPrev} onClick={onPrev} aria-label={c.cardPrev} title={c.cardPrev}>
+              <ChevronLeft size={16} aria-hidden /> <span className="hidden sm:inline">{c.cardPrev}</span>
+            </button>
+            <span className="min-w-[4.5rem] text-center font-mono text-[11px] tabular-nums text-[#c9a961]" aria-live="polite">
+              {position > 0 && total > 0 ? c.cardPos(position, total) : "—"}
+            </span>
+            <button type="button" className={NAV_BTN} disabled={!onNext || nextLoading} onClick={() => onNext && void onNext()} aria-label={c.cardNext} title={c.cardNext}>
+              <span className="hidden sm:inline">{c.cardNext}</span> {nextLoading ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <ChevronRight size={16} aria-hidden />}
+            </button>
           </div>
-          <button type="button" onClick={onClose} aria-label={c.close} className="rounded-full p-2 text-zinc-400 hover:bg-white/5"><X size={18} /></button>
-        </div>
+          <button type="button" onClick={onClose} aria-label={c.close} title={c.close}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-800 text-zinc-400 transition hover:border-[#c9a961]/50 hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a961]/50">
+            <X size={18} aria-hidden />
+          </button>
+        </nav>
 
-        {error ? (
-          <p role="alert" className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-3 text-sm text-rose-100">{error}</p>
-        ) : !card ? (
-          <p className="flex items-center gap-2 py-8 text-sm text-zinc-500"><Loader2 size={14} className="animate-spin" /> {c.loading}</p>
-        ) : (
-          <CatalogCardView
-            card={card}
-            lang={lang}
-            watermark={watermark}
-            toolbar={
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  {card.noInvites ? (
-                    <span className="text-xs text-zinc-500">{c.inviteBlocked}</span>
-                  ) : (
-                    <button type="button" className={GOLD_BTN} onClick={() => onInvite(card.id)}><Send size={14} /> {c.inviteTitle}</button>
-                  )}
-                  {card.invite && <span className="self-center text-xs text-amber-100">{c.inviteStatus[card.invite.status]} · {fmtDay(card.invite.at, lang)}</span>}
-                </div>
-                <div className="rounded-xl border border-zinc-800 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">{c.shortTitle}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {lists.map((l) => (
-                      <button key={l.id} type="button" disabled={busy} onClick={() => toggle(l.id)}
-                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition ${inLists.has(l.id) ? "border-[#c9a961]/60 bg-[#c9a961]/15 text-amber-100" : "border-zinc-700 text-zinc-400 hover:text-zinc-200"}`}>
-                        {inLists.has(l.id) ? <BookmarkCheck size={12} /> : <BookmarkPlus size={12} />} {l.title}
-                      </button>
-                    ))}
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
+          {error ? (
+            <p role="alert" className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-3 text-sm text-rose-100">{error}</p>
+          ) : !card ? (
+            <p className="flex items-center gap-2 py-8 text-sm text-zinc-500"><Loader2 size={14} className="animate-spin" /> {c.loading}</p>
+          ) : (
+            <CatalogCardView
+              key={card.id}
+              card={card}
+              lang={lang}
+              watermark={watermark}
+              toolbar={
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {card.noInvites ? (
+                      <span className="text-xs text-zinc-500">{c.inviteBlocked}</span>
+                    ) : (
+                      <button type="button" className={GOLD_BTN} onClick={() => onInvite(card.id)}><Send size={14} /> {c.inviteTitle}</button>
+                    )}
+                    {card.invite && <span className="self-center text-xs text-amber-100">{c.inviteStatus[card.invite.status]} · {fmtDay(card.invite.at, lang)}</span>}
                   </div>
-                  <div className="mt-2 flex gap-2">
-                    <input className={FIELD} maxLength={80} placeholder={c.shortNewPlaceholder} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
-                    <button type="button" className={GHOST_BTN} disabled={busy || !newTitle.trim()} onClick={createAndAdd}>{c.shortCreate}</button>
+                  <div className="rounded-xl border border-zinc-800 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">{c.shortTitle}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {lists.map((l) => (
+                        <button key={l.id} type="button" disabled={busy} onClick={() => toggle(l.id)}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition ${inLists.has(l.id) ? "border-[#c9a961]/60 bg-[#c9a961]/15 text-amber-100" : "border-zinc-700 text-zinc-400 hover:text-zinc-200"}`}>
+                          {inLists.has(l.id) ? <BookmarkCheck size={12} /> : <BookmarkPlus size={12} />} {l.title}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <input className={FIELD} maxLength={80} placeholder={c.shortNewPlaceholder} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+                      <button type="button" className={GHOST_BTN} disabled={busy || !newTitle.trim()} onClick={createAndAdd}>{c.shortCreate}</button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            }
-          />
-        )}
+              }
+            />
+          )}
+          <p className="mt-6 hidden text-center text-[10px] text-zinc-600 sm:block">{c.cardNavHint}</p>
+        </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
 
@@ -454,8 +556,15 @@ function CardDialog({ residentId, c, lang, watermark, lists, onLimits, onClose, 
 
 function InviteDialog({ c, lang, ids, castings, initialCasting, onLimits, onClose }: {
   c: CatalogCopy; lang: string; ids: string[]; castings: ManagerCasting[]; initialCasting: string;
-  onLimits: (l: CatalogLimits | null) => void; onClose: () => void;
+  onLimits: (l: CatalogLimits | null) => void; onClose: (sentIds: string[]) => void;
 }) {
+  const [sent, setSent] = useState<string[]>([]);
+  const close = useCallback(() => onClose(sent), [onClose, sent]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); close(); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [close]);
   const [castingId, setCastingId] = useState(initialCasting || castings[0]?.id || "");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -470,6 +579,7 @@ function InviteDialog({ c, lang, ids, castings, initialCasting, onLimits, onClos
     if (!r.ok) { setResult(errText(c, r.reason)); return; }
     if (r.limits) onLimits(r.limits);
     const ok = r.results.filter((x) => x.ok).length;
+    setSent(r.results.filter((x) => x.ok).map((x) => x.residentId));
     setResult(ids.length === 1 ? (ok ? c.inviteSent : errText(c, r.results[0]?.reason ?? "failed")) : c.inviteBatchResult(ok, ids.length));
     if (ids.length > 1) {
       const reasons = new Map<string, number>();
@@ -479,11 +589,11 @@ function InviteDialog({ c, lang, ids, castings, initialCasting, onLimits, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label={c.inviteTitle}>
+    <Overlay z={110} label={c.inviteTitle} onBackdrop={close}>
       <div className="w-full max-w-lg rounded-t-3xl border border-zinc-800 bg-zinc-950 p-5 sm:rounded-3xl sm:p-6">
         <div className="flex items-start justify-between gap-2">
           <h2 className="text-lg text-zinc-100">{c.inviteTitle}{ids.length > 1 ? ` · ${ids.length}` : ""}</h2>
-          <button type="button" onClick={onClose} aria-label={c.close} className="rounded-full p-2 text-zinc-400 hover:bg-white/5"><X size={18} /></button>
+          <button type="button" onClick={close} aria-label={c.close} className="inline-flex h-11 w-11 items-center justify-center rounded-full text-zinc-400 hover:bg-white/5"><X size={18} /></button>
         </div>
         {!castings.length ? (
           <p className="mt-3 text-sm text-zinc-400">{c.inviteNoCastings}</p>
@@ -504,12 +614,12 @@ function InviteDialog({ c, lang, ids, castings, initialCasting, onLimits, onClos
               <button type="button" className={GOLD_BTN} disabled={busy || !castingId || !msgOk || !!result} onClick={send}>
                 {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} {c.inviteSend}
               </button>
-              <button type="button" className={GHOST_BTN} onClick={onClose}>{c.close}</button>
+              <button type="button" className={GHOST_BTN} onClick={close}>{c.close}</button>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </Overlay>
   );
 }
 

@@ -457,7 +457,7 @@ type Copy = {
   cardLanguages: string;
   cardBusy: string;
   cardSince: (d: string) => string;
-  cardPrev: string;
+  cardPrev: string; cardBack: string; cardPos: (a: number, b: number) => string; cardNavHint: string;
   cardNext: string;
   shortTitle: string;
   shortNew: string;
@@ -598,7 +598,7 @@ const RU: Copy = {
   found: (n) => `Найдено: ${n}`, empty: "По этим фильтрам никого нет.", more: "Показать ещё",
   cardOpen: "Открыть анкету", cardVideo: "Есть видео", cardNoVideo: "Без видео", cardVideoPrivate: "Видео она показывает только тем, с кем работает.",
   cardParams: "Параметры", cardBodyHidden: "Вес и параметры скрыты резиденткой", cardSizes: "Размеры", cardLanguages: "Языки", cardBusy: "Занята",
-  cardSince: (d) => `в каталоге с ${d}`, cardPrev: "Предыдущая", cardNext: "Следующая",
+  cardSince: (d) => `в каталоге с ${d}`, cardPrev: "Предыдущая", cardNext: "Следующая", cardBack: "Каталог", cardPos: (a, b) => `${a} из ${b}`, cardNavHint: "← → — листать, Esc — закрыть",
   shortTitle: "Подборки", shortNew: "Новая подборка", shortNewPlaceholder: "Например, «Дубай, апрель»", shortCreate: "Создать",
   shortAdd: "В подборку", shortIn: "В подборке", shortRemove: "Убрать", shortEmpty: "Подборка пуста.",
   shortUnavailable: "Анкета недоступна", shortPrune: "Убрать недоступные", shortDelete: "Удалить подборку",
@@ -700,7 +700,7 @@ const EN: Copy = {
   found: (n) => `Found: ${n}`, empty: "No one matches these filters.", more: "Show more",
   cardOpen: "Open profile", cardVideo: "Has video", cardNoVideo: "No video", cardVideoPrivate: "She shows video only to managers she works with.",
   cardParams: "Details", cardBodyHidden: "Weight and measurements hidden by her", cardSizes: "Sizes", cardLanguages: "Languages", cardBusy: "Busy",
-  cardSince: (d) => `in the catalog since ${d}`, cardPrev: "Previous", cardNext: "Next",
+  cardSince: (d) => `in the catalog since ${d}`, cardPrev: "Previous", cardNext: "Next", cardBack: "Catalog", cardPos: (a, b) => `${a} of ${b}`, cardNavHint: "← → to browse, Esc to close",
   shortTitle: "Shortlists", shortNew: "New shortlist", shortNewPlaceholder: "e.g. “Dubai, April”", shortCreate: "Create",
   shortAdd: "Shortlist", shortIn: "Shortlisted", shortRemove: "Remove", shortEmpty: "This shortlist is empty.",
   shortUnavailable: "Profile unavailable", shortPrune: "Remove unavailable", shortDelete: "Delete shortlist",
@@ -804,7 +804,7 @@ const ES: Copy = {
   found: (n) => `Encontradas: ${n}`, empty: "Nadie coincide con estos filtros.", more: "Mostrar más",
   cardOpen: "Abrir perfil", cardVideo: "Con vídeo", cardNoVideo: "Sin vídeo", cardVideoPrivate: "Solo muestra vídeo a los managers con los que trabaja.",
   cardParams: "Datos", cardBodyHidden: "Peso y medidas ocultos por ella", cardSizes: "Tallas", cardLanguages: "Idiomas", cardBusy: "Ocupada",
-  cardSince: (d) => `en el catálogo desde ${d}`, cardPrev: "Anterior", cardNext: "Siguiente",
+  cardSince: (d) => `en el catálogo desde ${d}`, cardPrev: "Anterior", cardNext: "Siguiente", cardBack: "Catálogo", cardPos: (a, b) => `${a} de ${b}`, cardNavHint: "← → para pasar, Esc para cerrar",
   shortTitle: "Selecciones", shortNew: "Nueva selección", shortNewPlaceholder: "p. ej. «Dubái, abril»", shortCreate: "Crear",
   shortAdd: "A selección", shortIn: "En selección", shortRemove: "Quitar", shortEmpty: "La selección está vacía.",
   shortUnavailable: "Perfil no disponible", shortPrune: "Quitar no disponibles", shortDelete: "Eliminar selección",
@@ -908,7 +908,7 @@ const PT: Copy = {
   found: (n) => `Encontradas: ${n}`, empty: "Ninguém corresponde a estes filtros.", more: "Mostrar mais",
   cardOpen: "Abrir perfil", cardVideo: "Com vídeo", cardNoVideo: "Sem vídeo", cardVideoPrivate: "Só mostra vídeo aos managers com quem trabalha.",
   cardParams: "Dados", cardBodyHidden: "Peso e medidas ocultos por ela", cardSizes: "Tamanhos", cardLanguages: "Idiomas", cardBusy: "Ocupada",
-  cardSince: (d) => `no catálogo desde ${d}`, cardPrev: "Anterior", cardNext: "Seguinte",
+  cardSince: (d) => `no catálogo desde ${d}`, cardPrev: "Anterior", cardNext: "Seguinte", cardBack: "Catálogo", cardPos: (a, b) => `${a} de ${b}`, cardNavHint: "← → para navegar, Esc para fechar",
   shortTitle: "Seleções", shortNew: "Nova seleção", shortNewPlaceholder: "ex.: «Dubai, abril»", shortCreate: "Criar",
   shortAdd: "Para seleção", shortIn: "Na seleção", shortRemove: "Remover", shortEmpty: "A seleção está vazia.",
   shortUnavailable: "Perfil indisponível", shortPrune: "Remover indisponíveis", shortDelete: "Apagar seleção",
