@@ -287,3 +287,23 @@ export async function removePortfolioPhoto(entry: string): Promise<PortfolioResu
   }
   return done(result.photoUrls);
 }
+
+/**
+ * Каталог 2.0, этап A: «Сделать обложкой». Обложка — первое фото в
+ * photo_urls (так её уже читает каталог), поэтому фото просто переносится
+ * в начало списка. Остальной порядок сохраняется. Это не «новое фото»:
+ * дата актуальности анкеты от перестановки не меняется (триггер в базе).
+ */
+export async function setPortfolioCover(entry: string): Promise<PortfolioResult> {
+  if (typeof entry !== "string" || !entry.trim()) return { ok: false, reason: "invalid" };
+  const loaded = await loadOwner();
+  if (!loaded.ok) return loaded;
+
+  const result = await mutatePhotoUrls(loaded.owner, (current) => {
+    if (!current.includes(entry)) return { ok: false, reason: "not_found" };
+    if (current[0] === entry) return current;
+    return [entry, ...current.filter((e) => e !== entry)];
+  });
+  if (!result.ok) return result;
+  return done(result.photoUrls);
+}

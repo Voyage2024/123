@@ -99,10 +99,20 @@ export type ResidentDraft = {
   fullName: string;
   location: string;
   citizenship: string;
+  /** причина смены гражданства у существующего профиля — уходит в audit_logs */
+  citizenshipReason?: string;
   status: string;
   kycLevel: number;
   email: string;
   password: string;
+};
+
+/** Подпись поля причины смены гражданства (идентификационные данные → журнал аудита). */
+const IDENTITY_REASON_COPY: Record<string, { label: string; placeholder: string }> = {
+  ru: { label: "Причина смены гражданства (в журнал)", placeholder: "Сверено с паспортом, заявка консьержу от …" },
+  en: { label: "Reason for citizenship change (audit log)", placeholder: "Checked against passport, concierge request of …" },
+  es: { label: "Motivo del cambio de ciudadanía (registro)", placeholder: "Cotejado con el pasaporte, solicitud del …" },
+  pt: { label: "Motivo da alteração de cidadania (registro)", placeholder: "Conferido com o passaporte, pedido de …" },
 };
 
 export type KycFilter = "all" | "review" | "pending" | "verified";
@@ -1013,6 +1023,8 @@ function ResidentModal({
   const [fullName, setFullName] = useState(initial?.fullName ?? "");
   const [location, setLocation] = useState(initial?.location ?? "");
   const [citizenship, setCitizenship] = useState(initial?.citizenship ?? "");
+  const [citizenshipReason, setCitizenshipReason] = useState("");
+  const citizenshipChanged = !isNew && citizenship.replace(/\s+/g, " ").trim() !== (initial?.citizenship ?? "").replace(/\s+/g, " ").trim();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [statusChoice, setStatusChoice] = useState(initial?.status ?? "");
@@ -1053,6 +1065,7 @@ function ResidentModal({
       fullName,
       location,
       citizenship,
+      citizenshipReason: citizenshipChanged ? citizenshipReason : undefined,
       status: statusChoice === CUSTOM ? customStatus : statusChoice,
       kycLevel,
       email: email.trim(),
@@ -1128,6 +1141,18 @@ function ResidentModal({
               <input value={citizenship} onChange={(e) => setCitizenship(e.target.value)} placeholder={t.citizenshipPh} className={INPUT} />
             </Field>
           </div>
+          {citizenshipChanged && (
+            <Field label={IDENTITY_REASON_COPY[lang]?.label ?? IDENTITY_REASON_COPY.en.label}>
+              <input
+                value={citizenshipReason}
+                onChange={(e) => setCitizenshipReason(e.target.value)}
+                maxLength={500}
+                placeholder={IDENTITY_REASON_COPY[lang]?.placeholder ?? IDENTITY_REASON_COPY.en.placeholder}
+                className={INPUT}
+                name="citizenship-reason"
+              />
+            </Field>
+          )}
           <Field label={t.status}>
             <span className="relative block">
               <select value={statusChoice} onChange={(e) => setStatusChoice(e.target.value)} className={`${INPUT} cursor-pointer appearance-none pr-9`}>

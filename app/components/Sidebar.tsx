@@ -21,6 +21,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
+  BookUser,
+  LibraryBig,
   Activity,
   Sparkles,
   FileText,
@@ -47,6 +49,13 @@ import {
   Menu,
   X,
   ChevronDown,
+  CalendarClock,
+  UsersRound,
+  ScanSearch,
+  Headset,
+  UserCog,
+  Gauge,
+  Gem,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth, type Role } from "@/app/context/AuthContext";
@@ -58,6 +67,7 @@ import { isClubAdmin } from "@/lib/access";
 import { useMobileMenu, useRegisterSidebar, useScrollLock } from "@/app/context/MobileMenuContext";
 import { getAdminReviewCounts } from "@/app/actions/admin-review";
 import { REVIEW_QUEUE_EVENT, type ReviewCounts } from "@/lib/admin-review";
+import { useUnreadLocationFeed } from "@/lib/map-subscriptions";
 
 type NavKey =
   | "myVoyage"
@@ -91,9 +101,23 @@ type NavKey =
   | "manifest"
   | "pulse"
   | "blacklist"
-  | "keys";
+  | "keys"
+  | "toursBookings"
+  | "myTeam"
+  | "myModels"
+  | "guestDesk"
+  | "dispatch"
+  | "operatorGuests"
+  | "operatorProfile"
+  | "scoutModels"
+  | "scoutCastings"
+  | "scoutEarnings"
+  | "scoutProfile"
+  | "tourControl"
+  | "residentCatalog"
+  | "catalogControl";
 
-type SectionKey = "club" | "market" | "operations" | "intelligence" | "authority" | "console" | "management" | "administration" | "owner" | "account";
+type SectionKey = "club" | "market" | "operations" | "tourOps" | "dispatch" | "scout" | "intelligence" | "authority" | "console" | "management" | "administration" | "owner" | "account";
 
 /** children — подпункты: рисуются веткой под родителем */
 type NavItem = { key: NavKey; href: string; icon: LucideIcon; children?: readonly NavItem[] };
@@ -102,6 +126,9 @@ type NavSection = { key: SectionKey; roles: readonly Role[]; items: NavItem[] };
 const STAFF: readonly Role[] = ["manager", "admin", "owner"];
 
 const ADMIN: readonly Role[] = ["admin", "owner"];
+
+/** ОС туров и букингов: admin сюда не допускается (только manager и owner). */
+const TOUR_OPS: readonly Role[] = ["manager", "owner"];
 
 const NAV_SECTIONS: NavSection[] = [
   // ── Resident workspace ───────────────────────────────────────────────
@@ -137,12 +164,45 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { key: "command", href: "/partner", icon: LayoutDashboard },
       { key: "castings", href: "/partner/castings", icon: ClipboardList },
+      { key: "residentCatalog", href: "/partner/catalog", icon: BookUser },
     ],
   },
   {
     key: "operations",
     roles: STAFF,
     items: [{ key: "manifest", href: "/partner/manifest", icon: Plane }],
+  },
+  // ── ОС туров: букинги, команда операторов, пробивщик (без admin) ────
+  {
+    key: "tourOps",
+    roles: TOUR_OPS,
+    items: [
+      { key: "toursBookings", href: "/partner/bookings", icon: CalendarClock },
+      { key: "myTeam", href: "/partner/team", icon: UsersRound },
+      { key: "myModels", href: "/partner/models", icon: Gem },
+      { key: "guestDesk", href: "/partner/guests", icon: ScanSearch },
+    ],
+  },
+  // ── Кабинет оператора ────────────────────────────────────────────────
+  {
+    key: "dispatch",
+    roles: ["operator"],
+    items: [
+      { key: "dispatch", href: "/operator", icon: Headset },
+      { key: "operatorGuests", href: "/operator/guests", icon: ScanSearch },
+      { key: "operatorProfile", href: "/operator/profile", icon: UserCog },
+    ],
+  },
+  // ── Кабинет скаута: только свои модели, ссылки, начисления, профиль ──
+  {
+    key: "scout",
+    roles: ["scout"],
+    items: [
+      { key: "scoutModels", href: "/scout", icon: Gem },
+      { key: "scoutCastings", href: "/scout/castings", icon: Sparkles },
+      { key: "scoutEarnings", href: "/scout/earnings", icon: Coins },
+      { key: "scoutProfile", href: "/scout/profile", icon: UserCog },
+    ],
   },
   {
     key: "intelligence",
@@ -187,7 +247,11 @@ const NAV_SECTIONS: NavSection[] = [
   {
     key: "owner",
     roles: ["owner"],
-    items: [{ key: "roleManagement", href: "/admin/roles", icon: KeyRound }],
+    items: [
+      { key: "roleManagement", href: "/admin/roles", icon: KeyRound },
+      { key: "tourControl", href: "/admin/tour-control", icon: Gauge },
+      { key: "catalogControl", href: "/admin/tour-control/catalog", icon: LibraryBig },
+    ],
   },
   // Personal settings are the one /admin route that remains available to staff.
   {
@@ -199,7 +263,7 @@ const NAV_SECTIONS: NavSection[] = [
 
 // Корневые адреса подсвечиваются только при точном совпадении
 // (иначе «Справочник» /admin горел бы на каждой странице админки)
-const INDEX_ROUTES = new Set(["/admin", "/dashboard", "/partner"]);
+const INDEX_ROUTES = new Set(["/admin", "/dashboard", "/partner", "/operator", "/scout"]);
 
 function isActive(href: string, pathname: string) {
   if (pathname === href) return true;
@@ -217,12 +281,17 @@ function isChildActive(item: NavItem, pathname: string) {
 const translations = {
   EN: {
     subtitle: {
+      operator: "Dispatch Desk",
+      scout: "Scout Desk",
       resident: "Private Club",
       manager: "Partner Command",
       admin: "Admin Console",
       owner: "Owner Console",
     },
     sections: {
+      tourOps: "Tours & bookings",
+      dispatch: "Dispatch",
+      scout: "Scouting",
       club: "Club",
       market: "Market",
       operations: "Operations",
@@ -235,6 +304,20 @@ const translations = {
       account: "Account",
     },
     nav: {
+      toursBookings: "Tours & Bookings",
+      myTeam: "My Team (Operators)",
+      myModels: "My Models",
+      guestDesk: "Guest Lookup",
+      dispatch: "Dispatch Desk",
+      operatorGuests: "Guest Lookup",
+      operatorProfile: "My Profile",
+      scoutModels: "My Models & Links",
+      scoutCastings: "Open Castings",
+      scoutEarnings: "Earnings & Payouts",
+      scoutProfile: "My Profile",
+      tourControl: "Tours & Bookings Control",
+      residentCatalog: "Resident Catalog",
+      catalogControl: "Catalog Control",
       myVoyage: "My Voyage",
       myApplications: "My Applications",
       parties: "Themes / Parties",
@@ -268,11 +351,12 @@ const translations = {
       blacklist: "Blacklist",
       keys: "Keys",
     },
-    roles: { owner: "Owner", admin: "Administrator", manager: "Manager", resident: "Resident" },
+    roles: { owner: "Owner", admin: "Administrator", manager: "Manager", resident: "Resident", operator: "Operator", scout: "Scout" },
     logout: "Sign out",
     pendingInvites: (n: number) => `${n} awaiting review`,
     pendingKyc: (n: number) => `${n} awaiting KYC review`,
     pendingConcierge: (n: number) => `${n} new concierge requests`,
+    pendingLocationFeed: (n: number) => `${n} new in your map locations`,
     openMenu: "Open menu",
     closeMenu: "Close menu",
     menu: "Menu",
@@ -281,12 +365,17 @@ const translations = {
   },
   RU: {
     subtitle: {
+      operator: "Диспетчерский пульт",
+      scout: "Кабинет скаута",
       resident: "Закрытый клуб",
       manager: "Штаб партнёра",
       admin: "Панель админа",
       owner: "Панель владельца",
     },
     sections: {
+      tourOps: "Туры и букинги",
+      dispatch: "Диспетчерская",
+      scout: "Скаутинг",
       club: "Клуб",
       market: "Рынок",
       operations: "Операции",
@@ -299,6 +388,20 @@ const translations = {
       account: "Аккаунт",
     },
     nav: {
+      toursBookings: "Туры и букинги",
+      myTeam: "Моя команда (Операторы)",
+      myModels: "Мои модели",
+      guestDesk: "Пробивщик гостей",
+      dispatch: "Диспетчерский пульт",
+      operatorGuests: "Пробивщик гостей",
+      operatorProfile: "Мой профиль",
+      scoutModels: "Мои модели и ссылки",
+      scoutCastings: "Кастинги для моделей",
+      scoutEarnings: "Начисления и выплаты",
+      scoutProfile: "Профиль",
+      tourControl: "Контроль туров и букингов",
+      residentCatalog: "Каталог резиденток",
+      catalogControl: "Контроль каталога",
       myVoyage: "Мой Voyage",
       myApplications: "Мои заявки",
       parties: "Темы / Тусовки",
@@ -332,11 +435,12 @@ const translations = {
       blacklist: "Чёрный список",
       keys: "Ключи",
     },
-    roles: { owner: "Владелец", admin: "Администратор", manager: "Менеджер", resident: "Резидент" },
+    roles: { owner: "Владелец", admin: "Администратор", manager: "Менеджер", resident: "Резидент", operator: "Оператор", scout: "Скаут" },
     logout: "Выйти",
     pendingInvites: (n: number) => `${n} на модерации`,
     pendingKyc: (n: number) => `${n} ждут проверки KYC`,
     pendingConcierge: (n: number) => `${n} новых обращений к консьержу`,
+    pendingLocationFeed: (n: number) => `${n} новое в ваших локациях карты`,
     openMenu: "Открыть меню",
     closeMenu: "Закрыть меню",
     menu: "Меню",
@@ -345,12 +449,17 @@ const translations = {
   },
   ES: {
     subtitle: {
+      operator: "Centro de despacho",
+      scout: "Panel de scout",
       resident: "Club Privado",
       manager: "Centro del partner",
       admin: "Panel de admin",
       owner: "Panel del propietario",
     },
     sections: {
+      tourOps: "Tours y reservas",
+      dispatch: "Despacho",
+      scout: "Scouting",
       club: "Club",
       market: "Mercado",
       operations: "Operaciones",
@@ -363,6 +472,20 @@ const translations = {
       account: "Cuenta",
     },
     nav: {
+      toursBookings: "Tours y reservas",
+      myTeam: "Mi equipo (Operadores)",
+      myModels: "Mis modelos",
+      guestDesk: "Verificar huésped",
+      dispatch: "Centro de despacho",
+      operatorGuests: "Verificar huésped",
+      operatorProfile: "Mi perfil",
+      scoutModels: "Mis modelos y enlaces",
+      scoutCastings: "Castings abiertos",
+      scoutEarnings: "Bonos y pagos",
+      scoutProfile: "Mi perfil",
+      tourControl: "Control de tours y reservas",
+      residentCatalog: "Catálogo de residentes",
+      catalogControl: "Control del catálogo",
       myVoyage: "Mi Voyage",
       myApplications: "Mis solicitudes",
       parties: "Temas / Fiestas",
@@ -396,11 +519,12 @@ const translations = {
       blacklist: "Lista negra",
       keys: "Llaves",
     },
-    roles: { owner: "Propietario", admin: "Administrador", manager: "Gerente", resident: "Residente" },
+    roles: { owner: "Propietario", admin: "Administrador", manager: "Gerente", resident: "Residente", operator: "Operador", scout: "Scout" },
     logout: "Cerrar sesión",
     pendingInvites: (n: number) => `${n} en moderación`,
     pendingKyc: (n: number) => `${n} esperan revisión KYC`,
     pendingConcierge: (n: number) => `${n} solicitudes nuevas al conserje`,
+    pendingLocationFeed: (n: number) => `${n} novedades en tus ubicaciones`,
     openMenu: "Abrir menú",
     closeMenu: "Cerrar menú",
     menu: "Menú",
@@ -409,12 +533,17 @@ const translations = {
   },
   PT: {
     subtitle: {
+      operator: "Central de despacho",
+      scout: "Painel do scout",
       resident: "Clube Privado",
       manager: "Central do parceiro",
       admin: "Painel do admin",
       owner: "Painel do proprietário",
     },
     sections: {
+      tourOps: "Tours e reservas",
+      dispatch: "Despacho",
+      scout: "Scouting",
       club: "Clube",
       market: "Mercado",
       operations: "Operações",
@@ -427,6 +556,20 @@ const translations = {
       account: "Conta",
     },
     nav: {
+      toursBookings: "Tours e reservas",
+      myTeam: "Minha equipe (Operadores)",
+      myModels: "Minhas modelos",
+      guestDesk: "Verificar hóspede",
+      dispatch: "Central de despacho",
+      operatorGuests: "Verificar hóspede",
+      operatorProfile: "Meu perfil",
+      scoutModels: "Minhas modelos e links",
+      scoutCastings: "Castings abertos",
+      scoutEarnings: "Bônus e pagamentos",
+      scoutProfile: "Meu perfil",
+      tourControl: "Controle de tours e reservas",
+      residentCatalog: "Catálogo de residentes",
+      catalogControl: "Controle do catálogo",
       myVoyage: "Meu Voyage",
       myApplications: "Minhas solicitações",
       parties: "Temas / Festas",
@@ -460,11 +603,12 @@ const translations = {
       blacklist: "Lista negra",
       keys: "Chaves",
     },
-    roles: { owner: "Proprietário", admin: "Administrador", manager: "Gerente", resident: "Residente" },
+    roles: { owner: "Proprietário", admin: "Administrador", manager: "Gerente", resident: "Residente", operator: "Operador", scout: "Scout" },
     logout: "Sair",
     pendingInvites: (n: number) => `${n} em moderação`,
     pendingKyc: (n: number) => `${n} aguardam revisão KYC`,
     pendingConcierge: (n: number) => `${n} pedidos novos ao concierge`,
+    pendingLocationFeed: (n: number) => `${n} novidades nas suas localizações`,
     openMenu: "Abrir menu",
     closeMenu: "Fechar menu",
     menu: "Menu",
@@ -557,6 +701,8 @@ const ROLE_BADGE: Record<Role, string> = {
   admin: "border-amber-500/30 bg-amber-950/40 text-amber-300/80",
   manager: "border-sky-400/25 bg-sky-950/40 text-sky-300/80",
   resident: "border-zinc-800/60 bg-zinc-900/40 text-zinc-500",
+  operator: "border-emerald-400/25 bg-emerald-950/40 text-emerald-300/80",
+  scout: "border-fuchsia-400/25 bg-fuchsia-950/40 text-fuchsia-300/80",
 };
 
 const DESKTOP = "(min-width: 768px)";
@@ -593,7 +739,10 @@ export default function Sidebar() {
   const pendingInvites = usePendingCount("club_invites", clubAdmin);
   const pendingApplications = usePendingCount("guest_applications", clubAdmin);
   const review = useReviewCounts(clubAdmin, pathname);
+  // Лента локаций: новые туры/кастинги в городах из подписок резидентки
+  const locationFeedUnread = useUnreadLocationFeed(role === "resident", user?.id);
   const pendingFor: Partial<Record<NavKey, number>> = {
+    mapTours: locationFeedUnread,
     invitations: pendingInvites,
     membershipRequests: pendingApplications,
     directory: review.verification,
@@ -601,7 +750,13 @@ export default function Sidebar() {
   };
   /** Подсказка у счётчика: у каждого раздела своя */
   const pendingTitle = (key: NavKey, n: number) =>
-    key === "directory" ? t.pendingKyc(n) : key === "concierge" ? t.pendingConcierge(n) : t.pendingInvites(n);
+    key === "directory"
+      ? t.pendingKyc(n)
+      : key === "concierge"
+        ? t.pendingConcierge(n)
+        : key === "mapTours"
+          ? t.pendingLocationFeed(n)
+          : t.pendingInvites(n);
 
   const t = translations[(lang as LangKey) in translations ? (lang as LangKey) : "EN"];
 
