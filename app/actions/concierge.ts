@@ -8,7 +8,6 @@ import { AuthorizationError, requireRole } from "@/lib/server/require-role";
 import type { Lang } from "@/app/context/LanguageContext";
 import { notifyAdminsOfConciergeRequest } from "@/lib/server/telegram/admin-notifications";
 import { isKyc3RequestTitle } from "@/lib/admin-review";
-import { isIdentityRequestTitle } from "@/lib/resident-profile-fields";
 
 export type ConciergeCategory = "travel" | "accommodation" | "transport" | "event" | "documents" | "general";
 export type ConciergeStage = "before_tour" | "during_tour" | "after_tour";
@@ -28,23 +27,6 @@ function serviceClient() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Server-side Supabase configuration is missing.");
   return createSupabaseAdminClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-}
-
-/**
- * Запросы «[Данные KYC]» (гражданство / дата рождения) закрываются только из
- * карточки резидентки — Approve & Apply или Reject (app/actions/admin-identity-requests.ts),
- * чтобы запрос нельзя было закрыть, не применив или не отклонив изменение.
- * Через общий список «Консьержа» по ним можно только переписываться:
- * статус остаётся прежним, допустим лишь переход open → in_progress.
- * Карточка сначала сама закрывает запрос, а потом отправляет сообщение
- * с тем же статусом — этот переход (done → done, impossible → impossible) разрешён.
- */
-function identityStatusChangeBlocked(request: { title?: unknown; status?: unknown }, next: ConciergeStatus): boolean {
-  if (!isIdentityRequestTitle(request.title)) return false;
-  const current = String(request.status ?? "");
-  if (next === current) return false;
-  if (current === "open" && next === "in_progress") return false;
-  return true;
 }
 
 function validDate(value?: string | null): string | null | undefined {
@@ -349,13 +331,6 @@ export async function updateConciergeRequest(input: { id: string; status: Concie
     const isClosed = input.status === "done" || input.status === "impossible";
     if (isClosed && !feedback) return { ok: false as const, reason: "feedback_required" };
     const db = serviceClient();
-    const { data: current, error: currentError } = await db.from("partner_concierge_requests")
-      .select("id,title,status").eq("id", input.id).maybeSingle();
-    if (currentError || !current) {
-      console.error("[concierge] update request lookup failed", { code: currentError?.code, id: input.id });
-      return { ok: false as const, reason: currentError ? "server_error" : "not_found" };
-    }
-    if (identityStatusChangeBlocked(current, input.status)) return { ok: false as const, reason: "identity_request" };
     const patch: Record<string, unknown> = {
       status: input.status,
       resolved_by: isClosed ? userId : null,
@@ -392,12 +367,11 @@ export async function replyToConciergeRequest(input: { id: string; message: stri
 
     const db = serviceClient();
     const { data: request, error: requestError } = await db.from("partner_concierge_requests")
-      .select("id,resident_id,title,status").eq("id", input.id).maybeSingle();
+      .select("id,resident_id,title").eq("id", input.id).maybeSingle();
     if (requestError || !request) {
       console.error("[concierge] reply request lookup failed", { code: requestError?.code, id: input.id });
       return { ok: false as const, reason: requestError ? "server_error" : "not_found" };
     }
-    if (identityStatusChangeBlocked(request, status)) return { ok: false as const, reason: "identity_request" };
 
     // Store the reply and update the request status atomically in PostgreSQL.
     const { data: messageId, error: replyError } = await db.rpc("voyage_concierge_reply", {

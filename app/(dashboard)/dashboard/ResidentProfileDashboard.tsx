@@ -32,23 +32,6 @@ import { useAuth } from "@/app/context/AuthContext";
 import { useLanguage, type Lang } from "@/app/context/LanguageContext";
 import { supabase } from "@/lib/supabase";
 import { updateResidentLifestylePreference } from "@/app/actions/map-locations";
-import { updateResidentSizes } from "@/app/actions/resident-sizes";
-import { updateResidentPhysical } from "@/app/actions/resident-physical";
-import { PHYSICAL_COPY } from "@/lib/resident-physical";
-import {
-  getResidentIdentityLock,
-  requestResidentIdentityChange,
-  updateResidentProfileFields,
-} from "@/app/actions/resident-profile-fields";
-import { PROFILE_FIELDS_COPY, isIdentityLocked } from "@/lib/resident-profile-fields";
-import {
-  CLOTHING_SIZES,
-  SHOE_SIZE_OPTIONS,
-  SIZE_COPY,
-  formatShoeSize,
-  missingSizes,
-  normalizeClothingSize,
-} from "@/lib/resident-sizes";
 import {
   attachPortfolioPhotos,
   createPortfolioUploadSlots,
@@ -72,9 +55,6 @@ import { AchievementShelf, type AchievementKey } from "@/app/components/profile/
 import { KycSection } from "@/app/components/profile/KycSection";
 import { VipAvatarMark, VipBadge, VipSeal, isKycElite } from "@/app/components/profile/VipBadge";
 import ProfileIdentityQuickEdit from "@/app/components/profile/ProfileIdentityQuickEdit";
-import VideoIdentitySection, { type VideoSummary } from "@/app/components/media/VideoIdentitySection";
-import VideoIdentityRing from "@/app/components/catalog/VideoIdentityRing";
-import MyVisibilityPanel from "@/app/components/catalog/MyVisibilityPanel";
 
 /* ──────────────────────────────────────────────────────────────────────
  * ПРИМЕЧАНИЯ ПО АРХИТЕКТУРЕ
@@ -88,14 +68,7 @@ import MyVisibilityPanel from "@/app/components/catalog/MyVisibilityPanel";
  *    и редактируются на странице настроек. Здесь они read-only.
  *    `photo_urls` — отдельный массив портфолио, к аватару отношения не имеет.
  *
- * 3a. Город, «о себе», гражданство и дата рождения — через Server Action
- *    app/actions/resident-profile-fields.ts. Гражданство и дата рождения
- *    с момента отправки документов KYC (и после подтверждения) — только
- *    запросом команде клуба (IdentityChangeRequest ниже → заявка консьержу).
- *
- * 3. Рост, вес и объёмы сохраняются через Server Action
- *    app/actions/resident-physical.ts (как размеры одежды/обуви): прямой
- *    upsert в profiles у резидентки отклоняется правами на колонки.
+ * 3. `height` / `weight` сохраняются как «сырые» значения из инпута.
  *    Единицы (cm / kg) показываются отдельно и НЕ пишутся в БД.
  *
  * 4. Для записи нужны корректные RLS-политики на таблице `profiles`
@@ -583,10 +556,6 @@ interface Profile {
   height: string | number | null;
   weight: string | number | null;
   measurements: string | null;
-  /** XXS…XXL — обязательный (проверка в анкете и в server action) */
-  clothing_size?: string | null;
-  /** EU, шаг 0.5 — обязательный; numeric из БД приходит строкой */
-  shoe_size?: string | number | null;
   smoking: boolean;
   alcohol: boolean;
   about: string | null;
@@ -612,8 +581,6 @@ function emptyProfile(id: string): Profile {
     height: null,
     weight: null,
     measurements: null,
-    clothing_size: null,
-    shoe_size: null,
     smoking: false,
     alcohol: false,
     about: null,
@@ -681,7 +648,6 @@ function CircleStatusPanel({
   completion,
   kycLevel,
   loading,
-  videoRing,
 }: {
   t: Dict;
   circle: CircleConfig;
@@ -691,7 +657,6 @@ function CircleStatusPanel({
   completion: number;
   kycLevel: number;
   loading: boolean;
-  videoRing?: React.ReactNode;
 }) {
   const skin = skinFor(circle.key);
   const rank = CIRCLE_ORDER.indexOf(circle.key as CircleKey);
@@ -749,7 +714,6 @@ function CircleStatusPanel({
 
       <div className="flex flex-col gap-4 border-t border-white/[0.06] pt-4">
         <ProfileCompletionBar percentage={completion} label={t.completion} />
-        {videoRing}
 
         <div>
           <div className="flex items-baseline justify-between">
@@ -867,68 +831,6 @@ function ToggleSwitch({
   );
 }
 
-/** Выбор размера: компактный select в стиле анкеты, с пометкой «обязательно» */
-function SizeSelect({
-  label,
-  value,
-  options,
-  unit,
-  placeholder,
-  requiredLabel,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: string | null;
-  options: { value: string; label: string }[];
-  unit?: string;
-  placeholder: string;
-  requiredLabel: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}) {
-  const missing = !value;
-  return (
-    <label className="block">
-      <span className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="text-[10px] sm:text-[11px] tracking-[0.12em] sm:tracking-[0.15em] uppercase text-zinc-500 font-medium">
-          {label}
-        </span>
-        {missing && (
-          <span className="rounded-full border border-amber-200/35 bg-amber-200/[0.06] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-amber-200">
-            {requiredLabel}
-          </span>
-        )}
-      </span>
-      <span
-        className={`flex items-center gap-2 rounded-lg border bg-zinc-950/50 px-3 transition-colors ${
-          missing ? "border-amber-200/40" : "border-zinc-700/40 focus-within:border-amber-500/40"
-        }`}
-      >
-        <select
-          value={value ?? ""}
-          disabled={disabled}
-          required
-          aria-required="true"
-          onChange={(e) => {
-            if (e.target.value) onChange(e.target.value);
-          }}
-          className="min-h-10 w-full cursor-pointer appearance-none bg-transparent font-mono text-sm tracking-wide text-zinc-100 outline-none disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {/* Пустой вариант только пока размер не указан: стереть его нельзя */}
-          {missing && <option value="">{placeholder}</option>}
-          {options.map((o) => (
-            <option key={o.value} value={o.value} className="bg-zinc-900">
-              {o.label}
-            </option>
-          ))}
-        </select>
-        {unit && <span className="text-xs text-zinc-500">{unit}</span>}
-      </span>
-    </label>
-  );
-}
-
 function GlassCard({
   children,
   className = "",
@@ -950,83 +852,6 @@ function GlassCard({
  * Инлайн-редактируемое текстовое поле.
  * Клик → инпут → сохранение по blur / Enter (Esc отменяет).
  */
-// ─── Запрос на изменение данных, подтверждённых KYC ────────────────
-type IdentityValues = { citizenship: string | null; birth_date: string | null };
-
-function IdentityChangeRequest({
-  lang,
-  current,
-  onClose,
-}: {
-  lang: Lang;
-  current: IdentityValues;
-  onClose: () => void;
-}) {
-  const c = PROFILE_FIELDS_COPY[lang] ?? PROFILE_FIELDS_COPY.EN;
-  const [citizenship, setCitizenship] = useState(current.citizenship ?? "");
-  const [birthDate, setBirthDate] = useState(current.birth_date ?? "");
-  const [comment, setComment] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const send = async () => {
-    const patch: { citizenship?: string; birth_date?: string } = {};
-    if (citizenship.trim() !== (current.citizenship ?? "")) patch.citizenship = citizenship;
-    if (birthDate !== (current.birth_date ?? "")) patch.birth_date = birthDate;
-    if (!Object.keys(patch).length) {
-      setResult({ ok: false, text: c.nothingToChange });
-      return;
-    }
-    setBusy(true);
-    setResult(null);
-    const r = await requestResidentIdentityChange({ ...patch, comment, language: lang });
-    setBusy(false);
-    if (r.ok) return setResult({ ok: true, text: c.sent });
-    const text =
-      r.reason === "already_requested" ? c.alreadyRequested
-      : r.reason === "invalid" ? c.invalid
-      : r.reason === "nothing_to_change" ? c.nothingToChange
-      : c.requestError;
-    setResult({ ok: r.reason === "already_requested", text });
-  };
-
-  const field = "w-full bg-zinc-950/60 border border-zinc-700/60 rounded-md px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-amber-500/50";
-  return (
-    <div className="mt-4 rounded-lg border border-amber-200/20 bg-amber-200/[0.03] p-4" data-testid="identity-request">
-      <p className="text-[10px] tracking-[0.2em] uppercase text-amber-100/70 font-semibold">{c.requestTitle}</p>
-      {result?.ok ? (
-        <p role="status" className="mt-3 text-xs leading-5 text-emerald-300">{result.text}</p>
-      ) : (
-        <>
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="space-y-1">
-              <span className="text-[10px] uppercase tracking-[0.15em] text-zinc-500">{c.newValue} · {lang === "RU" ? "гражданство" : "citizenship"}</span>
-              <input value={citizenship} onChange={(e) => setCitizenship(e.target.value)} className={field} name="request-citizenship" />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[10px] uppercase tracking-[0.15em] text-zinc-500">{c.newValue} · {lang === "RU" ? "дата рождения" : "date of birth"}</span>
-              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className={`${field} font-mono`} name="request-birth-date" />
-            </label>
-            <label className="space-y-1 sm:col-span-2">
-              <span className="text-[10px] uppercase tracking-[0.15em] text-zinc-500">{c.comment}</span>
-              <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} maxLength={1000} placeholder={c.commentPh} className={`${field} resize-none`} name="request-comment" />
-            </label>
-          </div>
-          {result && <p role="alert" className="mt-2 text-[11px] text-rose-300">{result.text}</p>}
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={send} disabled={busy} className="inline-flex items-center gap-1.5 rounded-md border border-amber-200/50 bg-amber-200 px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-amber-100 disabled:opacity-50">
-              {busy && <Loader2 className="w-3 h-3 animate-spin" />} {c.send}
-            </button>
-            <button type="button" onClick={onClose} className="rounded-md border border-zinc-700/60 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200">
-              {c.cancel}
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 function EditableText({
   value,
   onSave,
@@ -1184,7 +1009,6 @@ export default function ResidentProfilePage() {
   const { user, hasRole } = useAuth();
   const { lang } = useLanguage();
   const t: Dict = T[lang] ?? T.EN;
-  const sizeT = SIZE_COPY[lang] ?? SIZE_COPY.EN;
 
   // UI-проверка; настоящая защита — RLS и триггер в базе
   const isAdmin = hasRole(["owner", "admin"]) || user?.email === LEGACY_ADMIN_EMAIL;
@@ -1218,8 +1042,6 @@ export default function ResidentProfilePage() {
   // блок свёрнут и у самой резидентки, цифры открываются по нажатию.
   const [pointsHidden, setPointsHidden] = useState(false);
   const [pointsRevealed, setPointsRevealed] = useState(false);
-  // этап 2: два пункта видео в заполненности (визитка + хотя бы один Moment)
-  const [videoSummary, setVideoSummary] = useState<VideoSummary | null>(null);
   useEffect(() => {
     if (!user?.id) return;
     let alive = true;
@@ -1347,118 +1169,7 @@ export default function ResidentProfilePage() {
     setProfile((current) => current ? { ...current, ...savedPatch } : current);
   }, [user, profile]);
 
-  // ── Размеры одежды/обуви: отдельный server action с валидацией ──────
-  const [sizeError, setSizeError] = useState<string | null>(null);
-  const updateSizes = useCallback(
-    async (patch: { clothing_size?: string; shoe_size?: string }) => {
-      if (!user || !profile) return;
-      const before = { clothing_size: profile.clothing_size ?? null, shoe_size: profile.shoe_size ?? null };
-      setProfile((current) => (current ? { ...current, ...patch } : current));
-      setSizeError(null);
-      setSaving(true);
-      const result = await updateResidentSizes(patch);
-      setSaving(false);
-      if (!result.ok) {
-        setProfile((current) => (current ? { ...current, ...before } : current));
-        setSizeError((SIZE_COPY[lang] ?? SIZE_COPY.EN).saveError);
-        console.error("Could not save sizes:", result.reason);
-        return;
-      }
-      setProfile((current) =>
-        current ? { ...current, clothing_size: result.clothing_size, shoe_size: result.shoe_size } : current
-      );
-    },
-    [user, profile, lang]
-  );
-
-  // ── Рост / вес / объёмы: server action, откат при ошибке ─────────────
-  const [physicalError, setPhysicalError] = useState<string | null>(null);
-  const updatePhysical = useCallback(
-    async (patch: { height?: string | null; weight?: string | null; measurements?: string | null }) => {
-      if (!user || !profile) return;
-      const before = {
-        height: profile.height ?? null,
-        weight: profile.weight ?? null,
-        measurements: profile.measurements ?? null,
-      };
-      setProfile((current) => (current ? { ...current, ...patch } : current));
-      setPhysicalError(null);
-      setSaving(true);
-      const result = await updateResidentPhysical(patch);
-      setSaving(false);
-      const copy = PHYSICAL_COPY[lang] ?? PHYSICAL_COPY.EN;
-      if (!result.ok) {
-        setProfile((current) => (current ? { ...current, ...before } : current));
-        setPhysicalError(result.reason === "invalid" ? copy.invalid : copy.saveError);
-        console.error("Could not save physical parameters:", result.reason);
-        return;
-      }
-      // Значения из БД — источник истины (в т.ч. для полей, которые не меняли).
-      setProfile((current) =>
-        current
-          ? { ...current, height: result.height, weight: result.weight, measurements: result.measurements }
-          : current
-      );
-    },
-    [user, profile, lang]
-  );
-
-  // ── Город / «о себе» / гражданство / дата рождения: server action ────
-  type TextField = "location" | "about" | "citizenship" | "birth_date";
-  const [fieldError, setFieldError] = useState<{ field: TextField; text: string } | null>(null);
-  const [identityLockedByServer, setIdentityLockedByServer] = useState(false);
-  const [identityRequestOpen, setIdentityRequestOpen] = useState(false);
-  const identityLocked = !!profile && (identityLockedByServer || isIdentityLocked(profile.kyc_level));
-  // Блокировка «под KYC» учитывает и документы на проверке — спрашиваем сервер.
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    getResidentIdentityLock()
-      .then((r) => {
-        if (active && r.ok && r.locked) setIdentityLockedByServer(true);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [user]);
-  const updateFields = useCallback(
-    async (field: TextField, value: string | null) => {
-      if (!user || !profile) return;
-      const before = profile[field] ?? null;
-      setProfile((current) => (current ? { ...current, [field]: value } : current));
-      setFieldError(null);
-      setSaving(true);
-      const result = await updateResidentProfileFields({ [field]: value });
-      setSaving(false);
-      const copy = PROFILE_FIELDS_COPY[lang] ?? PROFILE_FIELDS_COPY.EN;
-      if (!result.ok) {
-        setProfile((current) => (current ? { ...current, [field]: before } : current));
-        if (result.reason === "identity_locked") {
-          setIdentityLockedByServer(true);
-          setFieldError({ field, text: copy.lockedHint });
-        } else {
-          setFieldError({ field, text: result.reason === "invalid" ? copy.invalid : copy.saveError });
-        }
-        console.error("Could not save profile field:", result.reason);
-        return;
-      }
-      if (result.identity_locked) setIdentityLockedByServer(true);
-      setProfile((current) =>
-        current
-          ? { ...current, location: result.location, about: result.about, citizenship: result.citizenship, birth_date: result.birth_date }
-          : current
-      );
-    },
-    [user, profile, lang]
-  );
-  const fieldErrorFor = (fields: TextField[]) =>
-    fieldError && fields.includes(fieldError.field) ? (
-      <p role="alert" className="mt-3 text-[11px] text-rose-300">{fieldError.text}</p>
-    ) : null;
-
   // ── Универсальное сохранение (optimistic + upsert) ──────────────────
-  // Остаётся только для действий персонала в этом экране (ачивки, уровень KYC).
   const updateProfile = useCallback(
     async (patch: Partial<Profile>) => {
       if (!user) return;
@@ -1593,8 +1304,7 @@ export default function ResidentProfilePage() {
   };
 
   // ── Прогресс заполнения ─────────────────────────────────────────────
-  // 100% только если: все поля заполнены, ≥3 фото портфолио, kyc_level === 3,
-  // есть визитка и хотя бы один Moment (этап 2, решение D5: 16 пунктов вместо 14)
+  // 100% только если: все поля заполнены, ≥3 фото портфолио и kyc_level === 3
   const completion = useMemo(() => {
     if (!profile) return 0;
     const textFields = [
@@ -1608,13 +1318,10 @@ export default function ResidentProfilePage() {
       profile.about,
     ];
     let done = textFields.filter(isFilled).length; // до 8
-    done += 2 - missingSizes(profile).length; // размеры одежды и обуви — до 2
     done += Math.min((profile.photo_urls ?? []).length, 3); // до 3
     done += profile.kyc_level >= 3 ? 1 : 0; // до 1
-    done += videoSummary?.hasIntro ? 1 : 0; // визитка — до 1
-    done += videoSummary?.hasMoment ? 1 : 0; // хотя бы один Moment — до 1
-    return Math.round((done / 16) * 100);
-  }, [profile, displayName, videoSummary]);
+    return Math.round((done / 12) * 100);
+  }, [profile, displayName]);
 
   // ── Состояния загрузки / отсутствия пользователя ────────────────────
   if (!user && !loading) {
@@ -1761,7 +1468,6 @@ export default function ResidentProfilePage() {
                 completion={completion}
                 kycLevel={profile.kyc_level}
                 loading={standing.loading}
-                videoRing={<VideoIdentityRing summary={videoSummary} lang={lang} />}
               />
             )}
           </div>
@@ -1845,14 +1551,13 @@ export default function ResidentProfilePage() {
                           editHint={t.clickToEdit}
                           placeholder={t.locationPlaceholder}
                           onSave={(v) =>
-                            updateFields("location", v || null)
+                            updateProfile({ location: v || null })
                           }
                         />
                       </div>
                     </div>
                   </div>
                 </div>
-                {fieldErrorFor(["location"])}
               </div>
             </GlassCard>
 
@@ -1872,11 +1577,11 @@ export default function ResidentProfilePage() {
                     </p>
                     <EditableText
                       value={profile.citizenship}
-                      editable={canEditOwn && !identityLocked}
+                      editable={canEditOwn}
                       editHint={t.clickToEdit}
                       placeholder={t.nationalityPlaceholder}
                       onSave={(v) =>
-                        updateFields("citizenship", v || null)
+                        updateProfile({ citizenship: v || null })
                       }
                     />
                   </div>
@@ -1888,44 +1593,19 @@ export default function ResidentProfilePage() {
                       <Calendar className="w-3 h-3 text-zinc-500 flex-shrink-0" />
                       <EditableText
                         value={profile.birth_date}
-                        editable={canEditOwn && !identityLocked}
+                        editable={canEditOwn}
                         editHint={t.clickToEdit}
                         type="date"
                         mono
                         placeholder={t.dobPlaceholder}
                         format={formatDate}
                         onSave={(v) =>
-                          updateFields("birth_date", v || null)
+                          updateProfile({ birth_date: v || null })
                         }
                       />
                     </div>
                   </div>
                 </div>
-                {identityLocked && canEditOwn && (
-                  <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-800/40 pt-3" data-testid="identity-locked">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-200/80">
-                      <LockKeyhole className="w-3 h-3" /> {(PROFILE_FIELDS_COPY[lang] ?? PROFILE_FIELDS_COPY.EN).locked}
-                    </span>
-                    {!identityRequestOpen && (
-                      <button
-                        type="button"
-                        onClick={() => setIdentityRequestOpen(true)}
-                        className="text-[11px] text-amber-200/80 underline decoration-dashed underline-offset-4 hover:text-amber-100"
-                      >
-                        {(PROFILE_FIELDS_COPY[lang] ?? PROFILE_FIELDS_COPY.EN).requestChange}
-                      </button>
-                    )}
-                    <p className="w-full text-[11px] leading-5 text-zinc-500">{(PROFILE_FIELDS_COPY[lang] ?? PROFILE_FIELDS_COPY.EN).lockedHint}</p>
-                  </div>
-                )}
-                {identityLocked && identityRequestOpen && (
-                  <IdentityChangeRequest
-                    lang={lang}
-                    current={{ citizenship: profile.citizenship, birth_date: profile.birth_date ? profile.birth_date.slice(0, 10) : null }}
-                    onClose={() => setIdentityRequestOpen(false)}
-                  />
-                )}
-                {fieldErrorFor(["citizenship", "birth_date"])}
               </div>
             </GlassCard>
 
@@ -1954,7 +1634,7 @@ export default function ResidentProfilePage() {
                         type="number"
                         mono
                         placeholder="—"
-                        onSave={(v) => updatePhysical({ height: v || null })}
+                        onSave={(v) => updateProfile({ height: v || null })}
                       />
                       {isFilled(profile.height) && (
                         <span className="text-zinc-500 text-xs">{t.cm}</span>
@@ -1976,7 +1656,7 @@ export default function ResidentProfilePage() {
                         type="number"
                         mono
                         placeholder="—"
-                        onSave={(v) => updatePhysical({ weight: v || null })}
+                        onSave={(v) => updateProfile({ weight: v || null })}
                       />
                       {isFilled(profile.weight) && (
                         <span className="text-zinc-500 text-xs">{t.kg}</span>
@@ -1998,53 +1678,12 @@ export default function ResidentProfilePage() {
                         mono
                         placeholder="90 / 60 / 90"
                         onSave={(v) =>
-                          updatePhysical({ measurements: v || null })
+                          updateProfile({ measurements: v || null })
                         }
                       />
                     </p>
                   </div>
                 </div>
-                {physicalError && (
-                  <p role="alert" className="mt-3 text-[11px] text-rose-300">
-                    {physicalError}
-                  </p>
-                )}
-
-                {/* Размеры одежды и обуви — обязательные поля анкеты */}
-                <div className="mt-5 grid grid-cols-2 gap-3 border-t border-zinc-800/40 pt-4">
-                  <SizeSelect
-                    label={sizeT.clothing}
-                    value={normalizeClothingSize(profile.clothing_size)}
-                    options={CLOTHING_SIZES.map((s) => ({ value: s, label: s }))}
-                    placeholder={sizeT.choose}
-                    requiredLabel={sizeT.required}
-                    disabled={!canEditOwn || saving}
-                    onChange={(v) => updateSizes({ clothing_size: v })}
-                  />
-                  <SizeSelect
-                    label={sizeT.shoe}
-                    value={formatShoeSize(profile.shoe_size)}
-                    options={SHOE_SIZE_OPTIONS.map((n) => {
-                      const v = formatShoeSize(n) ?? String(n);
-                      return { value: v, label: v };
-                    })}
-                    unit={sizeT.shoeUnit}
-                    placeholder={sizeT.choose}
-                    requiredLabel={sizeT.required}
-                    disabled={!canEditOwn || saving}
-                    onChange={(v) => updateSizes({ shoe_size: v })}
-                  />
-                </div>
-                {missingSizes(profile).length > 0 && (
-                  <p className="mt-3 rounded-lg border border-amber-200/25 bg-amber-200/[0.05] px-3 py-2 text-[11px] leading-5 text-amber-100/80">
-                    {sizeT.requiredHint}
-                  </p>
-                )}
-                {sizeError && (
-                  <p role="alert" className="mt-2 text-[11px] text-rose-300">
-                    {sizeError}
-                  </p>
-                )}
               </div>
             </GlassCard>
 
@@ -2092,20 +1731,13 @@ export default function ResidentProfilePage() {
                     editHint={t.clickToEdit}
                     multiline
                     placeholder={t.aboutPlaceholder}
-                    onSave={(v) => updateFields("about", v || null)}
+                    onSave={(v) => updateProfile({ about: v || null })}
                   />
                 </div>
-                {fieldErrorFor(["about"])}
               </div>
             </GlassCard>
           </div>
         </section>
-
-        {/* ── Video Identity (Визитка + Moments, этап 1) ─────────── */}
-        <VideoIdentitySection lang={lang} onSummary={setVideoSummary} />
-
-        {/* ── Моя видимость (каталог, этап 2) ────────────────────── */}
-        <MyVisibilityPanel lang={lang} />
 
         {/* ── Visual Portfolio ───────────────────────────────────── */}
         <section className="mb-10">
